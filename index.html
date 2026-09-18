@@ -113,9 +113,12 @@
     </section>
     <section id="budgetContent" hidden>
       <div class="budget-head"><div><h2>Budget</h2><p>Private financial dashboard</p></div><button id="lockBudgetBtn" class="secondary">Lock now</button></div>
-      <div class="budget-summary"><div><span>Monthly income</span><b>—</b></div><div><span>Monthly spending</span><b>—</b></div><div><span>Available</span><b>—</b></div></div>
-      <div class="budget-grid"><article><h3>Accounts</h3><p>Ready for balances and account summaries.</p></article><article><h3>Monthly budget</h3><p>Ready for categories, targets, actuals, and variance.</p></article><article><h3>Recurring bills</h3><p>Ready for subscriptions and upcoming payments.</p></article><article><h3>Goals</h3><p>Ready for savings, debt payoff, and other targets.</p></article></div>
-      <p class="budget-security-note">Budget data is not loaded until this screen is unlocked. The database layer remains closed to the public app until account authentication is completed.</p>
+      <div class="budget-mode"><button id="budgetModeMonthly" class="active">Monthly</button><button id="budgetModePaycheck">Per paycheck</button></div>
+      <div class="budget-summary"><div><span>Income</span><b id="budgetIncome">—</b></div><div><span>Fixed + planned</span><b id="budgetSpending">—</b></div><div><span>Left over</span><b id="budgetAvailable">—</b></div></div>
+      <div id="budgetDataStatus" class="status"></div>
+      <article class="budget-panel"><div class="budget-panel-head"><div><h3>Money flow</h3><p>Tap a flow to highlight it.</p></div></div><div id="budgetFlow" class="budget-flow"></div></article>
+      <article class="budget-panel"><div class="budget-panel-head"><div><h3>Budget table</h3><p>Spreadsheet-style view of the same numbers.</p></div></div><div class="table-scroll"><table class="budget-table"><thead><tr><th>Category</th><th>Item</th><th>Frequency</th><th>Amount</th></tr></thead><tbody id="budgetTableBody"></tbody></table></div></article>
+      <p class="budget-security-note">Budget records load only after this screen is unlocked and the signed-in account passes database ownership checks.</p>
     </section>
   </main>
 </section>
