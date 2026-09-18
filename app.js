@@ -85,7 +85,9 @@ function safeLink(url){try{const u=new URL(url);return ["http:","https:"].includ
 function renderResearch(x){
   const opts=[1,2,3].map(i=>({name:x["option"+i],price:x["price"+i],link:safeLink(x["link"+i])})).filter(o=>o.name||o.link);
   if(!opts.length)return '<div class="research-empty">No researched options yet.</div>';
-  return '<div class="research-options"><div class="research-title">Researched options</div>'+opts.map(o=>`<div class="research-option"><div><b>${esc(o.name||"Product option")}</b>${o.price!=null?'<span>const levels=["Eventually","Want","Need"],i=levels.indexOf(x.priority),n=Math.max(0,Math.min(2,i+(dir==="up"?1:-1)));x.priority=levels[n];saveItem(x).catch(showErr);renderLists()}
+  return '<div class="research-options"><div class="research-title">Researched options</div>'+opts.map(o=>`<div class="research-option"><div><b>${esc(o.name||"Product option")}</b>${o.price!=null?'<span>$'+Number(o.price).toFixed(2)+'</span>':""}</div>${o.link?'<a href="'+esc(o.link)+'" target="_blank" rel="noopener noreferrer">View product ↗</a>':'<span class="link-pending">Link not saved yet</span>'}</div>`).join("")+'</div>';
+}
+function changePriority(x,dir){const levels=["Eventually","Want","Need"],i=levels.indexOf(x.priority),n=Math.max(0,Math.min(2,i+(dir==="up"?1:-1)));x.priority=levels[n];saveItem(x).catch(showErr);renderLists()}
 function openEdit(x){$("dialogTitle").textContent="Edit item";$("itemId").value=x.id;$("item").value=x.item;$("category").value=x.category||"";$("priority").value=x.priority||"Need";$("quantity").value=x.quantity||"";$("itemStatus").value=x.status||"Looking";$("notes").value=x.notes||"";$("itemDialog").showModal()}
 function openAddItem(){$("dialogTitle").textContent=currentPage==="buy"?"Add purchase":"Add grocery";$("itemId").value="";$("itemForm").reset();$("priority").value="Need";$("itemDialog").showModal()}
 
@@ -185,12 +187,48 @@ function renderReminders(){
 }
 document.querySelectorAll(".reminder-tab").forEach(b=>b.onclick=()=>{reminderView=b.dataset.reminderView;document.querySelectorAll(".reminder-tab").forEach(z=>z.classList.toggle("active",z===b));renderReminders()});
 
+const BUDGET_PIN_KEY="roggy-budget-pin-v1",BUDGET_CRED_KEY="roggy-budget-credential-v1";
+let budgetUnlocked=false,budgetTimer=null;
+function bytesToB64(bytes){return btoa(String.fromCharCode(...new Uint8Array(bytes)))}
+function b64ToBytes(s){return Uint8Array.from(atob(s),c=>c.charCodeAt(0))}
+async function hashPin(pin,salt){const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(pin),"PBKDF2",false,["deriveBits"]);return bytesToB64(await crypto.subtle.deriveBits({name:"PBKDF2",salt,iterations:210000,hash:"SHA-256"},key,256))}
+function budgetConfigured(){return !!localStorage.getItem(BUDGET_PIN_KEY)}
+function touchBudget(){clearTimeout(budgetTimer);if(budgetUnlocked)budgetTimer=setTimeout(lockBudget,5*60*1000)}
+function unlockBudget(){budgetUnlocked=true;$("budgetLock").hidden=true;$("budgetContent").hidden=false;touchBudget()}
+function lockBudget(){budgetUnlocked=false;clearTimeout(budgetTimer);$("budgetContent").hidden=true;$("budgetLock").hidden=false}
+async function setupBudgetPin(pin){
+  const salt=crypto.getRandomValues(new Uint8Array(16)),hash=await hashPin(pin,salt);
+  localStorage.setItem(BUDGET_PIN_KEY,JSON.stringify({salt:bytesToB64(salt),hash}));
+  $("budgetLockStatus").textContent="PIN saved securely on this device.";
+}
+async function verifyBudgetPin(pin){const rec=JSON.parse(localStorage.getItem(BUDGET_PIN_KEY)||"null");if(!rec)return false;return (await hashPin(pin,b64ToBytes(rec.salt)))===rec.hash}
+async function setupPasskey(){
+  if(!window.PublicKeyCredential)throw new Error("Passkeys are not supported on this device.");
+  const uid=crypto.getRandomValues(new Uint8Array(32));
+  const cred=await navigator.credentials.create({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),rp:{name:"Roggy Lists"},user:{id:uid,name:"budget-owner",displayName:"Budget Owner"},pubKeyCredParams:[{alg:-7,type:"public-key"},{alg:-257,type:"public-key"}],authenticatorSelection:{authenticatorAttachment:"platform",userVerification:"required",residentKey:"preferred"},timeout:60000,attestation:"none"}});
+  localStorage.setItem(BUDGET_CRED_KEY,bytesToB64(cred.rawId));return true;
+}
+async function faceUnlock(){
+  const id=localStorage.getItem(BUDGET_CRED_KEY);
+  if(!id){await setupPasskey();$("budgetLockStatus").textContent="Face ID / passkey enabled.";unlockBudget();return}
+  await navigator.credentials.get({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),allowCredentials:[{type:"public-key",id:b64ToBytes(id)}],userVerification:"required",timeout:60000}});
+  unlockBudget();
+}
+$("setupBudgetLockBtn").onclick=()=>$("budgetSetupDialog").showModal();
+$("budgetSetupForm").addEventListener("submit",async e=>{if(e.submitter?.value==="cancel")return;e.preventDefault();const a=$("budgetPinNew").value,b=$("budgetPinConfirm").value;if(a!==b){$("budgetPinConfirm").setCustomValidity("PINs do not match");$("budgetPinConfirm").reportValidity();return}$("budgetPinConfirm").setCustomValidity("");await setupBudgetPin(a);$("budgetSetupDialog").close();$("budgetSetupForm").reset();try{await setupPasskey();$("budgetLockStatus").textContent="PIN and Face ID / passkey are ready."}catch{$("budgetLockStatus").textContent="PIN is ready. Face ID / passkey can be set up when you tap its unlock button."}});
+$("pinUnlockBtn").onclick=()=>budgetConfigured()?$("budgetPinDialog").showModal():$("budgetSetupDialog").showModal();
+$("budgetPinForm").addEventListener("submit",async e=>{if(e.submitter?.value==="cancel")return;e.preventDefault();if(await verifyBudgetPin($("budgetPinEntry").value)){$("budgetPinDialog").close();$("budgetPinForm").reset();$("budgetPinError").textContent="";unlockBudget()}else $("budgetPinError").textContent="Incorrect PIN."});
+$("faceUnlockBtn").onclick=()=>faceUnlock().catch(e=>$("budgetLockStatus").textContent=e.message||"Face ID / passkey unlock failed.");
+$("lockBudgetBtn").onclick=lockBudget;
+document.addEventListener("visibilitychange",()=>{if(document.hidden)lockBudget()});
+["pointerdown","keydown"].forEach(ev=>document.addEventListener(ev,()=>{if(currentPage==="budget")touchBudget()},{passive:true}));
+
 function setPage(page){
   currentPage=page;document.querySelectorAll(".page-tab").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
-  const isDrivers=page==="drivers",isReminders=page==="reminders";$("listsPage").hidden=isDrivers||isReminders;$("driversPage").hidden=!isDrivers;$("remindersPage").hidden=!isReminders;$("backupBtn").style.display=(isDrivers||isReminders)?"none":"";
+  const isDrivers=page==="drivers",isReminders=page==="reminders",isBudget=page==="budget";$("listsPage").hidden=isDrivers||isReminders||isBudget;$("driversPage").hidden=!isDrivers;$("remindersPage").hidden=!isReminders;$("budgetPage").hidden=!isBudget;$("backupBtn").style.display=(isDrivers||isReminders||isBudget)?"none":"";
   $("addBtn").style.display="";
   if(isDrivers){$("pageTitle").textContent="Bad Drivers";$("pageSubtitle").textContent="Track observations and compare demographics.";loadDrivers()}
-  else if(isReminders){$("pageTitle").textContent="Reminders";$("pageSubtitle").textContent="What is coming up.";$("addBtn").style.display="none";loadReminders()}
+  else if(isReminders){$("pageTitle").textContent="Reminders";$("pageSubtitle").textContent="What is coming up.";$("addBtn").style.display="none";loadReminders()} else if(isBudget){$("pageTitle").textContent="Budget 🔒";$("pageSubtitle").textContent="Private financial dashboard.";$("addBtn").style.display="none";lockBudget()}
   else {currentView="active";document.querySelectorAll(".sub-tab").forEach(z=>z.classList.toggle("active",z.dataset.view==="active"));renderLists()}
 }
 document.querySelectorAll(".page-tab").forEach(b=>b.onclick=()=>setPage(b.dataset.page));
