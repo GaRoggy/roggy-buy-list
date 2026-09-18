@@ -210,16 +210,34 @@ function budgetModel(){const income=budgetEntries.filter(x=>x.entry_type==="inco
 function renderBudget(){const m=budgetModel();$("budgetIncome").textContent=money(m.income);$("budgetSpending").textContent=money(m.allocated);$("budgetAvailable").textContent=money(m.left);renderBudgetTable();renderBudgetFlow()}
 function renderBudgetTable(){const m=budgetModel(),order=["Savings","Living","Auto","Subscriptions","Other"];const rows=m.items.sort((a,b)=>order.indexOf(a._group)-order.indexOf(b._group)||b._value-a._value);$("budgetTableBody").innerHTML=rows.length?rows.map(x=>`<tr><td><span class="budget-cat cat-${x._group.toLowerCase()}">${esc(x._group)}</span></td><td>${esc(x.name)}</td><td>${money(x._value)}</td><td>${m.income?(x._value/m.income*100).toFixed(1):"0.0"}%</td></tr>`).join(""):'<tr><td colspan="4">No private budget rows synced yet.</td></tr>'}
 function renderBudgetFlow(){
- const root=$("budgetFlow");root.innerHTML="";const m=budgetModel();if(!m.income){root.innerHTML='<div class="budget-empty">Add an income baseline to build the Sankey diagram.</div>';return}
- const order=["Savings","Living","Auto","Subscriptions","Other"],groups=order.map(name=>({name,items:m.items.filter(x=>x._group===name)})).filter(g=>g.items.length);groups.forEach(g=>g.value=g.items.reduce((s,x)=>s+x._value,0));if(m.left>0)groups.push({name:"Left Over",value:m.left,items:[]});
- const NS="http://www.w3.org/2000/svg",svg=document.createElementNS(NS,"svg"),W=1080,H=700,sx=20,sw=155,mx=455,mw=14,rx=790,rw=265,top=28,bottom=28,gap=28,avail=H-top-bottom-gap*(groups.length-1),scale=avail/m.income;
- svg.setAttribute("viewBox",`0 0 ${W} ${H}`);svg.setAttribute("class","sankey-svg sankey-three");svg.setAttribute("role","img");svg.setAttribute("aria-label","Income flows through proportional budget categories to individual allocations.");
- const el=(tag,attrs,parent=svg)=>{const z=document.createElementNS(NS,tag);Object.entries(attrs||{}).forEach(([k,v])=>z.setAttribute(k,v));parent.appendChild(z);return z},txt=(x,y,v,cls,parent=svg)=>{const z=el("text",{x,y,class:cls},parent);z.textContent=v;return z};
- const cls=n=>"sk-"+n.toLowerCase().replace(/\s+/g,"-"),sourceY=top,sourceH=avail+gap*(groups.length-1);el("rect",{x:sx,y:sourceY,width:sw,height:sourceH,rx:8,class:"sk-source"});txt(sx+18,sourceY+sourceH/2-18,"Total Income","sk-source-label");txt(sx+18,sourceY+sourceH/2+12,money(m.income),"sk-source-value");txt(sx+18,sourceY+sourceH/2+34,budgetMode==="monthly"?"monthly":"per paycheck","sk-source-sub");
- let gy=top,srcY=sourceY;const pos=[];
- groups.forEach(g=>{const gh=Math.max(4,g.value*scale),gc=gy+gh/2,c=cls(g.name);el("path",{d:`M ${sx+sw} ${srcY} C 290 ${srcY},355 ${gy},${mx} ${gy} L ${mx} ${gy+gh} C 355 ${gy+gh},290 ${srcY+gh},${sx+sw} ${srcY+gh} Z`,class:"sk-band "+c});el("rect",{x:mx,y:gy,width:mw,height:gh,rx:3,class:"sk-mid "+c});txt(mx+mw+12,gc-3,g.name,"sk-mid-label");txt(mx+mw+12,gc+15,money(g.value)+" · "+(g.value/m.income*100).toFixed(1)+"%","sk-mid-value");pos.push({...g,y:gy,h:gh,center:gc,cls:c});gy+=gh+gap;srcY+=gh+gap});
- pos.filter(g=>g.items.length).forEach(g=>{const itemGap=8,itemMin=32,totalBoxes=g.items.reduce((s,x)=>s+Math.max(itemMin,x._value*scale),0)+itemGap*(g.items.length-1);let iy=Math.max(top,g.center-totalBoxes/2),outY=g.y;g.items.forEach(x=>{const ih=x._value*scale,displayH=Math.max(itemMin,ih),center=iy+displayH/2;el("path",{d:`M ${mx+mw} ${outY} C 610 ${outY},700 ${center-ih/2},${rx} ${center-ih/2} L ${rx} ${center+ih/2} C 700 ${center+ih/2},610 ${outY+ih},${mx+mw} ${outY+ih} Z`,class:"sk-band "+g.cls});el("rect",{x:rx,y:center-displayH/2,width:rw,height:displayH,rx:6,class:"sk-item"});el("rect",{x:rx,y:center-displayH/2,width:7,height:displayH,rx:3,class:"sk-accent "+g.cls});txt(rx+18,center+4,x.name,"sk-item-label");txt(rx+rw-12,center+4,money(x._value),"sk-item-value");outY+=ih;iy+=displayH+itemGap})});
- root.appendChild(svg)
+ const root=$("budgetFlow");root.innerHTML="";const m=budgetModel();
+ if(!m.income){root.innerHTML='<div class="budget-empty">Add an income baseline to build the Sankey diagram.</div>';return}
+ if(!window.d3||!d3.sankey){root.innerHTML='<div class="budget-empty">Sankey library failed to load. Refresh the app.</div>';return}
+ const order=["Savings","Living","Auto","Subscriptions","Other"];
+ const groups=order.map(name=>({name,items:m.items.filter(x=>x._group===name)})).filter(g=>g.items.length);
+ groups.forEach(g=>g.value=g.items.reduce((s,x)=>s+x._value,0));
+ const nodes=[{id:"income",name:"Total Income",type:"source",value:m.income}];
+ const links=[];
+ groups.forEach(g=>{const gid="group:"+g.name;nodes.push({id:gid,name:g.name,type:"group",group:g.name,value:g.value});links.push({source:"income",target:gid,value:g.value,group:g.name});g.items.forEach((x,i)=>{const id=gid+":item:"+i;nodes.push({id,name:x.name,type:"item",group:g.name,value:x._value});links.push({source:gid,target:id,value:x._value,group:g.name})})});
+ if(m.left>0){nodes.push({id:"leftover",name:"Left Over",type:"group",group:"Left Over",value:m.left});links.push({source:"income",target:"leftover",value:m.left,group:"Left Over"})}
+ const W=1080,H=Math.max(540,460+Math.max(0,m.items.length-8)*28),left=180,right=785,top=24,bottom=24;
+ const sankey=d3.sankey().nodeId(d=>d.id).nodeWidth(12).nodePadding(22).nodeAlign(d3.sankeyJustify).nodeSort(null).extent([[left,top],[right,H-bottom]]);
+ const graph=sankey({nodes:nodes.map(d=>({...d})),links:links.map(d=>({...d}))});
+ const svg=d3.create("svg").attr("viewBox",[0,0,W,H]).attr("class","sankey-svg sankey-d3").attr("role","img").attr("aria-label","Monthly income flowing through budget categories to individual allocations.");
+ const colors={"Savings":"#22a06b","Living":"#3b82f6","Auto":"#f59e42","Subscriptions":"#9b5de5","Other":"#9ca3af","Left Over":"#ef6464"};
+ svg.append("g").selectAll("path").data(graph.links).join("path").attr("d",d3.sankeyLinkHorizontal()).attr("fill","none").attr("stroke",d=>colors[d.group]||"#94a3b8").attr("stroke-opacity",.30).attr("stroke-width",d=>Math.max(1,d.width));
+ const source=graph.nodes.find(n=>n.id==="income");
+ svg.append("rect").attr("x",20).attr("y",source.y0).attr("width",150).attr("height",source.y1-source.y0).attr("rx",8).attr("fill","#1f2937");
+ const sy=(source.y0+source.y1)/2;svg.append("text").attr("x",40).attr("y",sy-18).attr("class","sk-source-label").text("Total Income");svg.append("text").attr("x",40).attr("y",sy+12).attr("class","sk-source-value").text(money(m.income));svg.append("text").attr("x",40).attr("y",sy+34).attr("class","sk-source-sub").text(budgetMode==="monthly"?"monthly":"per paycheck");
+ const nonSource=graph.nodes.filter(n=>n.id!=="income");
+ svg.append("g").selectAll("rect").data(nonSource).join("rect").attr("x",d=>d.x0).attr("y",d=>d.y0).attr("width",d=>d.x1-d.x0).attr("height",d=>Math.max(2,d.y1-d.y0)).attr("rx",3).attr("fill",d=>colors[d.group]||"#94a3b8");
+ const groupsOnly=graph.nodes.filter(n=>n.type==="group");
+ const gl=svg.append("g");
+ groupsOnly.forEach(d=>{const y=(d.y0+d.y1)/2;gl.append("text").attr("x",d.x1+12).attr("y",y-3).attr("class","sk-mid-label").text(d.name);gl.append("text").attr("x",d.x1+12).attr("y",y+15).attr("class","sk-mid-value").text(money(d.value)+" · "+(d.value/m.income*100).toFixed(1)+"%")});
+ const items=graph.nodes.filter(n=>n.type==="item");
+ const cards=svg.append("g");
+ items.forEach(d=>{const cy=(d.y0+d.y1)/2,bh=Math.max(32,d.y1-d.y0),y=cy-bh/2,x=d.x1+12,w=270;cards.append("rect").attr("x",x).attr("y",y).attr("width",w).attr("height",bh).attr("rx",6).attr("class","sk-item");cards.append("rect").attr("x",x).attr("y",y).attr("width",7).attr("height",bh).attr("rx",3).attr("fill",colors[d.group]||"#94a3b8");cards.append("text").attr("x",x+18).attr("y",cy+4).attr("class","sk-item-label").text(d.name);cards.append("text").attr("x",x+w-12).attr("y",cy+4).attr("class","sk-item-value").text(money(d.value))});
+ root.appendChild(svg.node())
 }
 $("budgetModeMonthly").onclick=()=>{budgetMode="monthly";$("budgetModeMonthly").classList.add("active");$("budgetModePaycheck").classList.remove("active");renderBudget()}
 $("budgetModePaycheck").onclick=()=>{budgetMode="paycheck";$("budgetModePaycheck").classList.add("active");$("budgetModeMonthly").classList.remove("active");renderBudget()}
