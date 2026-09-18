@@ -205,40 +205,21 @@ async function faceUnlock(){const id=localStorage.getItem(BUDGET_CRED_KEY);if(!i
 function money(n){return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(Number(n||0))}
 function normalizeBudgetAmount(x){let n=Number(x.amount||0);if(budgetMode==="paycheck"&&x.notes!=="per_paycheck")n=n*12/26;if(budgetMode==="monthly"&&x.notes==="per_paycheck")n=n*26/12;return n}
 async function loadBudgetData(){const {data:{session}}=await sb.auth.getSession();if(!session){$("budgetDataStatus").textContent="Sign in is required before private budget records can sync.";renderBudget();return}const {data:rows,error}=await sb.from("budget_entries").select("*").order("entry_type");if(error){$("budgetDataStatus").textContent="Budget sync unavailable: "+error.message;budgetEntries=[]}else{$("budgetDataStatus").textContent="";budgetEntries=rows||[]}renderBudget()}
-function renderBudget(){const income=budgetEntries.filter(x=>x.entry_type==="income").reduce((s,x)=>s+normalizeBudgetAmount(x),0),expense=budgetEntries.filter(x=>x.entry_type==="expense").reduce((s,x)=>s+normalizeBudgetAmount(x),0),goal=budgetEntries.filter(x=>x.entry_type==="goal").reduce((s,x)=>s+normalizeBudgetAmount(x),0),avail=income-expense-goal; $("budgetIncome").textContent=money(income);$("budgetSpending").textContent=money(expense);$("budgetAvailable").textContent=money(avail);renderBudgetTable();renderBudgetFlow()}
-function renderBudgetTable(){const rows=budgetEntries.slice().sort((a,b)=>(a.category||"").localeCompare(b.category||"")||(a.name||"").localeCompare(b.name||""));$("budgetTableBody").innerHTML=rows.length?rows.map(x=>`<tr><td>${esc(x.category||x.entry_type)}</td><td>${esc(x.name)}</td><td>${esc(x.notes==="per_paycheck"?"Biweekly":"Monthly")}</td><td>${money(normalizeBudgetAmount(x))}</td></tr>`).join(""):'<tr><td colspan="4">No private budget rows synced yet.</td></tr>'}
+function budgetGroup(x){const n=(x.name||"").toLowerCase(),cat=(x.category||"").toLowerCase();if(x.entry_type==="goal"||n.includes("roth")||n.includes("401"))return "Savings";if(n.includes("toyota")||n.includes("geico")||cat.includes("transport")||cat.includes("auto")||cat.includes("insurance"))return "Auto";if(n.includes("chatgpt")||cat.includes("subscription"))return "Subscriptions";if(n.includes("rent")||n.includes("utility")||n.includes("internet")||n.includes("mediacom")||n.includes("gym")||cat.includes("housing")||cat.includes("utilities"))return "Living";return "Other"}
+function budgetModel(){const income=budgetEntries.filter(x=>x.entry_type==="income").reduce((s,x)=>s+normalizeBudgetAmount(x),0),items=budgetEntries.filter(x=>x.entry_type!=="income").map(x=>({...x,_value:normalizeBudgetAmount(x),_group:budgetGroup(x)})).filter(x=>x._value>0),allocated=items.reduce((s,x)=>s+x._value,0),left=Math.max(0,income-allocated);return{income,items,allocated,left}}
+function renderBudget(){const m=budgetModel();$("budgetIncome").textContent=money(m.income);$("budgetSpending").textContent=money(m.allocated);$("budgetAvailable").textContent=money(m.left);renderBudgetTable();renderBudgetFlow()}
+function renderBudgetTable(){const m=budgetModel(),order=["Savings","Living","Auto","Subscriptions","Other"];const rows=m.items.sort((a,b)=>order.indexOf(a._group)-order.indexOf(b._group)||b._value-a._value);$("budgetTableBody").innerHTML=rows.length?rows.map(x=>`<tr><td><span class="budget-cat cat-${x._group.toLowerCase()}">${esc(x._group)}</span></td><td>${esc(x.name)}</td><td>${money(x._value)}</td><td>${m.income?(x._value/m.income*100).toFixed(1):"0.0"}%</td></tr>`).join(""):'<tr><td colspan="4">No private budget rows synced yet.</td></tr>'}
 function renderBudgetFlow(){
-  const root=$("budgetFlow");root.innerHTML="";
-  if(!budgetEntries.length){root.innerHTML='<div class="budget-empty">Private budget data will appear here after account sign-in.</div>';return}
-  const income=budgetEntries.filter(x=>x.entry_type==="income");
-  const outs=budgetEntries.filter(x=>x.entry_type!=="income").map(x=>({...x,_value:normalizeBudgetAmount(x)})).filter(x=>x._value>0);
-  const total=income.reduce((s,x)=>s+normalizeBudgetAmount(x),0);
-  const spent=outs.reduce((s,x)=>s+x._value,0),leftover=Math.max(0,total-spent);
-  const flows=[...outs.map(x=>({name:x.name,value:x._value,type:x.entry_type})),...(leftover>0?[{name:"Left over",value:leftover,type:"leftover"}]:[])];
-  if(!total||!flows.length){root.innerHTML='<div class="budget-empty">Add an income baseline and budget rows to build the Sankey diagram.</div>';return}
-  const NS="http://www.w3.org/2000/svg",svg=document.createElementNS(NS,"svg"),W=Math.max(620,root.clientWidth||620),nodeW=128,leftX=12,rightX=W-nodeW-12,gap=10,top=10;
-  const minH=44,H=Math.max(260,flows.length*(minH+gap)+20),usable=H-top*2-gap*(flows.length-1);
-  svg.setAttribute("viewBox",`0 0 ${W} ${H}`);svg.setAttribute("class","sankey-svg");svg.setAttribute("role","img");svg.setAttribute("aria-label","Budget Sankey diagram showing income flowing to expenses, savings, and money left over.");
-  const sourceH=Math.max(84,H-20),sourceY=(H-sourceH)/2,sourceCenter=sourceY+sourceH/2;
-  const rect=(x,y,w,h,cls)=>{const r=document.createElementNS(NS,"rect");r.setAttribute("x",x);r.setAttribute("y",y);r.setAttribute("width",w);r.setAttribute("height",h);r.setAttribute("rx","12");r.setAttribute("class",cls);svg.appendChild(r);return r};
-  const txt=(x,y,val,cls,anchor="start")=>{const t=document.createElementNS(NS,"text");t.setAttribute("x",x);t.setAttribute("y",y);t.setAttribute("class",cls);t.setAttribute("text-anchor",anchor);t.textContent=val;svg.appendChild(t);return t};
-  rect(leftX,sourceY,nodeW,sourceH,"sankey-node sankey-source");
-  txt(leftX+14,sourceCenter-8,"Full baseline","sankey-label");txt(leftX+14,sourceCenter+16,money(total),"sankey-value");
-  let y=top,sourceCursor=sourceY;
-  const scale=usable/Math.max(total,spent+leftover);
-  flows.forEach((f,i)=>{
-    const h=Math.max(minH,f.value*scale),center=y+h/2,thick=Math.max(3,f.value/total*sourceH);
-    const path=document.createElementNS(NS,"path"),x1=leftX+nodeW,x2=rightX,cy1=sourceCursor+thick/2;
-    path.setAttribute("d",`M ${x1} ${cy1} C ${x1+(x2-x1)*.42} ${cy1}, ${x1+(x2-x1)*.58} ${center}, ${x2} ${center}`);
-    path.setAttribute("class","sankey-link "+(f.type==="leftover"?"sankey-leftover-link":""));path.setAttribute("stroke-width",thick);svg.appendChild(path);
-    const g=document.createElementNS(NS,"g");g.setAttribute("class","sankey-target");g.setAttribute("tabindex","0");g.setAttribute("role","button");g.setAttribute("aria-label",f.name+" "+money(f.value));
-    const r=document.createElementNS(NS,"rect");r.setAttribute("x",rightX);r.setAttribute("y",center-minH/2);r.setAttribute("width",nodeW);r.setAttribute("height",minH);r.setAttribute("rx","10");r.setAttribute("class","sankey-node "+(f.type==="leftover"?"sankey-leftover":""));g.appendChild(r);
-    const a=document.createElementNS(NS,"text");a.setAttribute("x",rightX+12);a.setAttribute("y",center-3);a.setAttribute("class","sankey-label");a.textContent=f.name;g.appendChild(a);
-    const b=document.createElementNS(NS,"text");b.setAttribute("x",rightX+12);b.setAttribute("y",center+15);b.setAttribute("class","sankey-small-value");b.textContent=money(f.value);g.appendChild(b);
-    const select=()=>{svg.querySelectorAll(".sankey-target").forEach(z=>z.classList.remove("active"));g.classList.add("active")};g.addEventListener("click",select);g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select()}});
-    svg.appendChild(g);sourceCursor+=thick;y+=h+gap;
-  });
-  root.appendChild(svg);
+ const root=$("budgetFlow");root.innerHTML="";const m=budgetModel();if(!m.income){root.innerHTML='<div class="budget-empty">Add an income baseline to build the Sankey diagram.</div>';return}
+ const order=["Savings","Living","Auto","Subscriptions","Other"],groups=order.map(name=>({name,items:m.items.filter(x=>x._group===name)})).filter(g=>g.items.length);groups.forEach(g=>g.value=g.items.reduce((s,x)=>s+x._value,0));if(m.left>0)groups.push({name:"Left Over",value:m.left,items:[]});
+ const NS="http://www.w3.org/2000/svg",svg=document.createElementNS(NS,"svg"),W=1000,H=Math.max(520,m.items.length*52+80),sx=18,sw=150,mx=390,mw=145,rx=755,rw=220,top=28,gap=14,totalH=H-top*2;
+ svg.setAttribute("viewBox",`0 0 ${W} ${H}`);svg.setAttribute("class","sankey-svg sankey-three");svg.setAttribute("role","img");svg.setAttribute("aria-label","Income flows through budget categories to individual allocations.");
+ const el=(tag,attrs,parent=svg)=>{const z=document.createElementNS(NS,tag);Object.entries(attrs||{}).forEach(([k,v])=>z.setAttribute(k,v));parent.appendChild(z);return z},text=(x,y,v,cls,parent=svg)=>{const z=el("text",{x,y,class:cls},parent);z.textContent=v;return z};
+ const sourceH=totalH*.86,sourceY=(H-sourceH)/2;el("rect",{x:sx,y:sourceY,width:sw,height:sourceH,rx:8,class:"sk-source"});text(sx+18,sourceY+sourceH/2-18,"Total Income","sk-source-label");text(sx+18,sourceY+sourceH/2+12,money(m.income),"sk-source-value");text(sx+18,sourceY+sourceH/2+34,budgetMode==="monthly"?"monthly":"per paycheck","sk-source-sub");
+ let gy=top,srcCursor=sourceY;const groupAvail=H-top*2-gap*(groups.length-1),groupScale=groupAvail/m.income,groupPos=[];
+ groups.forEach(g=>{const gh=Math.max(42,g.value*groupScale),gc=gy+gh/2,th=Math.max(3,g.value/m.income*sourceH),cls="sk-"+g.name.toLowerCase().replace(/\s+/g,"-");const p=el("path",{d:`M ${sx+sw} ${srcCursor+th/2} C 260 ${srcCursor+th/2},300 ${gc},${mx} ${gc}`,class:"sk-link "+cls,"stroke-width":th});el("rect",{x:mx,y:gc-21,width:mw,height:42,rx:5,class:"sk-mid "+cls});text(mx+12,gc-4,g.name,"sk-mid-label");text(mx+12,gc+15,money(g.value)+" · "+(g.value/m.income*100).toFixed(1)+"%","sk-mid-value");groupPos.push({...g,center:gc,cls});srcCursor+=th;gy+=gh+gap});
+ const itemRows=[];groupPos.forEach(g=>g.items.forEach(x=>itemRows.push({x,g})));let iy=top;const rowGap=8,rowH=42;groupPos.forEach(g=>{if(!g.items.length)return;let gcursor=g.center-Math.min(34,g.value/m.income*sourceH)/2;g.items.forEach(x=>{const center=iy+rowH/2,th=Math.max(3,x._value/m.income*sourceH);el("path",{d:`M ${mx+mw} ${gcursor+th/2} C 620 ${gcursor+th/2},675 ${center},${rx} ${center}`,class:"sk-link "+g.cls,"stroke-width":th});el("rect",{x:rx,y:iy,width:rw,height:rowH,rx:7,class:"sk-item"});el("rect",{x:rx,y:iy,width:7,height:rowH,rx:3,class:"sk-accent "+g.cls});text(rx+18,center-3,x.name,"sk-item-label");text(rx+rw-12,center+14,money(x._value),"sk-item-value");gcursor+=th;iy+=rowH+rowGap})});
+ root.appendChild(svg)
 }
 $("budgetModeMonthly").onclick=()=>{budgetMode="monthly";$("budgetModeMonthly").classList.add("active");$("budgetModePaycheck").classList.remove("active");renderBudget()}
 $("budgetModePaycheck").onclick=()=>{budgetMode="paycheck";$("budgetModePaycheck").classList.add("active");$("budgetModeMonthly").classList.remove("active");renderBudget()}
