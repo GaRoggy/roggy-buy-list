@@ -207,7 +207,39 @@ function normalizeBudgetAmount(x){let n=Number(x.amount||0);if(budgetMode==="pay
 async function loadBudgetData(){const {data:{session}}=await sb.auth.getSession();if(!session){$("budgetDataStatus").textContent="Sign in is required before private budget records can sync.";renderBudget();return}const {data:rows,error}=await sb.from("budget_entries").select("*").order("entry_type");if(error){$("budgetDataStatus").textContent="Budget sync unavailable: "+error.message;budgetEntries=[]}else{$("budgetDataStatus").textContent="";budgetEntries=rows||[]}renderBudget()}
 function renderBudget(){const income=budgetEntries.filter(x=>x.entry_type==="income").reduce((s,x)=>s+normalizeBudgetAmount(x),0),expense=budgetEntries.filter(x=>x.entry_type==="expense").reduce((s,x)=>s+normalizeBudgetAmount(x),0),goal=budgetEntries.filter(x=>x.entry_type==="goal").reduce((s,x)=>s+normalizeBudgetAmount(x),0),avail=income-expense-goal; $("budgetIncome").textContent=money(income);$("budgetSpending").textContent=money(expense);$("budgetAvailable").textContent=money(avail);renderBudgetTable();renderBudgetFlow()}
 function renderBudgetTable(){const rows=budgetEntries.slice().sort((a,b)=>(a.category||"").localeCompare(b.category||"")||(a.name||"").localeCompare(b.name||""));$("budgetTableBody").innerHTML=rows.length?rows.map(x=>`<tr><td>${esc(x.category||x.entry_type)}</td><td>${esc(x.name)}</td><td>${esc(x.notes==="per_paycheck"?"Biweekly":"Monthly")}</td><td>${money(normalizeBudgetAmount(x))}</td></tr>`).join(""):'<tr><td colspan="4">No private budget rows synced yet.</td></tr>'}
-function renderBudgetFlow(){const root=$("budgetFlow");root.innerHTML="";if(!budgetEntries.length){root.innerHTML='<div class="budget-empty">Private budget data will appear here after account sign-in.</div>';return}const income=budgetEntries.filter(x=>x.entry_type==="income"),outs=budgetEntries.filter(x=>x.entry_type!=="income");const total=income.reduce((s,x)=>s+normalizeBudgetAmount(x),0);const left=document.createElement("div");left.className="flow-source";left.innerHTML='<span>Income</span><b>'+money(total)+'</b>';root.appendChild(left);const lanes=document.createElement("div");lanes.className="flow-lanes";outs.forEach(x=>{const v=normalizeBudgetAmount(x),row=document.createElement("button");row.className="flow-row";row.innerHTML='<span class="flow-line" style="--w:'+Math.max(4,Math.min(100,total?v/total*100:0))+'%"></span><span class="flow-label">'+esc(x.name)+'</span><b>'+money(v)+'</b>';row.onclick=()=>{document.querySelectorAll(".flow-row").forEach(z=>z.classList.remove("active"));row.classList.add("active")};lanes.appendChild(row)});root.appendChild(lanes)}
+function renderBudgetFlow(){
+  const root=$("budgetFlow");root.innerHTML="";
+  if(!budgetEntries.length){root.innerHTML='<div class="budget-empty">Private budget data will appear here after account sign-in.</div>';return}
+  const income=budgetEntries.filter(x=>x.entry_type==="income");
+  const outs=budgetEntries.filter(x=>x.entry_type!=="income").map(x=>({...x,_value:normalizeBudgetAmount(x)})).filter(x=>x._value>0);
+  const total=income.reduce((s,x)=>s+normalizeBudgetAmount(x),0);
+  const spent=outs.reduce((s,x)=>s+x._value,0),leftover=Math.max(0,total-spent);
+  const flows=[...outs.map(x=>({name:x.name,value:x._value,type:x.entry_type})),...(leftover>0?[{name:"Left over",value:leftover,type:"leftover"}]:[])];
+  if(!total||!flows.length){root.innerHTML='<div class="budget-empty">Add an income baseline and budget rows to build the Sankey diagram.</div>';return}
+  const NS="http://www.w3.org/2000/svg",svg=document.createElementNS(NS,"svg"),W=Math.max(620,root.clientWidth||620),nodeW=128,leftX=12,rightX=W-nodeW-12,gap=10,top=10;
+  const minH=44,H=Math.max(260,flows.length*(minH+gap)+20),usable=H-top*2-gap*(flows.length-1);
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`);svg.setAttribute("class","sankey-svg");svg.setAttribute("role","img");svg.setAttribute("aria-label","Budget Sankey diagram showing income flowing to expenses, savings, and money left over.");
+  const sourceH=Math.max(84,H-20),sourceY=(H-sourceH)/2,sourceCenter=sourceY+sourceH/2;
+  const rect=(x,y,w,h,cls)=>{const r=document.createElementNS(NS,"rect");r.setAttribute("x",x);r.setAttribute("y",y);r.setAttribute("width",w);r.setAttribute("height",h);r.setAttribute("rx","12");r.setAttribute("class",cls);svg.appendChild(r);return r};
+  const txt=(x,y,val,cls,anchor="start")=>{const t=document.createElementNS(NS,"text");t.setAttribute("x",x);t.setAttribute("y",y);t.setAttribute("class",cls);t.setAttribute("text-anchor",anchor);t.textContent=val;svg.appendChild(t);return t};
+  rect(leftX,sourceY,nodeW,sourceH,"sankey-node sankey-source");
+  txt(leftX+14,sourceCenter-8,"Full baseline","sankey-label");txt(leftX+14,sourceCenter+16,money(total),"sankey-value");
+  let y=top,sourceCursor=sourceY;
+  const scale=usable/Math.max(total,spent+leftover);
+  flows.forEach((f,i)=>{
+    const h=Math.max(minH,f.value*scale),center=y+h/2,thick=Math.max(3,f.value/total*sourceH);
+    const path=document.createElementNS(NS,"path"),x1=leftX+nodeW,x2=rightX,cy1=sourceCursor+thick/2;
+    path.setAttribute("d",`M ${x1} ${cy1} C ${x1+(x2-x1)*.42} ${cy1}, ${x1+(x2-x1)*.58} ${center}, ${x2} ${center}`);
+    path.setAttribute("class","sankey-link "+(f.type==="leftover"?"sankey-leftover-link":""));path.setAttribute("stroke-width",thick);svg.appendChild(path);
+    const g=document.createElementNS(NS,"g");g.setAttribute("class","sankey-target");g.setAttribute("tabindex","0");g.setAttribute("role","button");g.setAttribute("aria-label",f.name+" "+money(f.value));
+    const r=document.createElementNS(NS,"rect");r.setAttribute("x",rightX);r.setAttribute("y",center-minH/2);r.setAttribute("width",nodeW);r.setAttribute("height",minH);r.setAttribute("rx","10");r.setAttribute("class","sankey-node "+(f.type==="leftover"?"sankey-leftover":""));g.appendChild(r);
+    const a=document.createElementNS(NS,"text");a.setAttribute("x",rightX+12);a.setAttribute("y",center-3);a.setAttribute("class","sankey-label");a.textContent=f.name;g.appendChild(a);
+    const b=document.createElementNS(NS,"text");b.setAttribute("x",rightX+12);b.setAttribute("y",center+15);b.setAttribute("class","sankey-small-value");b.textContent=money(f.value);g.appendChild(b);
+    const select=()=>{svg.querySelectorAll(".sankey-target").forEach(z=>z.classList.remove("active"));g.classList.add("active")};g.addEventListener("click",select);g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select()}});
+    svg.appendChild(g);sourceCursor+=thick;y+=h+gap;
+  });
+  root.appendChild(svg);
+}
 $("budgetModeMonthly").onclick=()=>{budgetMode="monthly";$("budgetModeMonthly").classList.add("active");$("budgetModePaycheck").classList.remove("active");renderBudget()}
 $("budgetModePaycheck").onclick=()=>{budgetMode="paycheck";$("budgetModePaycheck").classList.add("active");$("budgetModeMonthly").classList.remove("active");renderBudget()}
 $("setupBudgetLockBtn").onclick=()=>$("budgetSetupDialog").showModal();$("pinUnlockBtn").onclick=()=>budgetConfigured()?$("budgetPinDialog").showModal():$("budgetSetupDialog").showModal();$("faceUnlockBtn").onclick=()=>faceUnlock().catch(e=>$("budgetLockStatus").textContent=e.message||"Face ID / passkey unlock failed.");$("lockBudgetBtn").onclick=lockBudget;
