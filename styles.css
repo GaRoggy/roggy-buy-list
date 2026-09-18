@@ -42,3 +42,6 @@
 .sk-item{fill:#f8fafc;stroke:#d8dee6;stroke-width:1}.sk-item-label{fill:#111827;font-size:11px;font-weight:750}.sk-item-value{fill:#4b5563;font-size:10px;font-weight:700;text-anchor:end}.sk-accent{stroke:none}
 .budget-cat{display:inline-block;font-weight:800}.cat-savings{color:#16855a}.cat-living{color:#2563eb}.cat-auto{color:#d97706}.cat-subscriptions{color:#7c3aed}.cat-other{color:#6b7280}
 @media(max-width:600px){.budget-panel{padding:12px}.sankey-three{min-width:820px}.budget-flow{margin-left:-2px;margin-right:-2px}.budget-table{min-width:620px}}
+
+/* Sankey geometry v19 */
+.sk-band{stroke:none;opacity:.30}.sk-band.sk-savings{fill:#22a06b}.sk-band.sk-living{fill:#3b82f6}.sk-band.sk-auto{fill:#f59e42}.sk-band.sk-subscriptions{fill:#9b5de5}.sk-band.sk-other{fill:#9ca3af}.sk-band.sk-left-over{fill:#ef6464}.sk-mid{stroke:none;opacity:.96}.sk-tiny-label{font-size:9px;font-weight:750;fill:#374151}
