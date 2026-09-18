@@ -1,8 +1,121 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#111827"><title>Roggy Lists</title><link rel="manifest" href="manifest.json"><link rel="stylesheet" href="styles.css"><link rel="apple-touch-icon" href="icon.svg"></head><body>
-<header><div><h1 id="pageTitle">Buy List</h1><p id="pageSubtitle">Needs first. Luxuries later.</p></div><div class="header-actions"><button id="authBtn" class="auth-btn">Sign in</button><div class="header-actions"><button id="authBtn" class="auth-btn">Sign in</button><button id="backupBtn" class="icon-btn" aria-label="Backup">⇩</button></div></div></header>
-<nav class="page-tabs"><button class="page-tab active" data-list="buy">Buy List</button><button class="page-tab" data-list="groceries">Groceries</button></nav>
-<nav class="sub-tabs"><button class="sub-tab active" data-view="active">Active</button><button class="sub-tab" data-view="deleted">Recently Deleted <span id="deletedCount"></span></button></nav>
-<main><section id="summary" class="summary"></section><section class="toolbar"><div id="priorityFilters" class="segmented"><button class="filter active" data-filter="all">All</button><button class="filter" data-filter="Need">Need</button><button class="filter" data-filter="Want">Want</button><button class="filter" data-filter="Eventually">Eventually</button></div><div class="searchrow"><input id="search" placeholder="Search items..." autocomplete="off"><select id="sort"><option value="priority">Priority</option><option value="name">A–Z</option></select></div></section><section id="status" class="status"></section><section id="list" class="list"></section></main>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>Roggy Lists</title>
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="styles.css">
+<link rel="apple-touch-icon" href="icon.svg">
+</head>
+<body>
+<header>
+  <div><h1 id="pageTitle">Buy List</h1><p id="pageSubtitle">Needs first. Luxuries later.</p></div>
+  <div class="header-actions"><button id="authBtn" class="auth-btn">Sign in</button><button id="backupBtn" class="icon-btn" aria-label="Backup">⇩</button></div>
+</header>
+
+<nav class="page-tabs">
+  <button class="page-tab active" data-page="buy">Buy List</button>
+  <button class="page-tab" data-page="groceries">Groceries</button>
+  <button class="page-tab" data-page="drivers">Bad Drivers</button>
+</nav>
+
+<section id="listsPage">
+  <nav class="sub-tabs"><button class="sub-tab active" data-view="active">Active</button><button class="sub-tab" data-view="deleted">Recently Deleted <span id="deletedCount"></span></button></nav>
+  <main>
+    <section id="summary" class="summary"></section>
+    <section class="toolbar">
+      <div id="priorityFilters" class="segmented"><button class="filter active" data-filter="all">All</button><button class="filter" data-filter="Need">Need</button><button class="filter" data-filter="Want">Want</button><button class="filter" data-filter="Eventually">Eventually</button></div>
+      <div class="searchrow"><input id="search" placeholder="Search items..." autocomplete="off"><select id="sort"><option value="priority">Priority</option><option value="name">A–Z</option></select></div>
+    </section>
+    <section id="status" class="status"></section>
+    <section id="list" class="list"></section>
+  </main>
+</section>
+
+<section id="driversPage" hidden>
+  <nav class="sub-tabs driver-subtabs"><button class="driver-tab active" data-driver-view="overview">Analysis</button><button class="driver-tab" data-driver-view="observations">Observations</button></nav>
+  <main class="driver-main">
+    <section id="driverStatus" class="status"></section>
+
+    <section id="driverOverview">
+      <div class="driver-summary">
+        <div><b id="driverTotal">26</b><span>Total observations</span></div>
+        <div><b id="individualTotal">0</b><span>Detailed entries</span></div>
+        <div><b id="baselineTotal">26</b><span>Historical baseline</span></div>
+      </div>
+      <div class="stat-note"><b>Interpretation:</b> representation ratio = share of your observations ÷ Iowa population share. 1.0× is proportional. These are observations from your personal sample, not estimates of demographic driving risk.</div>
+
+      <div class="chart-grid">
+        <article class="chart-card"><h3>Race</h3><div class="chart-wrap"><canvas id="raceChart"></canvas></div></article>
+        <article class="chart-card"><h3>Gender</h3><div class="chart-wrap"><canvas id="genderChart"></canvas></div></article>
+        <article class="chart-card"><h3>Age</h3><div class="chart-wrap"><canvas id="ageChart"></canvas></div></article>
+        <article class="chart-card"><h3>Obesity</h3><div class="chart-wrap"><canvas id="obeseChart"></canvas></div></article>
+      </div>
+
+      <article class="chart-card wide">
+        <div class="chart-head"><div><h3>Population-adjusted representation</h3><p>Bars compare your observation share with the Iowa comparison population.</p></div>
+          <select id="ratioDimension"><option value="Race">Race</option><option value="Gender">Gender</option><option value="Age">Age</option><option value="Obese">Obesity</option></select>
+        </div>
+        <div class="ratio-help">1.0× = proportional to Iowa population share</div>
+        <div class="chart-wrap ratio-wrap"><canvas id="ratioChart"></canvas></div>
+      </article>
+
+      <section class="analysis-card">
+        <h3>Statistical analysis</h3>
+        <div id="analysisTable"></div>
+        <p class="source-note">Population references: U.S. Census Bureau QuickFacts Iowa (2025 estimates), ACS 2024 age distribution, and CDC BRFSS 2022–2024 obesity prevalence. Age comparison is approximate because Census age bands do not exactly match the tracker buckets.</p>
+      </section>
+    </section>
+
+    <section id="driverObservations" hidden>
+      <div class="driver-toolbar">
+        <input id="driverSearch" placeholder="Search descriptions..." autocomplete="off">
+        <select id="driverSort">
+          <option value="newest">Newest</option>
+          <option value="race">Race</option>
+          <option value="gender">Gender</option>
+          <option value="age">Age</option>
+          <option value="obese">Obese?</option>
+        </select>
+      </div>
+      <div class="baseline-banner">The original 26 observations were entered as aggregate totals, so they appear in analysis but not as fake individual rows here.</div>
+      <section id="driverList" class="driver-list"></section>
+    </section>
+  </main>
+</section>
+
 <button id="addBtn" class="fab">＋</button>
-<dialog id="itemDialog"><form method="dialog" id="itemForm"><div class="dialog-head"><h2 id="dialogTitle">Add item</h2><button value="cancel" class="plain">✕</button></div><input type="hidden" id="itemId"><label>Item<input id="item" required></label><div class="grid2"><label>Category<input id="category" placeholder="Home, Kitchen, Produce..."></label><label>Priority<select id="priority"><option>Need</option><option>Want</option><option>Eventually</option></select></label></div><div class="grid2"><label>Quantity<input id="quantity" placeholder="1"></label><label>Status<select id="itemStatus"><option>Looking</option><option>Ready to Buy</option><option>Bought</option></select></label></div><label>Notes<textarea id="notes" rows="3"></textarea></label><div class="actions"><button value="cancel" class="secondary">Cancel</button><button id="saveBtn" value="default" class="primary">Save</button></div></form></dialog>
-<input id="importFile" type="file" accept="application/json" hidden><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="app.js"></script></body></html>
+
+<dialog id="itemDialog"><form method="dialog" id="itemForm">
+  <div class="dialog-head"><h2 id="dialogTitle">Add item</h2><button value="cancel" class="plain">✕</button></div>
+  <input type="hidden" id="itemId">
+  <label>Item<input id="item" required></label>
+  <div class="grid2"><label>Category<input id="category" placeholder="Home, Kitchen, Produce..."></label><label>Priority<select id="priority"><option>Need</option><option>Want</option><option>Eventually</option></select></label></div>
+  <div class="grid2"><label>Quantity<input id="quantity" placeholder="1"></label><label>Status<select id="itemStatus"><option>Looking</option><option>Ready to Buy</option><option>Bought</option></select></label></div>
+  <label>Notes<textarea id="notes" rows="3"></textarea></label>
+  <div class="actions"><button value="cancel" class="secondary">Cancel</button><button id="saveBtn" value="default" class="primary">Save</button></div>
+</form></dialog>
+
+<dialog id="driverDialog"><form method="dialog" id="driverForm">
+  <div class="dialog-head"><h2>Add bad driver</h2><button value="cancel" class="plain">✕</button></div>
+  <div class="grid2">
+    <label>Race<select id="driverRace" required><option>White</option><option>Black</option><option>Asian</option><option>Other</option><option>Unknown</option></select></label>
+    <label>Gender<select id="driverGender" required><option>Woman</option><option>Man</option><option>Unknown</option></select></label>
+  </div>
+  <div class="grid2">
+    <label>Age<select id="driverAge" required><option>14-25</option><option>25-39</option><option>40-59</option><option>60+</option><option>Unknown</option></select></label>
+    <label>Obese?<select id="driverObese" required><option>No</option><option>Yes</option><option>Unknown</option></select></label>
+  </div>
+  <label>Why were they a bad driver?<textarea id="driverDescription" rows="5" required placeholder="Describe what happened..."></textarea></label>
+  <div class="actions"><button value="cancel" class="secondary">Cancel</button><button value="default" class="primary">Save observation</button></div>
+</form></dialog>
+
+<dialog id="driverDetailDialog"><div class="detail-dialog"><div class="dialog-head"><h2>Observation</h2><button id="closeDriverDetail" class="plain">✕</button></div><div id="driverDetail"></div></div></dialog>
+
+<input id="importFile" type="file" accept="application/json" hidden>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body></html>
