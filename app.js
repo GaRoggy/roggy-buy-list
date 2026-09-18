@@ -1,7 +1,7 @@
 const SUPABASE_URL="https://dplvxsniyqkwlmdzqbyg.supabase.co";
 const SUPABASE_KEY="sb_publishable_4WYS4v4U7PSgXesYNNJUfA_69lJaBX1";
 const KEY="roggy-lists-v1";
-const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{flowType:"pkce",detectSessionInUrl:false,persistSession:true,autoRefreshToken:true}});
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{flowType:"pkce",detectSessionInUrl:true,persistSession:true,autoRefreshToken:true}});
 const $=id=>document.getElementById(id);
 
 const seed={buy:[
@@ -240,4 +240,4 @@ $("authBtn").onclick=async()=>{const {data:{session}}=await sb.auth.getSession()
 sb.auth.onAuthStateChange((event,session)=>{applyAuthSession(session);setTimeout(()=>{loadLists();if(currentPage==="drivers")loadDrivers();if(currentPage==="reminders")loadReminders();if(currentPage==="budget"&&budgetUnlocked)loadBudgetData()},0)});
 
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");
-finishOAuthRedirect().then(()=>updateAuth());loadLists();
+updateAuth();loadLists();
