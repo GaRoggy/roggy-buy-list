@@ -23,7 +23,7 @@ Age:{"14-25":18.45,"25-39":22.84,"40-59":28.00,"60+":30.71},
 Obese:{Yes:37.5,No:62.5}
 };
 
-let data={buy:[],groceries:[]},currentPage="buy",currentView="active",currentFilter="all";
+let data={buy:[],groceries:[]},currentPage="reminders",currentView="active",currentFilter="all";
 let baseline=FALLBACK_BASELINE,drivers=[],driverView="overview",charts={};
 let reminders=[],reminderView="today";
 
@@ -202,7 +202,7 @@ $("backupBtn").onclick=()=>{const blob=new Blob([JSON.stringify(data,null,2)],{t
 
 async function updateAuth(){const {data:{session}}=await sb.auth.getSession();$("authBtn").textContent=session?"Sign out":"Sign in";$("authBtn").title=session?.user?.email||"Sign in with GitHub";return session}
 $("authBtn").onclick=async()=>{const session=await updateAuth();if(session){await sb.auth.signOut();await updateAuth()}else{const {error}=await sb.auth.signInWithOAuth({provider:"github",options:{redirectTo:"https://garoggy.github.io/roggy-buy-list/"}});if(error)showErr(error)}};
-sb.auth.onAuthStateChange(()=>{updateAuth();loadLists();if(currentPage==="drivers")loadDrivers();if(currentPage==="reminders")loadReminders()});
+sb.auth.onAuthStateChange(()=>{updateAuth();loadLists();setPage("reminders");if(currentPage==="drivers")loadDrivers();if(currentPage==="reminders")loadReminders()});
 
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");
 updateAuth();loadLists();
