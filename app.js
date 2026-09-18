@@ -1,126 +1,32 @@
-// After deploying Code.gs as a Google Apps Script Web App,
-// paste its /exec URL below.
-const API_URL = "https://script.google.com/macros/s/AKfycby-S8CLT9WCg95lgUVmPliMTvhSty0mF7xQJLT8FOt1GyOJiCgiwiTtgUaqRDipMgCtdQ/exec";
-
-let items = [];
-let currentFilter = "all";
-
-const list = document.getElementById("list");
-const statusEl = document.getElementById("status");
-const dialog = document.getElementById("itemDialog");
-
-function money(v){ if(!v) return ""; const n=Number(String(v).replace(/[$,]/g,"")); return Number.isFinite(n) ? `$${n.toFixed(n%1?2:0)}` : v; }
-
-async function api(action, payload={}){
-  if(API_URL.includes("PASTE_YOUR")){
-    throw new Error("Connect the app to Google Sheets first. See SETUP.txt.");
-  }
-  const r = await fetch(API_URL,{
-    method:"POST",
-    headers:{"Content-Type":"text/plain;charset=utf-8"},
-    body:JSON.stringify({action,...payload})
-  });
-  const data = await r.json();
-  if(!data.ok) throw new Error(data.error || "Request failed");
-  return data;
-}
-
-async function load(){
-  statusEl.textContent="Loading…";
-  try{
-    const data = await api("list");
-    items = data.items || [];
-    statusEl.textContent="";
-    render();
-  }catch(e){
-    statusEl.textContent=e.message;
-    render();
-  }
-}
-
+const API_URL="https://script.google.com/macros/s/AKfycby-S8CLT9WCg95lgUVmPliMTvhSty0mF7xQJLT8FOt1GyOJiCgiwiTtgUaqRDipMgCtdQ/exec";
+let items=[],currentFilter="all";
+const list=document.getElementById("list"),statusEl=document.getElementById("status"),dialog=document.getElementById("itemDialog");
+function money(v){if(!v)return"";const n=Number(String(v).replace(/[$,]/g,""));return Number.isFinite(n)?`$${n.toFixed(2)}`:v}
+async function api(action,payload={}){const r=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action,...payload})});const d=await r.json();if(!d.ok)throw new Error(d.error||"Request failed");return d}
+async function load(){statusEl.textContent="Loading…";try{const d=await api("list");items=d.items||[];statusEl.textContent="";render()}catch(e){statusEl.textContent=e.message;render()}}
+function lowPrice(x){return Math.min(...[x.price1,x.price2,x.price3].map(v=>Number(String(v||"").replace(/[$,]/g,""))).filter(Number.isFinite),999999)}
 function render(){
-  const q=document.getElementById("search").value.trim().toLowerCase();
-  const priorityRank={Need:0,Want:1,Eventually:2};
-  const shown=items.filter(x=>(currentFilter==="all"||x.priority===currentFilter) &&
-    (!q || [x.item,x.category,x.notes].join(" ").toLowerCase().includes(q)))
-    .sort((a,b)=>(priorityRank[a.priority]??9)-(priorityRank[b.priority]??9) || a.row-b.row);
-
-  list.innerHTML="";
-  if(!shown.length){
-    list.innerHTML='<div class="card">Nothing here yet.</div>';
-    return;
-  }
-  for(const x of shown){
-    const c=document.createElement("article");
-    c.className="card "+(x.status==="Bought"?"bought":"");
-    c.innerHTML=`
-      <div class="card-top">
-        <div class="item-name">${esc(x.item)}</div>
-        <span class="badge ${esc(x.priority)}">${esc(x.priority)}</span>
-      </div>
-      <div class="meta">
-        <span>${esc(x.category||"Other")}</span>
-        ${x.targetPrice?`<span>Target ${esc(money(x.targetPrice))}</span>`:""}
-        <span>${esc(x.status||"Looking")}</span>
-      </div>
-      ${x.notes?`<div class="meta">${esc(x.notes)}</div>`:""}
-      <div class="options">
-        ${optionHtml(x.option1,x.price1,x.link1)}
-        ${optionHtml(x.option2,x.price2,x.link2)}
-        ${optionHtml(x.option3,x.price3,x.link3)}
-      </div>`;
-    c.onclick=()=>openEdit(x);
-    list.appendChild(c);
-  }
+ const q=document.getElementById("search").value.trim().toLowerCase(),sort=document.getElementById("sort").value,rank={Need:0,Want:1,Eventually:2};
+ let shown=items.filter(x=>(currentFilter==="all"||x.priority===currentFilter)&&(!q||[x.item,x.category,x.notes].join(" ").toLowerCase().includes(q)));
+ shown.sort(sort==="price"?(a,b)=>lowPrice(a)-lowPrice(b):sort==="name"?(a,b)=>a.item.localeCompare(b.item):(a,b)=>(rank[a.priority]??9)-(rank[b.priority]??9)||a.row-b.row);
+ const bought=items.filter(x=>x.status==="Bought").length,ready=items.filter(x=>x.status==="Ready to Buy").length;
+ document.getElementById("summary").innerHTML=`<div><b>${items.length-bought}</b><span>active</span></div><div><b>${ready}</b><span>ready</span></div><div><b>${bought}</b><span>bought</span></div>`;
+ list.innerHTML=""; if(!shown.length){list.innerHTML='<div class="card">Nothing here yet.</div>';return}
+ for(const x of shown){const c=document.createElement("article");c.className="card "+(x.status==="Bought"?"bought":"");c.innerHTML=`
+ <div class="card-top"><div><div class="item-name">${esc(x.item)}</div><div class="meta"><span>${esc(x.category||"Other")}</span><span>${esc(x.status||"Looking")}</span></div></div><span class="badge ${esc(x.priority)}">${esc(x.priority)}</span></div>
+ <div class="quick"><button class="statusbtn ${x.status==="Looking"?"selected":""}" data-s="Looking">Looking</button><button class="statusbtn ${x.status==="Ready to Buy"?"selected":""}" data-s="Ready to Buy">Ready</button><button class="statusbtn ${x.status==="Bought"?"selected":""}" data-s="Bought">✓ Bought</button></div>
+ <button class="options-toggle" type="button">Compare 3 options <span>⌄</span></button><div class="options collapsed">${optionHtml("Budget",x.option1,x.price1,x.link1)}${optionHtml("Value",x.option2,x.price2,x.link2)}${optionHtml("Upgrade",x.option3,x.price3,x.link3)}</div>
+ <button class="editbtn" type="button">Edit details</button>`;
+ c.querySelector(".options-toggle").onclick=e=>{e.stopPropagation();c.querySelector(".options").classList.toggle("collapsed");e.currentTarget.classList.toggle("open")};
+ c.querySelectorAll(".statusbtn").forEach(b=>b.onclick=async e=>{e.stopPropagation();await setStatus(x,b.dataset.s)});
+ c.querySelector(".editbtn").onclick=e=>{e.stopPropagation();openEdit(x)}; list.appendChild(c)}
 }
-
-function optionHtml(name,price,link){
-  if(!name&&!price&&!link) return "";
-  return `<div class="option"><span>${esc(name||"Option")} ${price?`— ${esc(money(price))}`:""}</span>${link?`<a href="${attr(link)}" target="_blank" onclick="event.stopPropagation()">Open</a>`:""}</div>`;
-}
-function esc(s=""){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
-function attr(s=""){return String(s).replace(/"/g,"&quot;")}
-
-document.querySelectorAll(".filter").forEach(b=>b.onclick=()=>{
-  document.querySelectorAll(".filter").forEach(x=>x.classList.remove("active"));
-  b.classList.add("active"); currentFilter=b.dataset.filter; render();
-});
-document.getElementById("search").oninput=render;
-document.getElementById("refreshBtn").onclick=load;
-document.getElementById("addBtn").onclick=()=>openAdd();
-
-function openAdd(){
-  document.getElementById("dialogTitle").textContent="Add item";
-  document.getElementById("rowIndex").value="";
-  document.getElementById("itemForm").reset();
-  dialog.showModal();
-}
-function openEdit(x){
-  document.getElementById("dialogTitle").textContent="Edit item";
-  rowIndex.value=x.row; item.value=x.item; category.value=x.category||"Other";
-  priority.value=x.priority||"Want"; targetPrice.value=x.targetPrice||"";
-  itemStatus.value=x.status||"Looking"; notes.value=x.notes||"";
-  dialog.showModal();
-}
-document.getElementById("itemForm").addEventListener("submit",async e=>{
-  if(e.submitter?.value==="cancel") return;
-  e.preventDefault();
-  const payload={
-    row:Number(rowIndex.value)||null,
-    item:item.value.trim(),
-    category:category.value,
-    priority:priority.value,
-    targetPrice:targetPrice.value.trim(),
-    status:itemStatus.value,
-    notes:notes.value.trim()
-  };
-  try{
-    document.getElementById("saveBtn").disabled=true;
-    await api(payload.row?"update":"add",payload);
-    dialog.close(); await load();
-  }catch(err){ alert(err.message); }
-  finally{document.getElementById("saveBtn").disabled=false;}
-});
-
-if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
-load();
+function optionHtml(label,name,price,link){if(!name&&!price&&!link)return"";return `<div class="option"><div><small>${label}</small><strong>${esc(name||"Option")}</strong><span>${esc(money(price))}</span></div>${link?`<a href="${attr(link)}" target="_blank" rel="noopener">View</a>`:""}</div>`}
+async function setStatus(x,s){statusEl.textContent="Saving…";try{await api("update",{row:x.row,item:x.item,category:x.category,priority:x.priority,targetPrice:x.targetPrice,status:s,notes:x.notes});x.status=s;statusEl.textContent="";render()}catch(e){statusEl.textContent=e.message}}
+function esc(s=""){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}function attr(s=""){return String(s).replace(/"/g,"&quot;")}
+document.querySelectorAll(".filter").forEach(b=>b.onclick=()=>{document.querySelectorAll(".filter").forEach(x=>x.classList.remove("active"));b.classList.add("active");currentFilter=b.dataset.filter;render()});
+document.getElementById("search").oninput=render;document.getElementById("sort").onchange=render;document.getElementById("refreshBtn").onclick=load;document.getElementById("addBtn").onclick=openAdd;
+function openAdd(){dialogTitle.textContent="Add item";rowIndex.value="";itemForm.reset();dialog.showModal()}
+function openEdit(x){dialogTitle.textContent="Edit item";rowIndex.value=x.row;item.value=x.item;category.value=x.category||"Other";priority.value=x.priority||"Want";targetPrice.value=x.targetPrice||"";itemStatus.value=x.status||"Looking";notes.value=x.notes||"";dialog.showModal()}
+itemForm.addEventListener("submit",async e=>{if(e.submitter?.value==="cancel")return;e.preventDefault();const p={row:Number(rowIndex.value)||null,item:item.value.trim(),category:category.value,priority:priority.value,targetPrice:targetPrice.value.trim(),status:itemStatus.value,notes:notes.value.trim()};try{saveBtn.disabled=true;await api(p.row?"update":"add",p);dialog.close();await load()}catch(err){alert(err.message)}finally{saveBtn.disabled=false}});
+if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");load();
