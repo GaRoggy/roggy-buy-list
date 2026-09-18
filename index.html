@@ -19,6 +19,7 @@
   <button class="page-tab active" data-page="buy">Buy List</button>
   <button class="page-tab" data-page="groceries">Groceries</button>
   <button class="page-tab" data-page="drivers">Bad Drivers</button>
+  <button class="page-tab" data-page="reminders">Reminders</button>
 </nav>
 
 <section id="listsPage">
@@ -83,6 +84,19 @@
       <div class="baseline-banner">The original 26 observations were entered as aggregate totals, so they appear in analysis but not as fake individual rows here.</div>
       <section id="driverList" class="driver-list"></section>
     </section>
+  </main>
+</section>
+
+<section id="remindersPage" hidden>
+  <nav class="sub-tabs reminder-subtabs">
+    <button class="reminder-tab active" data-reminder-view="today">Today</button>
+    <button class="reminder-tab" data-reminder-view="tomorrow">Tomorrow</button>
+    <button class="reminder-tab" data-reminder-view="week">This Week</button>
+  </nav>
+  <main class="reminder-main">
+    <section id="reminderStatus" class="status"></section>
+    <section id="reminderList" class="reminder-list"></section>
+    <p class="reminder-note">Calendar events synced into Roggy Lists are marked with a calendar badge.</p>
   </main>
 </section>
 
