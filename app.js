@@ -13,13 +13,24 @@ function render(){
  document.getElementById("summary").innerHTML=`<div><b>${items.length-bought}</b><span>active</span></div><div><b>${ready}</b><span>ready</span></div><div><b>${bought}</b><span>bought</span></div>`;
  list.innerHTML=""; if(!shown.length){list.innerHTML='<div class="card">Nothing here yet.</div>';return}
  for(const x of shown){const c=document.createElement("article");c.className="card "+(x.status==="Bought"?"bought":"");c.innerHTML=`
- <div class="card-top"><div><div class="item-name">${esc(x.item)}</div><div class="meta"><span>${esc(x.category||"Other")}</span><span>${esc(x.status||"Looking")}</span></div></div><div class="card-controls"><button class="prioritybtn icon-action" data-dir="up" type="button" aria-label="Increase priority">↑</button><span class="badge ${esc(x.priority)}">${esc(x.priority)}</span><button class="prioritybtn icon-action" data-dir="down" type="button" aria-label="Decrease priority">↓</button><button class="removebtn icon-action" type="button" aria-label="Remove item">✕</button></div></div>
- <div class="quick"><button class="statusbtn ${x.status==="Looking"?"selected":""}" data-s="Looking">Looking</button><button class="statusbtn ${x.status==="Ready to Buy"?"selected":""}" data-s="Ready to Buy">Ready</button><button class="statusbtn ${x.status==="Bought"?"selected":""}" data-s="Bought">✓ Bought</button></div>
- <button class="options-toggle" type="button">Compare 3 options <span>⌄</span></button><div class="options collapsed">${optionHtml("Budget",x.option1,x.price1,x.link1)}${optionHtml("Value",x.option2,x.price2,x.link2)}${optionHtml("Upgrade",x.option3,x.price3,x.link3)}</div>
- <div class="bottom-actions"><button class="editbtn" type="button">Edit details</button></div>`;
- c.querySelector(".options-toggle").onclick=e=>{e.stopPropagation();c.querySelector(".options").classList.toggle("collapsed");e.currentTarget.classList.toggle("open")};
- c.querySelectorAll(".statusbtn").forEach(b=>b.onclick=async e=>{e.stopPropagation();await setStatus(x,b.dataset.s)}); c.querySelectorAll(".prioritybtn").forEach(b=>b.onclick=async e=>{e.stopPropagation();await changePriority(x,b.dataset.dir)}); c.querySelector(".removebtn").onclick=e=>{e.stopPropagation();removeItem(x)};
- c.querySelector(".editbtn").onclick=e=>{e.stopPropagation();openEdit(x)}; list.appendChild(c)}
+ <div class="card-summary">
+   <div class="summary-main"><div class="item-name">${esc(x.item)}</div><div class="meta"><span>${esc(x.category||"Other")}</span><span>${esc(x.status||"Looking")}</span></div></div>
+   <div class="card-controls"><button class="prioritybtn icon-action" data-dir="up" type="button" aria-label="Increase priority">↑</button><span class="badge ${esc(x.priority)}">${esc(x.priority)}</span><button class="prioritybtn icon-action" data-dir="down" type="button" aria-label="Decrease priority">↓</button><button class="removebtn icon-action" type="button" aria-label="Remove item">✕</button><span class="chevron">⌄</span></div>
+ </div>
+ <div class="card-details collapsed">
+   <div class="quick"><button class="statusbtn ${x.status==="Looking"?"selected":""}" data-s="Looking">Looking</button><button class="statusbtn ${x.status==="Ready to Buy"?"selected":""}" data-s="Ready to Buy">Ready</button><button class="statusbtn ${x.status==="Bought"?"selected":""}" data-s="Bought">✓ Bought</button></div>
+   ${x.notes?`<div class="detail-notes">${esc(x.notes)}</div>`:""}
+   <div class="options">${optionHtml("Budget",x.option1,x.price1,x.link1)}${optionHtml("Value",x.option2,x.price2,x.link2)}${optionHtml("Upgrade",x.option3,x.price3,x.link3)}</div>
+   <div class="bottom-actions"><button class="editbtn" type="button">Edit details</button></div>
+ </div>`;
+ const details=c.querySelector(".card-details"),summary=c.querySelector(".card-summary");
+ summary.onclick=e=>{if(e.target.closest("button"))return;details.classList.toggle("collapsed");c.classList.toggle("expanded")};
+ c.querySelectorAll(".statusbtn").forEach(b=>b.onclick=async e=>{e.stopPropagation();await setStatus(x,b.dataset.s)});
+ c.querySelectorAll(".prioritybtn").forEach(b=>b.onclick=async e=>{e.stopPropagation();await changePriority(x,b.dataset.dir)});
+ c.querySelector(".removebtn").onclick=e=>{e.stopPropagation();removeItem(x)};
+ c.querySelector(".editbtn").onclick=e=>{e.stopPropagation();openEdit(x)};
+ list.appendChild(c)}
+
 }
 function optionHtml(label,name,price,link){if(!name&&!price&&!link)return"";return `<div class="option"><div><small>${label}</small><strong>${esc(name||"Option")}</strong><span>${esc(money(price))}</span></div>${link?`<a href="${attr(link)}" target="_blank" rel="noopener">View</a>`:""}</div>`}
 async function changePriority(x,dir){const levels=["Eventually","Want","Need"],i=levels.indexOf(x.priority),ni=Math.max(0,Math.min(2,i+(dir==="up"?1:-1)));if(i===ni)return;statusEl.textContent="Saving…";try{await api("update",{row:x.row,item:x.item,category:x.category,priority:levels[ni],targetPrice:x.targetPrice,status:x.status,notes:x.notes});x.priority=levels[ni];statusEl.textContent="";render()}catch(e){statusEl.textContent=e.message}}
