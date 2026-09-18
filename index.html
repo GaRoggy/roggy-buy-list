@@ -20,6 +20,7 @@
   <button class="page-tab" data-page="groceries">Groceries</button>
   <button class="page-tab" data-page="drivers">Bad Drivers</button>
   <button class="page-tab" data-page="reminders">Reminders</button>
+  <button class="page-tab" data-page="budget">Budget 🔒</button>
 </nav>
 
 <section id="listsPage">
@@ -99,6 +100,39 @@
     <p class="reminder-note">Calendar events synced into Roggy Lists are marked with a calendar badge.</p>
   </main>
 </section>
+
+<section id="budgetPage" hidden>
+  <main class="budget-main">
+    <section id="budgetLock" class="budget-lock">
+      <div class="lock-icon">🔒</div><h2>Budget Locked</h2>
+      <p>Your budget requires a local device unlock before anything is shown.</p>
+      <button id="faceUnlockBtn" class="primary budget-unlock">Unlock with Face ID / Passkey</button>
+      <button id="pinUnlockBtn" class="secondary budget-unlock">Use PIN</button>
+      <button id="setupBudgetLockBtn" class="plain-link">Set up / reset budget lock</button>
+      <div id="budgetLockStatus" class="status"></div>
+    </section>
+    <section id="budgetContent" hidden>
+      <div class="budget-head"><div><h2>Budget</h2><p>Private financial dashboard</p></div><button id="lockBudgetBtn" class="secondary">Lock now</button></div>
+      <div class="budget-summary"><div><span>Monthly income</span><b>—</b></div><div><span>Monthly spending</span><b>—</b></div><div><span>Available</span><b>—</b></div></div>
+      <div class="budget-grid"><article><h3>Accounts</h3><p>Ready for balances and account summaries.</p></article><article><h3>Monthly budget</h3><p>Ready for categories, targets, actuals, and variance.</p></article><article><h3>Recurring bills</h3><p>Ready for subscriptions and upcoming payments.</p></article><article><h3>Goals</h3><p>Ready for savings, debt payoff, and other targets.</p></article></div>
+      <p class="budget-security-note">Budget data is not loaded until this screen is unlocked. The database layer remains closed to the public app until account authentication is completed.</p>
+    </section>
+  </main>
+</section>
+
+<dialog id="budgetSetupDialog"><form method="dialog" id="budgetSetupForm">
+  <div class="dialog-head"><h2>Secure Budget</h2><button value="cancel" class="plain">✕</button></div>
+  <p class="setup-copy">Create a private PIN on this device. It is salted and hashed before storage; the PIN itself is never saved.</p>
+  <label>New PIN<input id="budgetPinNew" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="new-password" required placeholder="4–8 digits"></label>
+  <label>Confirm PIN<input id="budgetPinConfirm" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="new-password" required></label>
+  <div class="actions"><button value="cancel" class="secondary">Cancel</button><button value="default" class="primary">Save PIN</button></div>
+</form></dialog>
+<dialog id="budgetPinDialog"><form method="dialog" id="budgetPinForm">
+  <div class="dialog-head"><h2>Enter Budget PIN</h2><button value="cancel" class="plain">✕</button></div>
+  <label>PIN<input id="budgetPinEntry" type="password" inputmode="numeric" maxlength="8" autocomplete="off" required autofocus></label>
+  <div id="budgetPinError" class="status"></div>
+  <div class="actions"><button value="cancel" class="secondary">Cancel</button><button value="default" class="primary">Unlock</button></div>
+</form></dialog>
 
 <button id="addBtn" class="fab">＋</button>
 
