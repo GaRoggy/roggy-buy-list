@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#111827">
 <title>Roggy Lists</title>
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="styles.css?v=17">
+<link rel="stylesheet" href="styles.css?v=18">
 <link rel="apple-touch-icon" href="icon.svg">
 </head>
 <body>
@@ -114,10 +114,10 @@
     <section id="budgetContent" hidden>
       <div class="budget-head"><div><h2>Budget</h2><p>Private financial dashboard</p></div><button id="lockBudgetBtn" class="secondary">Lock now</button></div>
       <div class="budget-mode"><button id="budgetModeMonthly" class="active">Monthly</button><button id="budgetModePaycheck">Per paycheck</button></div>
-      <div class="budget-summary"><div><span>Income</span><b id="budgetIncome">—</b></div><div><span>Fixed + planned</span><b id="budgetSpending">—</b></div><div><span>Left over</span><b id="budgetAvailable">—</b></div></div>
+      <div class="budget-summary"><div><span>Total Income</span><b id="budgetIncome">—</b></div><div><span>Total Allocated</span><b id="budgetSpending">—</b></div><div><span>Left Over</span><b id="budgetAvailable">—</b></div></div>
       <div id="budgetDataStatus" class="status"></div>
-      <article class="budget-panel"><div class="budget-panel-head"><div><h3>Money flow</h3><p>Tap a flow to highlight it.</p></div></div><div id="budgetFlow" class="budget-flow"></div></article>
-      <article class="budget-panel"><div class="budget-panel-head"><div><h3>Budget table</h3><p>Spreadsheet-style view of the same numbers.</p></div></div><div class="table-scroll"><table class="budget-table"><thead><tr><th>Category</th><th>Item</th><th>Frequency</th><th>Amount</th></tr></thead><tbody id="budgetTableBody"></tbody></table></div></article>
+      <article class="budget-panel"><div class="budget-panel-head"><div><h3>Money flow</h3><p>Income → categories → individual allocations.</p></div></div><div id="budgetFlow" class="budget-flow"></div></article>
+      <article class="budget-panel"><div class="budget-panel-head"><div><h3>Budget table</h3><p>Spreadsheet-style view of the same numbers.</p></div></div><div class="table-scroll"><table class="budget-table"><thead><tr><th>Category</th><th>Item</th><th>Amount</th><th>% of Total</th></tr></thead><tbody id="budgetTableBody"></tbody></table></div></article>
       <p class="budget-security-note">Budget records load only after this screen is unlocked and the signed-in account passes database ownership checks.</p>
     </section>
   </main>
@@ -168,5 +168,5 @@
 <input id="importFile" type="file" accept="application/json" hidden>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-<script src="app.js?v=17"></script>
+<script src="app.js?v=18"></script>
 </body></html>
