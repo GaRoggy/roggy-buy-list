@@ -17,3 +17,17 @@
 
 .budget-mode{display:flex;gap:6px;margin-top:14px}.budget-mode button{border:0;border-radius:999px;padding:8px 12px;background:#e5e7eb;font-weight:800;color:#4b5563}.budget-mode button.active{background:#111827;color:#fff}.budget-panel{background:#fff;border-radius:18px;padding:14px;margin-top:12px;box-shadow:0 2px 10px rgba(0,0,0,.05)}.budget-panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.budget-panel h3{margin:0}.budget-panel p{margin:3px 0 0;color:#6b7280;font-size:12px}.budget-flow{display:grid;grid-template-columns:minmax(120px,.35fr) 1fr;gap:16px;align-items:center;margin-top:14px}.flow-source{background:#111827;color:#fff;border-radius:16px;padding:18px;display:grid;gap:4px;align-self:stretch;place-content:center}.flow-source span{font-size:11px;color:#d1d5db}.flow-source b{font-size:20px}.flow-lanes{display:grid;gap:8px}.flow-row{position:relative;border:0;background:#f9fafb;border-radius:12px;min-height:44px;padding:8px 10px 8px 14px;display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;overflow:hidden;text-align:left}.flow-row .flow-line{position:absolute;left:0;top:0;bottom:0;width:var(--w);opacity:.14;background:#111827;border-radius:12px}.flow-row.active{outline:2px solid #111827}.flow-label,.flow-row b{position:relative;z-index:1}.flow-label{font-size:12px;font-weight:700}.flow-row b{font-size:12px}.budget-table td:last-child,.budget-table th:last-child{text-align:right}.budget-empty{padding:18px;border-radius:12px;background:#f9fafb;color:#6b7280;font-size:12px}
 @media(max-width:600px){.budget-flow{grid-template-columns:1fr}.flow-source{min-height:82px}}
+
+.sankey-svg{width:100%;height:auto;display:block;overflow:visible}
+.sankey-node{fill:#f3f4f6;stroke:#d1d5db;stroke-width:1}
+.sankey-source{fill:#111827;stroke:#111827}
+.sankey-link{fill:none;stroke:#6b7280;stroke-opacity:.28;stroke-linecap:round}
+.sankey-leftover-link{stroke:#16a34a;stroke-opacity:.34}
+.sankey-label{font-size:12px;font-weight:700;fill:#111827}
+.sankey-source+.sankey-label{fill:#fff}
+.sankey-value{font-size:16px;font-weight:800;fill:#fff}
+.sankey-small-value{font-size:11px;font-weight:700;fill:#4b5563}
+.sankey-leftover{fill:#ecfdf5;stroke:#86efac}
+.sankey-target{cursor:pointer;outline:none}
+.sankey-target.active .sankey-node,.sankey-target:focus .sankey-node{stroke:#111827;stroke-width:2}
+@media(max-width:600px){#budgetFlow{overflow-x:auto}.sankey-svg{min-width:620px}}
