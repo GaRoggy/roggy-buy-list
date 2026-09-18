@@ -233,9 +233,10 @@ $("addBtn").onclick=()=>currentPage==="drivers"?$("driverDialog").showModal():op
 
 $("backupBtn").onclick=()=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="roggy-lists-backup.json";a.click();URL.revokeObjectURL(a.href)};
 
-async function updateAuth(){const {data:{session}}=await sb.auth.getSession();$("authBtn").textContent=session?"Sign out":"Sign in";$("authBtn").title=session?.user?.email||"Sign in with GitHub";return session}
-$("authBtn").onclick=async()=>{const session=await updateAuth();if(session){await sb.auth.signOut();await updateAuth()}else{const {error}=await sb.auth.signInWithOAuth({provider:"github",options:{redirectTo:"https://garoggy.github.io/roggy-buy-list/"}});if(error)showErr(error)}};
-sb.auth.onAuthStateChange(()=>{updateAuth();loadLists();setPage("reminders");if(currentPage==="drivers")loadDrivers();if(currentPage==="reminders")loadReminders()});
+function applyAuthSession(session){$("authBtn").textContent=session?"Sign out":"Sign in";$("authBtn").title=session?.user?.email||"Sign in with GitHub"}
+async function updateAuth(){const {data:{session},error}=await sb.auth.getSession();if(error)showErr(error);applyAuthSession(session);return session}
+$("authBtn").onclick=async()=>{const session=await updateAuth();if(session){const {error}=await sb.auth.signOut({scope:"local"});if(error)showErr(error);else applyAuthSession(null)}else{const {error}=await sb.auth.signInWithOAuth({provider:"github",options:{redirectTo:"https://garoggy.github.io/roggy-buy-list/"}});if(error)showErr(error)}};
+sb.auth.onAuthStateChange((event,session)=>{applyAuthSession(session);setTimeout(()=>{loadLists();if(currentPage==="drivers")loadDrivers();if(currentPage==="reminders")loadReminders();if(currentPage==="budget"&&budgetUnlocked)loadBudgetData()},0)});
 
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");
 updateAuth();loadLists();
