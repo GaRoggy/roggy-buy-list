@@ -31,3 +31,14 @@
 .sankey-target{cursor:pointer;outline:none}
 .sankey-target.active .sankey-node,.sankey-target:focus .sankey-node{stroke:#111827;stroke-width:2}
 @media(max-width:600px){#budgetFlow{overflow-x:auto}.sankey-svg{min-width:620px}}
+
+/* Budget Sankey v18 */
+.budget-flow{display:block!important;overflow-x:auto!important;margin-top:14px;-webkit-overflow-scrolling:touch}
+.sankey-three{width:100%;min-width:820px;height:auto;display:block}
+.sk-source{fill:#1f2937}.sk-source-label{fill:#fff;font-size:15px;font-weight:700}.sk-source-value{fill:#fff;font-size:21px;font-weight:850}.sk-source-sub{fill:#cbd5e1;font-size:11px}
+.sk-link{fill:none;stroke-opacity:.32;stroke-linecap:butt}
+.sk-savings{stroke:#22a06b;fill:#22a06b}.sk-living{stroke:#3b82f6;fill:#3b82f6}.sk-auto{stroke:#f59e42;fill:#f59e42}.sk-subscriptions{stroke:#9b5de5;fill:#9b5de5}.sk-other{stroke:#9ca3af;fill:#9ca3af}.sk-left-over{stroke:#ef6a6a;fill:#ef6a6a}
+.sk-mid{stroke:none}.sk-mid-label{fill:#111827;font-size:12px;font-weight:800}.sk-mid-value{fill:#374151;font-size:10px;font-weight:650}
+.sk-item{fill:#f8fafc;stroke:#d8dee6;stroke-width:1}.sk-item-label{fill:#111827;font-size:11px;font-weight:750}.sk-item-value{fill:#4b5563;font-size:10px;font-weight:700;text-anchor:end}.sk-accent{stroke:none}
+.budget-cat{display:inline-block;font-weight:800}.cat-savings{color:#16855a}.cat-living{color:#2563eb}.cat-auto{color:#d97706}.cat-subscriptions{color:#7c3aed}.cat-other{color:#6b7280}
+@media(max-width:600px){.budget-panel{padding:12px}.sankey-three{min-width:820px}.budget-flow{margin-left:-2px;margin-right:-2px}.budget-table{min-width:620px}}
