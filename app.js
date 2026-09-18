@@ -25,6 +25,7 @@ Obese:{Yes:37.5,No:62.5}
 
 let data={buy:[],groceries:[]},currentPage="buy",currentView="active",currentFilter="all";
 let baseline=FALLBACK_BASELINE,drivers=[],driverView="overview",charts={};
+let reminders=[],reminderView="today";
 
 function esc(s=""){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 function showErr(e,target="status"){const el=$(target);if(el)el.textContent="Sync error: "+(e?.message||e)}
@@ -156,11 +157,36 @@ async function addDriver(){
 $("driverForm").addEventListener("submit",e=>{if(e.submitter?.value==="cancel")return;e.preventDefault();addDriver().catch(e=>showErr(e,"driverStatus"));$("driverDialog").close();$("driverForm").reset()});
 $("closeDriverDetail").onclick=()=>$("driverDetailDialog").close();
 
+async function loadReminders(){
+  const {data:r,error}=await sb.from("reminders").select("*").eq("completed",false).order("start_at",{ascending:true});
+  if(error){showErr(error,"reminderStatus");reminders=[]}else reminders=r||[];
+  renderReminders();
+}
+function localDay(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate())}
+function renderReminders(){
+  const now=new Date(),today=localDay(now),tomorrow=new Date(today);tomorrow.setDate(today.getDate()+1);
+  const afterTomorrow=new Date(tomorrow);afterTomorrow.setDate(tomorrow.getDate()+1);
+  const weekEnd=new Date(today);weekEnd.setDate(today.getDate()+(7-today.getDay()));
+  let start=today,end=tomorrow;
+  if(reminderView==="tomorrow"){start=tomorrow;end=afterTomorrow}
+  if(reminderView==="week"){start=today;end=weekEnd}
+  const rows=reminders.filter(x=>{const d=new Date(x.start_at);return d>=start&&d<end});
+  $("reminderList").innerHTML=rows.length?"":'<div class="card empty">Nothing scheduled here.</div>';
+  rows.forEach(x=>{const d=new Date(x.start_at),el=document.createElement("article");el.className="reminder-card";
+    const when=x.all_day?"All day":d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});
+    const day=reminderView==="week"?d.toLocaleDateString([],{weekday:"short",month:"short",day:"numeric"}):"";
+    el.innerHTML=`<div class="reminder-date">${esc(day)}</div><div class="reminder-body"><b>${esc(x.title)}</b><span>${esc(when)}</span></div>${x.source==="google_calendar"?'<span class="calendar-badge">Calendar</span>':""}`;
+    $("reminderList").appendChild(el);
+  });
+}
+document.querySelectorAll(".reminder-tab").forEach(b=>b.onclick=()=>{reminderView=b.dataset.reminderView;document.querySelectorAll(".reminder-tab").forEach(z=>z.classList.toggle("active",z===b));renderReminders()});
+
 function setPage(page){
   currentPage=page;document.querySelectorAll(".page-tab").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
-  const isDrivers=page==="drivers";$("listsPage").hidden=isDrivers;$("driversPage").hidden=!isDrivers;$("backupBtn").style.display=isDrivers?"none":"";
+  const isDrivers=page==="drivers",isReminders=page==="reminders";$("listsPage").hidden=isDrivers||isReminders;$("driversPage").hidden=!isDrivers;$("remindersPage").hidden=!isReminders;$("backupBtn").style.display=(isDrivers||isReminders)?"none":"";
   $("addBtn").style.display="";
   if(isDrivers){$("pageTitle").textContent="Bad Drivers";$("pageSubtitle").textContent="Track observations and compare demographics.";loadDrivers()}
+  else if(isReminders){$("pageTitle").textContent="Reminders";$("pageSubtitle").textContent="What is coming up.";$("addBtn").style.display="none";loadReminders()}
   else {currentView="active";document.querySelectorAll(".sub-tab").forEach(z=>z.classList.toggle("active",z.dataset.view==="active"));renderLists()}
 }
 document.querySelectorAll(".page-tab").forEach(b=>b.onclick=()=>setPage(b.dataset.page));
@@ -176,7 +202,7 @@ $("backupBtn").onclick=()=>{const blob=new Blob([JSON.stringify(data,null,2)],{t
 
 async function updateAuth(){const {data:{session}}=await sb.auth.getSession();$("authBtn").textContent=session?"Sign out":"Sign in";$("authBtn").title=session?.user?.email||"Sign in with GitHub";return session}
 $("authBtn").onclick=async()=>{const session=await updateAuth();if(session){await sb.auth.signOut();await updateAuth()}else{const {error}=await sb.auth.signInWithOAuth({provider:"github",options:{redirectTo:"https://garoggy.github.io/roggy-buy-list/"}});if(error)showErr(error)}};
-sb.auth.onAuthStateChange(()=>{updateAuth();loadLists();if(currentPage==="drivers")loadDrivers()});
+sb.auth.onAuthStateChange(()=>{updateAuth();loadLists();if(currentPage==="drivers")loadDrivers();if(currentPage==="reminders")loadReminders()});
 
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");
 updateAuth();loadLists();
