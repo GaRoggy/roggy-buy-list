@@ -45,3 +45,6 @@
 
 /* Sankey geometry v19 */
 .sk-band{stroke:none;opacity:.30}.sk-band.sk-savings{fill:#22a06b}.sk-band.sk-living{fill:#3b82f6}.sk-band.sk-auto{fill:#f59e42}.sk-band.sk-subscriptions{fill:#9b5de5}.sk-band.sk-other{fill:#9ca3af}.sk-band.sk-left-over{fill:#ef6464}.sk-mid{stroke:none;opacity:.96}.sk-tiny-label{font-size:9px;font-weight:750;fill:#374151}
+
+/* D3 Sankey v24 */
+.sankey-d3{width:100%;min-width:860px;height:auto;display:block}.sankey-d3 .sk-item{fill:#f8fafc;stroke:#d8dee6;stroke-width:1}.sankey-d3 .sk-item-label{fill:#111827;font-size:11px;font-weight:750}.sankey-d3 .sk-item-value{fill:#4b5563;font-size:10px;font-weight:700;text-anchor:end}.sankey-d3 .sk-mid-label{fill:#111827;font-size:12px;font-weight:800}.sankey-d3 .sk-mid-value{fill:#374151;font-size:10px;font-weight:650}.sankey-d3 .sk-source-label{fill:#fff;font-size:15px;font-weight:700}.sankey-d3 .sk-source-value{fill:#fff;font-size:21px;font-weight:850}.sankey-d3 .sk-source-sub{fill:#cbd5e1;font-size:11px}@media(max-width:600px){.sankey-d3{min-width:860px}}
