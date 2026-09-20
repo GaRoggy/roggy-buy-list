@@ -252,23 +252,23 @@ async function loadDigestibles(){
  if(error){showErr(error,"digestStatus");digestibles=[]}else digestibles=r||[];
  renderDigestibles();
 }
-function updateDigestStatusLabels(){document.querySelectorAll(".digest-status-tab").forEach(b=>{const completed=b.dataset.digestStatus==="completed";b.textContent=digestView==="books"?(completed?"Books I’ve Read":"Books to Read"):(completed?"Movies I’ve Watched":"Movies to Watch")})}
+function updateDigestStatusLabels(){document.querySelectorAll(".digest-status-tab").forEach(b=>{const completed=b.dataset.digestStatus==="completed";b.textContent=digestView==="books"?(completed?"Books I’ve Read":"Books to Read"):digestView==="movies"?(completed?"Movies I’ve Watched":"Movies to Watch"):(completed?"Animes I’ve Watched":"Animes to Watch")})}
 function renderDigestibles(){
  updateDigestStatusLabels();
- const type=digestView==="books"?"book":"movie",rows=digestibles.filter(x=>x.media_type===type&&x.status===digestStatusView);
+ const type=digestView==="books"?"book":digestView==="movies"?"movie":"anime",rows=digestibles.filter(x=>x.media_type===type&&x.status===digestStatusView);
  $("digestItems").innerHTML='<div class="digest-list">'+(rows.length?"":'<div class="card empty">Nothing here yet.</div>')+'</div>';
  const root=$("digestItems").querySelector(".digest-list");rows.forEach(x=>root.appendChild(digestCard(x)));
 }
 function digestCard(x){
  const el=document.createElement("button");el.className="digest-card";
  const rating=x.rating!=null?'<span class="digest-rating">'+esc(x.rating)+"/"+esc(x.rating_scale||5)+'</span>':"";
- el.innerHTML='<div><b>'+esc(x.title)+'</b><span>'+(x.media_type==="book"?"by ":"Directed by ")+esc(x.creator||"Unknown")+'</span></div>'+rating+'<span class="chevron">⌄</span>';
+ el.innerHTML='<div><b>'+esc(x.title)+'</b><span>'+(x.media_type==="book"?"by ":x.media_type==="anime"?"Created by ":"Directed by ")+esc(x.creator||"Unknown")+'</span></div>'+rating+'<span class="chevron">⌄</span>';
  el.onclick=()=>openDigestDetail(x);return el;
 }
 function digestLink(url,label){return url?'<a class="digest-link" href="'+esc(url)+'" target="_blank" rel="noopener">'+esc(label)+'</a>':""}
 function openDigestDetail(x){
  $("digestDetailTitle").textContent=x.title;
- let html='<div class="digest-creator">'+(x.media_type==="book"?"Author":"Director")+': <b>'+esc(x.creator||"Unknown")+'</b></div>';
+ let html='<div class="digest-creator">'+(x.media_type==="book"?"Author":x.media_type==="anime"?"Creator":"Director")+': <b>'+esc(x.creator||"Unknown")+'</b></div>';
  if(x.rating!=null)html+='<div class="digest-big-rating">'+esc(x.rating)+' / '+esc(x.rating_scale||5)+'</div>';
  if(x.description)html+='<div class="digest-description">'+esc(x.description)+'</div>';
  if(x.review)html+='<div class="digest-review">'+esc(x.review)+'</div>';
@@ -292,7 +292,7 @@ function setPage(page){
   const isDrivers=page==="drivers",isReminders=page==="reminders",isBudget=page==="budget",isDigest=page==="digestibles";$("listsPage").hidden=isDrivers||isReminders||isBudget||isDigest;$("driversPage").hidden=!isDrivers;$("remindersPage").hidden=!isReminders;$("budgetPage").hidden=!isBudget;$("digestiblesPage").hidden=!isDigest;$("backupBtn").style.display=(isDrivers||isReminders||isBudget||isDigest)?"none":"";
   $("addBtn").style.display="";
   if(isDrivers){$("pageTitle").textContent="Bad Drivers";$("pageSubtitle").textContent="Track observations and compare demographics.";loadDrivers()}
-  else if(isReminders){$("pageTitle").textContent="Reminders";$("pageSubtitle").textContent="What is coming up.";$("addBtn").style.display="none";loadReminders()} else if(isDigest){$("pageTitle").textContent="Digestibles";$("pageSubtitle").textContent="Books and movies worth consuming.";$("addBtn").style.display="none";loadDigestibles()} else if(isBudget){$("pageTitle").textContent="Budget 🔒";$("pageSubtitle").textContent="Private financial dashboard.";$("addBtn").style.display="none";lockBudget()}
+  else if(isReminders){$("pageTitle").textContent="Reminders";$("pageSubtitle").textContent="What is coming up.";$("addBtn").style.display="none";loadReminders()} else if(isDigest){$("pageTitle").textContent="Digestibles";$("pageSubtitle").textContent="Books, movies, and anime worth consuming.";$("addBtn").style.display="none";loadDigestibles()} else if(isBudget){$("pageTitle").textContent="Budget 🔒";$("pageSubtitle").textContent="Private financial dashboard.";$("addBtn").style.display="none";lockBudget()}
   else {currentView="active";document.querySelectorAll(".sub-tab").forEach(z=>z.classList.toggle("active",z.dataset.view==="active"));renderLists()}
 }
 document.querySelectorAll(".page-tab").forEach(b=>b.onclick=()=>setPage(b.dataset.page));
