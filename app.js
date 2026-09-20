@@ -26,7 +26,7 @@ Obese:{Yes:37.5,No:62.5}
 let data={buy:[],groceries:[]},currentPage="reminders",currentView="active",currentFilter="all";
 let baseline=FALLBACK_BASELINE,drivers=[],driverView="overview",charts={};
 let reminders=[],reminderView="today";
-let digestibles=[],digestView="books";
+let digestibles=[],digestView="books",digestStatusView="queue";
 
 function esc(s=""){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 function showErr(e,target="status"){const el=$(target);if(el)el.textContent="Sync error: "+(e?.message||e)}
@@ -252,13 +252,12 @@ async function loadDigestibles(){
  if(error){showErr(error,"digestStatus");digestibles=[]}else digestibles=r||[];
  renderDigestibles();
 }
+function updateDigestStatusLabels(){document.querySelectorAll(".digest-status-tab").forEach(b=>{const completed=b.dataset.digestStatus==="completed";b.textContent=digestView==="books"?(completed?"Books I’ve Read":"Books to Read"):(completed?"Movies I’ve Watched":"Movies to Watch")})}
 function renderDigestibles(){
- const type=digestView==="books"?"book":"movie", rows=digestibles.filter(x=>x.media_type===type);
- const queue=rows.filter(x=>x.status==="queue"),done=rows.filter(x=>x.status==="completed");
- $("digestQueue").innerHTML='<h2 class="digest-heading">'+(type==="book"?"Books to Read":"Movies to Watch")+'</h2><div class="digest-list">'+(queue.length?"":'<div class="card empty">Nothing here yet.</div>')+'</div>';
- $("digestCompleted").innerHTML='<h2 class="digest-heading">'+(type==="book"?"Books I’ve Read":"Movies I’ve Watched")+'</h2><div class="digest-list">'+(done.length?"":'<div class="card empty">Nothing here yet.</div>')+'</div>';
- const q=$("digestQueue").querySelector(".digest-list"),d=$("digestCompleted").querySelector(".digest-list");
- queue.forEach(x=>q.appendChild(digestCard(x)));done.forEach(x=>d.appendChild(digestCard(x)));
+ updateDigestStatusLabels();
+ const type=digestView==="books"?"book":"movie",rows=digestibles.filter(x=>x.media_type===type&&x.status===digestStatusView);
+ $("digestItems").innerHTML='<div class="digest-list">'+(rows.length?"":'<div class="card empty">Nothing here yet.</div>')+'</div>';
+ const root=$("digestItems").querySelector(".digest-list");rows.forEach(x=>root.appendChild(digestCard(x)));
 }
 function digestCard(x){
  const el=document.createElement("button");el.className="digest-card";
@@ -270,7 +269,7 @@ function digestLink(url,label){return url?'<a class="digest-link" href="'+esc(ur
 function openDigestDetail(x){
  $("digestDetailTitle").textContent=x.title;
  let html='<div class="digest-creator">'+(x.media_type==="book"?"Author":"Director")+': <b>'+esc(x.creator||"Unknown")+'</b></div>';
- if(x.rating!=null)html+='<div class="digest-big-rating">'+esc(x.rating)+' / '+esc(x.rating_scale||5)+'</div>';
+ if(x.rating!=null)html+='<div class="digest-big-rating">'+esc(x.rating)+' / '+esc(x.rating_scale||5)+'</div>';\n if(x.description)html+='<div class="digest-description">'+esc(x.description)+'</div>';
  if(x.review)html+='<div class="digest-review">'+esc(x.review)+'</div>';
  if(x.media_type==="book"){
    html+='<div class="digest-links">'+digestLink(x.amazon_url,"Amazon");
@@ -284,7 +283,7 @@ function openDigestDetail(x){
  }
  $("digestDetail").innerHTML=html;$("digestDetailDialog").showModal();
 }
-document.querySelectorAll(".digest-tab").forEach(b=>b.onclick=()=>{digestView=b.dataset.digestView;document.querySelectorAll(".digest-tab").forEach(z=>z.classList.toggle("active",z===b));renderDigestibles()});
+document.querySelectorAll(".digest-tab").forEach(b=>b.onclick=()=>{digestView=b.dataset.digestView;digestStatusView="queue";document.querySelectorAll(".digest-tab").forEach(z=>z.classList.toggle("active",z===b));document.querySelectorAll(".digest-status-tab").forEach(z=>z.classList.toggle("active",z.dataset.digestStatus==="queue"));renderDigestibles()});\ndocument.querySelectorAll(".digest-status-tab").forEach(b=>b.onclick=()=>{digestStatusView=b.dataset.digestStatus;document.querySelectorAll(".digest-status-tab").forEach(z=>z.classList.toggle("active",z===b));renderDigestibles()});
 $("closeDigestDetail").onclick=()=>$("digestDetailDialog").close();
 
 function setPage(page){
