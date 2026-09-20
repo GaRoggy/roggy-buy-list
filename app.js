@@ -26,6 +26,7 @@ Obese:{Yes:37.5,No:62.5}
 let data={buy:[],groceries:[]},currentPage="reminders",currentView="active",currentFilter="all";
 let baseline=FALLBACK_BASELINE,drivers=[],driverView="overview",charts={};
 let reminders=[],reminderView="today";
+let digestibles=[],digestView="books";
 
 function esc(s=""){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 function showErr(e,target="status"){const el=$(target);if(el)el.textContent="Sync error: "+(e?.message||e)}
@@ -245,12 +246,53 @@ $("setupBudgetLockBtn").onclick=()=>$("budgetSetupDialog").showModal();$("pinUnl
 $("budgetSetupForm").addEventListener("submit",async e=>{if(e.submitter?.value==="cancel")return;e.preventDefault();const a=$("budgetPinNew").value,b=$("budgetPinConfirm").value;if(a!==b){$("budgetPinConfirm").setCustomValidity("PINs do not match");$("budgetPinConfirm").reportValidity();return}$("budgetPinConfirm").setCustomValidity("");await setupBudgetPin(a);$("budgetSetupDialog").close();$("budgetSetupForm").reset();try{await setupPasskey();$("budgetLockStatus").textContent="PIN and Face ID / passkey are ready."}catch{$("budgetLockStatus").textContent="PIN is ready. Face ID / passkey setup is still available."}});
 $("budgetPinForm").addEventListener("submit",async e=>{if(e.submitter?.value==="cancel")return;e.preventDefault();if(await verifyBudgetPin($("budgetPinEntry").value)){$("budgetPinDialog").close();$("budgetPinForm").reset();$("budgetPinError").textContent="";await unlockBudget()}else $("budgetPinError").textContent="Incorrect PIN."});document.addEventListener("visibilitychange",()=>{if(document.hidden)lockBudget()});["pointerdown","keydown"].forEach(ev=>document.addEventListener(ev,()=>{if(currentPage==="budget")touchBudget()},{passive:true}));
 
+
+async function loadDigestibles(){
+ const {data:r,error}=await sb.from("digestibles").select("*").order("created_at",{ascending:true});
+ if(error){showErr(error,"digestStatus");digestibles=[]}else digestibles=r||[];
+ renderDigestibles();
+}
+function renderDigestibles(){
+ const type=digestView==="books"?"book":"movie", rows=digestibles.filter(x=>x.media_type===type);
+ const queue=rows.filter(x=>x.status==="queue"),done=rows.filter(x=>x.status==="completed");
+ $("digestQueue").innerHTML='<h2 class="digest-heading">'+(type==="book"?"Books to Read":"Movies to Watch")+'</h2><div class="digest-list">'+(queue.length?"":'<div class="card empty">Nothing here yet.</div>')+'</div>';
+ $("digestCompleted").innerHTML='<h2 class="digest-heading">'+(type==="book"?"Books I’ve Read":"Movies I’ve Watched")+'</h2><div class="digest-list">'+(done.length?"":'<div class="card empty">Nothing here yet.</div>')+'</div>';
+ const q=$("digestQueue").querySelector(".digest-list"),d=$("digestCompleted").querySelector(".digest-list");
+ queue.forEach(x=>q.appendChild(digestCard(x)));done.forEach(x=>d.appendChild(digestCard(x)));
+}
+function digestCard(x){
+ const el=document.createElement("button");el.className="digest-card";
+ const rating=x.rating!=null?'<span class="digest-rating">'+esc(x.rating)+"/"+esc(x.rating_scale||5)+'</span>':"";
+ el.innerHTML='<div><b>'+esc(x.title)+'</b><span>'+(x.media_type==="book"?"by ":"Directed by ")+esc(x.creator||"Unknown")+'</span></div>'+rating+'<span class="chevron">⌄</span>';
+ el.onclick=()=>openDigestDetail(x);return el;
+}
+function digestLink(url,label){return url?'<a class="digest-link" href="'+esc(url)+'" target="_blank" rel="noopener">'+esc(label)+'</a>':""}
+function openDigestDetail(x){
+ $("digestDetailTitle").textContent=x.title;
+ let html='<div class="digest-creator">'+(x.media_type==="book"?"Author":"Director")+': <b>'+esc(x.creator||"Unknown")+'</b></div>';
+ if(x.rating!=null)html+='<div class="digest-big-rating">'+esc(x.rating)+' / '+esc(x.rating_scale||5)+'</div>';
+ if(x.review)html+='<div class="digest-review">'+esc(x.review)+'</div>';
+ if(x.media_type==="book"){
+   html+='<div class="digest-links">'+digestLink(x.amazon_url,"Amazon");
+   if(x.free_audio_url)html+=digestLink(x.free_audio_url,"Free audiobook");
+   if(x.spotify_url&&x.spotify_url!==x.free_audio_url)html+=digestLink(x.spotify_url,"Spotify");
+   if(x.youtube_url&&x.youtube_url!==x.free_audio_url)html+=digestLink(x.youtube_url,"YouTube");
+   html+='</div>';
+ } else {
+   if(x.rotten_tomatoes_critics!=null||x.rotten_tomatoes_audience!=null)html+='<div class="rt-row"><b>Rotten Tomatoes</b><span>Critics: '+(x.rotten_tomatoes_critics??"—")+'%</span><span>Audience: '+(x.rotten_tomatoes_audience??"—")+'%</span></div>';
+   html+='<div class="digest-links">'+digestLink(x.streaming_url,x.streaming_service||"Where to watch")+digestLink(x.rotten_tomatoes_url,"Rotten Tomatoes")+'</div>';
+ }
+ $("digestDetail").innerHTML=html;$("digestDetailDialog").showModal();
+}
+document.querySelectorAll(".digest-tab").forEach(b=>b.onclick=()=>{digestView=b.dataset.digestView;document.querySelectorAll(".digest-tab").forEach(z=>z.classList.toggle("active",z===b));renderDigestibles()});
+$("closeDigestDetail").onclick=()=>$("digestDetailDialog").close();
+
 function setPage(page){
   currentPage=page;document.querySelectorAll(".page-tab").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
-  const isDrivers=page==="drivers",isReminders=page==="reminders",isBudget=page==="budget";$("listsPage").hidden=isDrivers||isReminders||isBudget;$("driversPage").hidden=!isDrivers;$("remindersPage").hidden=!isReminders;$("budgetPage").hidden=!isBudget;$("backupBtn").style.display=(isDrivers||isReminders||isBudget)?"none":"";
+  const isDrivers=page==="drivers",isReminders=page==="reminders",isBudget=page==="budget",isDigest=page==="digestibles";$("listsPage").hidden=isDrivers||isReminders||isBudget||isDigest;$("driversPage").hidden=!isDrivers;$("remindersPage").hidden=!isReminders;$("budgetPage").hidden=!isBudget;$("digestiblesPage").hidden=!isDigest;$("backupBtn").style.display=(isDrivers||isReminders||isBudget||isDigest)?"none":"";
   $("addBtn").style.display="";
   if(isDrivers){$("pageTitle").textContent="Bad Drivers";$("pageSubtitle").textContent="Track observations and compare demographics.";loadDrivers()}
-  else if(isReminders){$("pageTitle").textContent="Reminders";$("pageSubtitle").textContent="What is coming up.";$("addBtn").style.display="none";loadReminders()} else if(isBudget){$("pageTitle").textContent="Budget 🔒";$("pageSubtitle").textContent="Private financial dashboard.";$("addBtn").style.display="none";lockBudget()}
+  else if(isReminders){$("pageTitle").textContent="Reminders";$("pageSubtitle").textContent="What is coming up.";$("addBtn").style.display="none";loadReminders()} else if(isDigest){$("pageTitle").textContent="Digestibles";$("pageSubtitle").textContent="Books and movies worth consuming.";$("addBtn").style.display="none";loadDigestibles()} else if(isBudget){$("pageTitle").textContent="Budget 🔒";$("pageSubtitle").textContent="Private financial dashboard.";$("addBtn").style.display="none";lockBudget()}
   else {currentView="active";document.querySelectorAll(".sub-tab").forEach(z=>z.classList.toggle("active",z.dataset.view==="active"));renderLists()}
 }
 document.querySelectorAll(".page-tab").forEach(b=>b.onclick=()=>setPage(b.dataset.page));
@@ -268,7 +310,7 @@ function applyAuthSession(session){$("authBtn").textContent=session?"Sign out":"
 async function finishOAuthRedirect(){const p=new URLSearchParams(location.search),code=p.get("code"),err=p.get("error_description")||p.get("error");if(err){$("status").textContent="Sign-in error: "+err;history.replaceState({},document.title,location.pathname);return}if(!code)return;const {data,error}=await sb.auth.exchangeCodeForSession(code);history.replaceState({},document.title,location.pathname);if(error){$("status").textContent="Sign-in error: "+error.message;applyAuthSession(null);return}applyAuthSession(data.session);$("status").textContent=""}
 async function updateAuth(){const {data:{session},error}=await sb.auth.getSession();if(error)showErr(error);applyAuthSession(session);return session}
 $("authBtn").onclick=async()=>{const {data:{session}}=await sb.auth.getSession();if(session){const {error}=await sb.auth.signOut({scope:"local"});if(error)showErr(error);else applyAuthSession(null);return}const {data,error}=await sb.auth.signInWithOAuth({provider:"github",options:{redirectTo:"https://garoggy.github.io/roggy-buy-list/",skipBrowserRedirect:true}});if(error){showErr(error);return}if(data?.url)window.location.assign(data.url);else $("status").textContent="Sign-in error: Supabase did not return an authorization URL."};
-sb.auth.onAuthStateChange((event,session)=>{applyAuthSession(session);setTimeout(()=>{loadLists();if(currentPage==="drivers")loadDrivers();if(currentPage==="reminders")loadReminders();if(currentPage==="budget"&&budgetUnlocked)loadBudgetData()},0)});
+sb.auth.onAuthStateChange((event,session)=>{applyAuthSession(session);setTimeout(()=>{loadLists();if(currentPage==="drivers")loadDrivers();if(currentPage==="reminders")loadReminders();if(currentPage==="budget"&&budgetUnlocked)loadBudgetData();if(currentPage==="digestibles")loadDigestibles()},0)});
 
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");
 updateAuth();loadLists();
