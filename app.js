@@ -3,6 +3,10 @@ const SUPABASE_KEY="sb_publishable_4WYS4v4U7PSgXesYNNJUfA_69lJaBX1";
 const KEY="roggy-lists-v1";
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{flowType:"pkce",detectSessionInUrl:true,persistSession:true,autoRefreshToken:true}});
 const $=id=>document.getElementById(id);
+const BRAIN_KEY="roggy-brain-v1",PROJECT_KEY="roggy-projects-v1";
+let brainDump=JSON.parse(localStorage.getItem(BRAIN_KEY)||"[]"),projects=JSON.parse(localStorage.getItem(PROJECT_KEY)||"[]");
+function saveBrain(){localStorage.setItem(BRAIN_KEY,JSON.stringify(brainDump))}
+function saveProjects(){localStorage.setItem(PROJECT_KEY,JSON.stringify(projects))}
 
 const seed={buy:[
 ["Indoor doormat","Home","Need"],["Outdoor doormat","Home","Need"],["Extended small mirror for office","Office","Want"],["Soft light for office meetings","Office","Want"],["Indoor mood lighting — lamps, LEDs, etc.","Home / Decoration","Eventually"],["Outdoor Christmas lights","Decoration","Eventually"],["Blackout curtains","Home","Need"],["Curtain rods x3","Home","Need"],["Fruit bowl","Kitchen","Want"],["Glass food storage container set","Kitchen","Need"],["Hard reusable ice packs for keeping food cold","Kitchen","Need"],["Soft reusable ice packs for injuries","Health / First Aid","Need"],["Flexible silicone ice trays","Kitchen","Need"]
@@ -288,12 +292,20 @@ document.querySelectorAll(".digest-status-tab").forEach(b=>b.onclick=()=>{digest
 $("closeDigestDetail").onclick=()=>$("digestDetailDialog").close();
 
 function setPage(page){
-  currentPage=page;document.querySelectorAll(".page-tab").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
-  const isDrivers=page==="drivers",isReminders=page==="reminders",isBudget=page==="budget",isDigest=page==="digestibles";$("listsPage").hidden=isDrivers||isReminders||isBudget||isDigest;$("driversPage").hidden=!isDrivers;$("remindersPage").hidden=!isReminders;$("budgetPage").hidden=!isBudget;$("digestiblesPage").hidden=!isDigest;$("backupBtn").style.display=(isDrivers||isReminders||isBudget||isDigest)?"none":"";
-  $("addBtn").style.display="";
-  if(isDrivers){$("pageTitle").textContent="Bad Drivers";$("pageSubtitle").textContent="Track observations and compare demographics.";loadDrivers()}
-  else if(isReminders){$("pageTitle").textContent="Reminders";$("pageSubtitle").textContent="What is coming up.";$("addBtn").style.display="none";loadReminders()} else if(isDigest){$("pageTitle").textContent="Digestibles";$("pageSubtitle").textContent="Books, movies, and anime worth consuming.";$("addBtn").style.display="none";loadDigestibles()} else if(isBudget){$("pageTitle").textContent="Budget 🔒";$("pageSubtitle").textContent="Private financial dashboard.";$("addBtn").style.display="none";lockBudget()}
-  else {currentView="active";document.querySelectorAll(".sub-tab").forEach(z=>z.classList.toggle("active",z.dataset.view==="active"));renderLists()}
+ currentPage=page;document.querySelectorAll(".page-tab").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
+ const special=["home","drivers","reminders","budget","digestibles","projects","health","vehicle"],isSpecial=special.includes(page);
+ $("listsPage").hidden=isSpecial;
+ ["home","drivers","reminders","budget","digestibles","projects","health","vehicle"].forEach(p=>{const el=$(p+"Page");if(el)el.hidden=page!==p});
+ $("backupBtn").style.display=isSpecial?"none":"";$("addBtn").style.display="";
+ if(page==="home"){ $("pageTitle").textContent="Roggy";$("pageSubtitle").textContent="Your command center."; $("addBtn").style.display="none";renderHome(); }
+ else if(page==="projects"){ $("pageTitle").textContent="Projects";$("pageSubtitle").textContent="Everything with a finish line."; $("addBtn").style.display="none";renderProjects(); }
+ else if(page==="health"){ $("pageTitle").textContent="Health";$("pageSubtitle").textContent="Garmin-powered wellness."; $("addBtn").style.display="none"; }
+ else if(page==="vehicle"){ $("pageTitle").textContent="Vehicle";$("pageSubtitle").textContent="Maintenance and ownership."; $("addBtn").style.display="none"; }
+ else if(page==="drivers"){ $("pageTitle").textContent="Bad Drivers";$("pageSubtitle").textContent="Track observations and compare demographics.";loadDrivers() }
+ else if(page==="reminders"){ $("pageTitle").textContent="Reminders";$("pageSubtitle").textContent="What is coming up.";$("addBtn").style.display="none";loadReminders() }
+ else if(page==="digestibles"){ $("pageTitle").textContent="Digestibles";$("pageSubtitle").textContent="Books, movies, and anime worth consuming.";$("addBtn").style.display="none";loadDigestibles() }
+ else if(page==="budget"){ $("pageTitle").textContent="Budget 🔒";$("pageSubtitle").textContent="Private financial dashboard.";$("addBtn").style.display="none";lockBudget() }
+ else {currentView="active";document.querySelectorAll(".sub-tab").forEach(z=>z.classList.toggle("active",z.dataset.view==="active"));renderLists()}
 }
 document.querySelectorAll(".page-tab").forEach(b=>b.onclick=()=>setPage(b.dataset.page));
 document.querySelectorAll("#listsPage .sub-tab").forEach(b=>b.onclick=()=>{currentView=b.dataset.view;document.querySelectorAll("#listsPage .sub-tab").forEach(z=>z.classList.toggle("active",z===b));renderLists()});
@@ -313,6 +325,31 @@ $("authBtn").onclick=async()=>{const {data:{session}}=await sb.auth.getSession()
 sb.auth.onAuthStateChange((event,session)=>{applyAuthSession(session);setTimeout(()=>{loadLists();if(currentPage==="drivers")loadDrivers();if(currentPage==="reminders")loadReminders();if(currentPage==="budget"&&budgetUnlocked)loadBudgetData();if(currentPage==="digestibles")loadDigestibles()},0)});
 
 
+
+/* Command center + personal OS v35 */
+function renderHome(){
+ $("homeDate").textContent=new Date().toLocaleDateString([],{weekday:"long",month:"long",day:"numeric"});
+ $("homeGreeting").textContent=new Date().getHours()<12?"Good morning.":new Date().getHours()<17?"Good afternoon.":"Good evening.";
+ const now=new Date(),tomorrow=new Date(now);tomorrow.setHours(24,0,0,0);
+ const todays=(reminders||[]).filter(x=>{const d=new Date(x.start_at);return d>=new Date(now.getFullYear(),now.getMonth(),now.getDate())&&d<tomorrow}).slice(0,4);
+ $("homeTimeline").innerHTML='<div class="section-head"><div><span class="eyebrow">TODAY</span><h3>Next up</h3></div><button class="text-action" data-home-jump="reminders">See all</button></div>'+(todays.length?todays.map(x=>'<button class="timeline-row" data-home-jump="reminders"><span>'+esc(x.all_day?"All day":new Date(x.start_at).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}))+'</span><b>'+esc(x.title)+'</b></button>').join(""):'<div class="quiet-state">Nothing demanding your attention right now.</div>');
+ renderBrainPreview();
+ document.querySelectorAll("[data-home-jump]").forEach(b=>b.onclick=()=>setPage(b.dataset.homeJump));
+ if(!reminders?.length)loadReminders().then(()=>{if(currentPage==="home")renderHome()}).catch(()=>{});
+}
+function renderBrainPreview(){if(!$("brainDumpPreview"))return;$("brainDumpPreview").innerHTML=brainDump.length?brainDump.slice(0,4).map((x,i)=>'<div class="brain-row"><span>•</span><p>'+esc(x.text)+'</p><button data-brain-delete="'+i+'">×</button></div>').join(""):'<div class="quiet-state">Your head is clear. Dump thoughts here before they disappear.</div>';document.querySelectorAll("[data-brain-delete]").forEach(b=>b.onclick=()=>{brainDump.splice(+b.dataset.brainDelete,1);saveBrain();renderBrainPreview()})}
+function openBrainDump(){$("brainDumpDialog").showModal();setTimeout(()=>$("brainDumpText").focus(),50)}
+$("brainDumpBtn").onclick=openBrainDump;$("brainDumpAddInline").onclick=openBrainDump;
+$("brainDumpForm").addEventListener("submit",e=>{if(e.submitter?.value==="cancel")return;e.preventDefault();brainDump.unshift({text:$("brainDumpText").value.trim(),created:new Date().toISOString()});saveBrain();$("brainDumpForm").reset();$("brainDumpDialog").close();renderBrainPreview()});
+function renderProjects(){$("projectList").innerHTML=projects.length?projects.map((p,i)=>'<article class="project-card"><div><span class="project-status">'+esc(p.status)+'</span><h3>'+esc(p.title)+'</h3><p>'+esc(p.description||"No description yet.")+'</p></div><div class="project-foot"><span>'+esc(p.priority)+' priority</span><button data-project-delete="'+i+'">×</button></div></article>').join(""):'<div class="system-card empty-project"><b>No projects yet.</b><p>Create one for anything that needs multiple steps, research, purchases, notes or a finish line.</p></div>';document.querySelectorAll("[data-project-delete]").forEach(b=>b.onclick=()=>{projects.splice(+b.dataset.projectDelete,1);saveProjects();renderProjects()})}
+$("newProjectBtn").onclick=()=>$("projectDialog").showModal();
+$("projectForm").addEventListener("submit",e=>{if(e.submitter?.value==="cancel")return;e.preventDefault();projects.unshift({title:$("projectTitle").value.trim(),description:$("projectDescription").value.trim(),status:$("projectStatus").value,priority:$("projectPriority").value,created:new Date().toISOString()});saveProjects();$("projectForm").reset();$("projectDialog").close();renderProjects()});
+document.querySelectorAll(".command-card").forEach(b=>b.onclick=()=>setPage(b.dataset.jump));
+function openGlobalSearch(){$("globalSearchDialog").showModal();$("globalSearchInput").value="";renderGlobalSearch("");setTimeout(()=>$("globalSearchInput").focus(),50)}
+$("globalSearchBtn").onclick=openGlobalSearch;$("closeGlobalSearch").onclick=()=>$("globalSearchDialog").close();
+function renderGlobalSearch(q){q=q.toLowerCase().trim();let rows=[];(data.buy||[]).filter(x=>!x.deleted).forEach(x=>rows.push({type:"Buy",title:x.item,page:"buy"}));(data.groceries||[]).filter(x=>!x.deleted).forEach(x=>rows.push({type:"Grocery",title:x.item,page:"groceries"}));brainDump.forEach(x=>rows.push({type:"Brain Dump",title:x.text,page:"home"}));projects.forEach(x=>rows.push({type:"Project",title:x.title,page:"projects"}));(reminders||[]).forEach(x=>rows.push({type:"Reminder",title:x.title,page:"reminders"}));(digestibles||[]).forEach(x=>rows.push({type:x.media_type,title:x.title,page:"digestibles"}));if(q)rows=rows.filter(x=>(x.type+" "+x.title).toLowerCase().includes(q));else rows=rows.slice(0,8);$("globalSearchResults").innerHTML=rows.slice(0,30).map((x,i)=>'<button data-search-index="'+i+'"><span>'+esc(x.type)+'</span><b>'+esc(x.title)+'</b></button>').join("")||'<div class="quiet-state">No matches.</div>';document.querySelectorAll("[data-search-index]").forEach((b)=>b.onclick=()=>{$("globalSearchDialog").close();setPage(rows[+b.dataset.searchIndex].page)})}
+$("globalSearchInput").oninput=e=>renderGlobalSearch(e.target.value);
+
 /* Appearance settings v31 */
 const THEME_KEY="roggy-theme",UI_SIZE_KEY="roggy-ui-size";
 function applyAppearance(){
@@ -328,4 +365,4 @@ document.querySelectorAll(".size-choice").forEach(b=>b.onclick=()=>{localStorage
 $("settingsShelfBtn").onclick=()=>{$("moreToggle").checked=false;$("settingsToggle").checked=true};
 
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");
-updateAuth();loadLists();
+updateAuth();loadLists().then(()=>{setPage("home")});
