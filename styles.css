@@ -146,3 +146,58 @@ html[data-ui-size="small"] .page-tabs,html[data-ui-size="small"] .sub-tabs{gap:4
 html[data-ui-size="small"] .card-summary{min-height:62px;padding:11px}html[data-ui-size="medium"] .card-summary{min-height:76px}html[data-ui-size="large"] .card-summary{min-height:90px;padding:18px}
 html[data-ui-size="small"] .list,html[data-ui-size="small"] .reminder-list,html[data-ui-size="small"] .digest-list{gap:7px}html[data-ui-size="large"] .list,html[data-ui-size="large"] .reminder-list,html[data-ui-size="large"] .digest-list{gap:15px}
 html[data-ui-size="small"] .fab{width:52px;height:52px;font-size:32px}html[data-ui-size="large"] .fab{width:68px;height:68px;font-size:42px}
+
+
+/* Strong S/M/L density separation v32 */
+html[data-ui-size="small"]{--ui-scale:.76}
+html[data-ui-size="medium"]{--ui-scale:1}
+html[data-ui-size="large"]{--ui-scale:1.30}
+
+/* Small = genuinely compact / information-dense */
+html[data-ui-size="small"] header{padding:calc(5px + env(safe-area-inset-top)) 10px 5px;border-radius:0 0 18px 10px}
+html[data-ui-size="small"] h1{font-size:21px}
+html[data-ui-size="small"] header p{font-size:9px}
+html[data-ui-size="small"] .page-tabs,html[data-ui-size="small"] .sub-tabs{padding:4px 6px 0;gap:3px}
+html[data-ui-size="small"] .page-tab,html[data-ui-size="small"] .more-tab,html[data-ui-size="small"] .sub-tab,html[data-ui-size="small"] .driver-tab,html[data-ui-size="small"] .reminder-tab,html[data-ui-size="small"] .digest-tab{padding:5px 3px;border-radius:13px 9px 14px 10px}
+html[data-ui-size="small"] .summary,html[data-ui-size="small"] .driver-summary{padding:5px 7px 0;gap:4px}
+html[data-ui-size="small"] .summary div,html[data-ui-size="small"] .driver-summary div{padding:5px}
+html[data-ui-size="small"] .toolbar{padding:5px 7px 4px}
+html[data-ui-size="small"] .filter{padding:5px 8px}
+html[data-ui-size="small"] .searchrow input,html[data-ui-size="small"] .searchrow select{padding:7px 8px}
+html[data-ui-size="small"] .list{padding:3px 8px 76px;gap:5px}
+html[data-ui-size="small"] .card{border-radius:18px 12px 19px 13px}
+html[data-ui-size="small"] .card-summary{min-height:48px;padding:8px 9px;gap:6px}
+html[data-ui-size="small"] .item-name{font-size:15px}
+html[data-ui-size="small"] .meta{margin-top:2px;font-size:10px}
+html[data-ui-size="small"] .icon-action{width:25px;height:25px}
+html[data-ui-size="small"] .badge{padding:3px 5px;font-size:9px}
+html[data-ui-size="small"] .fab{width:46px;height:46px;font-size:28px;right:14px;bottom:calc(14px + env(safe-area-inset-bottom))}
+html[data-ui-size="small"] .chart-card,html[data-ui-size="small"] .analysis-card,html[data-ui-size="small"] .budget-panel{padding:9px}
+html[data-ui-size="small"] .reminder-card,html[data-ui-size="small"] .digest-card,html[data-ui-size="small"] .driver-row{padding:9px}
+html[data-ui-size="small"] .settings-shelf{padding:13px}
+
+/* Large = spacious, oversized touch UI */
+html[data-ui-size="large"] header{padding:calc(18px + env(safe-area-inset-top)) 22px 17px;border-radius:0 0 42px 24px}
+html[data-ui-size="large"] h1{font-size:34px}
+html[data-ui-size="large"] header p{font-size:15px;margin-top:5px}
+html[data-ui-size="large"] .auth-btn{padding:11px 15px;font-size:14px}
+html[data-ui-size="large"] .page-tabs,html[data-ui-size="large"] .sub-tabs{padding:14px 18px 0;gap:12px}
+html[data-ui-size="large"] .page-tab,html[data-ui-size="large"] .more-tab,html[data-ui-size="large"] .sub-tab,html[data-ui-size="large"] .driver-tab,html[data-ui-size="large"] .reminder-tab,html[data-ui-size="large"] .digest-tab{padding:15px 10px;border-radius:29px 18px 31px 20px}
+html[data-ui-size="large"] .summary,html[data-ui-size="large"] .driver-summary{padding:16px 18px 0;gap:12px}
+html[data-ui-size="large"] .summary div,html[data-ui-size="large"] .driver-summary div{padding:17px 12px}
+html[data-ui-size="large"] .summary b,html[data-ui-size="large"] .driver-summary b{font-size:26px}
+html[data-ui-size="large"] .summary span,html[data-ui-size="large"] .driver-summary span{font-size:14px}
+html[data-ui-size="large"] .toolbar{padding:15px 18px 12px}
+html[data-ui-size="large"] .filter{padding:12px 18px}
+html[data-ui-size="large"] .searchrow input,html[data-ui-size="large"] .searchrow select{padding:16px}
+html[data-ui-size="large"] .list{padding:10px 18px 125px;gap:18px}
+html[data-ui-size="large"] .card{border-radius:35px 23px 38px 25px}
+html[data-ui-size="large"] .card-summary{min-height:108px;padding:22px;gap:15px}
+html[data-ui-size="large"] .item-name{font-size:23px}
+html[data-ui-size="large"] .meta{margin-top:8px;font-size:15px}
+html[data-ui-size="large"] .icon-action{width:42px;height:42px}
+html[data-ui-size="large"] .badge{padding:8px 11px;font-size:13px}
+html[data-ui-size="large"] .fab{width:78px;height:78px;font-size:48px;right:26px;bottom:calc(26px + env(safe-area-inset-bottom))}
+html[data-ui-size="large"] .chart-card,html[data-ui-size="large"] .analysis-card,html[data-ui-size="large"] .budget-panel{padding:21px}
+html[data-ui-size="large"] .reminder-card,html[data-ui-size="large"] .digest-card,html[data-ui-size="large"] .driver-row{padding:20px}
+html[data-ui-size="large"] .settings-shelf{padding:25px}
