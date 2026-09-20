@@ -86,3 +86,25 @@ input,select,textarea,#search,#sort{border:1px solid rgba(139,92,246,.22);backgr
 dialog{border-radius:34px 22px 36px 24px;background:#faf7ff;box-shadow:0 28px 80px rgba(76,29,149,.28)}dialog::backdrop{background:rgba(46,16,70,.48);backdrop-filter:blur(4px)}
 .side-drawer{background:linear-gradient(165deg,rgba(250,245,255,.98),rgba(237,233,254,.98));border-radius:38px 0 0 26px;box-shadow:-18px 0 45px rgba(76,29,149,.22);gap:12px}.drawer-backdrop{background:rgba(46,16,70,.32);backdrop-filter:blur(3px)}.drawer-close{border-radius:50% 42% 48% 52%;background:#e9d5ff;color:#6d28d9}.drawer-page-tab{border-radius:26px 15px 28px 17px}.drawer-page-tab.active{background:linear-gradient(135deg,#6d28d9,#a855f7);color:#fff}
 .card-details{border-top-color:rgba(139,92,246,.12)}.meta,.status,.source-note,.reminder-note,.chart-head p,.budget-head p,.budget-panel p,.digest-card div span{color:var(--muted)}
+
+
+/* Compact header + living FAB v30 */
+header{padding:calc(10px + env(safe-area-inset-top)) 16px 9px;border-radius:0 0 25px 14px}
+h1{font-size:25px;line-height:1.05}header p{margin-top:2px;font-size:11px}
+.auth-btn{padding:6px 9px;font-size:11px}.icon-btn{font-size:22px}
+.page-tabs{gap:6px;padding:7px 10px 0}.page-tab,.more-tab{padding:8px 6px;border-radius:18px 12px 19px 13px}
+.sub-tabs{gap:6px;padding:6px 10px 0}.sub-tab,.driver-tab,.reminder-tab,.digest-tab{padding:8px 6px;border-radius:18px 12px 19px 13px}
+.summary{gap:6px;padding:8px 10px 0}.summary div,.driver-summary div{padding:7px 8px;border-radius:18px 12px 19px 13px}.summary b,.driver-summary b{font-size:18px}.summary span,.driver-summary span{font-size:10px}
+.toolbar{padding:7px 10px 6px}.segmented{padding-bottom:6px}.filter{padding:7px 11px}.searchrow input,.searchrow select{padding:9px 11px}
+.digest-status-tabs{padding:6px 10px 0}.digest-status-tab{padding:6px 10px}
+.fab{width:58px;height:58px;right:20px;bottom:calc(20px + env(safe-area-inset-bottom));transform-origin:center;animation:liquidFab 7s ease-in-out infinite;will-change:border-radius,transform}
+@keyframes liquidFab{
+0%,100%{border-radius:52% 48% 44% 56%/55% 42% 58% 45%;transform:scale(1)}
+18%{border-radius:61% 39% 53% 47%/42% 57% 43% 58%;transform:scale(1.025,.985)}
+36%{border-radius:43% 57% 38% 62%/59% 41% 56% 44%;transform:scale(.99,1.025)}
+54%{border-radius:57% 43% 61% 39%/47% 62% 38% 53%;transform:scale(1.02,.99)}
+72%{border-radius:39% 61% 49% 51%/61% 45% 55% 39%;transform:scale(.985,1.02)}
+88%{border-radius:55% 45% 42% 58%/44% 53% 47% 56%;transform:scale(1.015)}
+}
+@media(prefers-reduced-motion:reduce){.fab{animation:none}}
+@media(max-width:500px){header{padding:calc(9px + env(safe-area-inset-top)) 12px 8px}h1{font-size:23px}.page-tabs{gap:5px;padding:6px 7px 0}.page-tab,.more-tab{padding:7px 3px;font-size:11px}.sub-tabs{padding:5px 8px 0}.summary{padding:7px 8px 0}}
