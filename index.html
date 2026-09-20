@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#111827">
 <title>Roggy Lists</title>
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="styles.css?v=27">
+<link rel="stylesheet" href="styles.css?v=28">
 <link rel="apple-touch-icon" href="icon.svg">
 </head>
 <body>
@@ -18,11 +18,18 @@
 <nav class="page-tabs">
   <button class="page-tab active" data-page="buy">Buy List</button>
   <button class="page-tab" data-page="groceries">Groceries</button>
-  <button class="page-tab" data-page="drivers">Bad Drivers</button>
   <button class="page-tab" data-page="reminders">Reminders</button>
-  <button class="page-tab" data-page="budget">Budget 🔒</button>
-  <button class="page-tab" data-page="digestibles">Digestibles</button>
+  <label class="more-tab" for="moreToggle">More <span>☰</span></label>
 </nav>
+
+<input id="moreToggle" class="drawer-toggle" type="checkbox" hidden>
+<label class="drawer-backdrop" for="moreToggle" aria-label="Close menu"></label>
+<aside class="side-drawer" aria-label="More sections">
+  <div class="drawer-head"><b>More</b><label for="moreToggle" class="drawer-close">✕</label></div>
+  <button class="page-tab drawer-page-tab" data-page="drivers" onclick="document.getElementById('moreToggle').checked=false">Bad Drivers</button>
+  <button class="page-tab drawer-page-tab" data-page="budget" onclick="document.getElementById('moreToggle').checked=false">Budget 🔒</button>
+  <button class="page-tab drawer-page-tab" data-page="digestibles" onclick="document.getElementById('moreToggle').checked=false">Digestibles</button>
+</aside>
 
 <section id="listsPage">
   <nav class="sub-tabs"><button class="sub-tab active" data-view="active">Active</button><button class="sub-tab" data-view="deleted">Recently Deleted <span id="deletedCount"></span></button></nav>
@@ -178,5 +185,5 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
-<script src="app.js?v=27"></script>
+<script src="app.js?v=28"></script>
 </body></html>
