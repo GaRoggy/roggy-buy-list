@@ -312,5 +312,20 @@ async function updateAuth(){const {data:{session},error}=await sb.auth.getSessio
 $("authBtn").onclick=async()=>{const {data:{session}}=await sb.auth.getSession();if(session){const {error}=await sb.auth.signOut({scope:"local"});if(error)showErr(error);else applyAuthSession(null);return}const {data,error}=await sb.auth.signInWithOAuth({provider:"github",options:{redirectTo:"https://garoggy.github.io/roggy-buy-list/",skipBrowserRedirect:true}});if(error){showErr(error);return}if(data?.url)window.location.assign(data.url);else $("status").textContent="Sign-in error: Supabase did not return an authorization URL."};
 sb.auth.onAuthStateChange((event,session)=>{applyAuthSession(session);setTimeout(()=>{loadLists();if(currentPage==="drivers")loadDrivers();if(currentPage==="reminders")loadReminders();if(currentPage==="budget"&&budgetUnlocked)loadBudgetData();if(currentPage==="digestibles")loadDigestibles()},0)});
 
+
+/* Appearance settings v31 */
+const THEME_KEY="roggy-theme",UI_SIZE_KEY="roggy-ui-size";
+function applyAppearance(){
+ const theme=localStorage.getItem(THEME_KEY)||"purple",size=localStorage.getItem(UI_SIZE_KEY)||"medium";
+ document.documentElement.dataset.theme=theme;document.documentElement.dataset.uiSize=size;
+ document.querySelectorAll(".color-choice").forEach(b=>b.classList.toggle("active",b.dataset.theme===theme));
+ document.querySelectorAll(".size-choice").forEach(b=>b.classList.toggle("active",b.dataset.size===size));
+ const swatch=document.querySelector('.color-choice[data-theme="'+theme+'"]');if(swatch){const color=swatch.style.getPropertyValue("--swatch");document.querySelector('meta[name="theme-color"]')?.setAttribute("content",color)}
+}
+applyAppearance();
+document.querySelectorAll(".color-choice").forEach(b=>b.onclick=()=>{localStorage.setItem(THEME_KEY,b.dataset.theme);applyAppearance()});
+document.querySelectorAll(".size-choice").forEach(b=>b.onclick=()=>{localStorage.setItem(UI_SIZE_KEY,b.dataset.size);applyAppearance()});
+$("settingsShelfBtn").onclick=()=>{$("moreToggle").checked=false;$("settingsToggle").checked=true};
+
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");
 updateAuth();loadLists();
