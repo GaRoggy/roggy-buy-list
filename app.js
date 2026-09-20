@@ -269,7 +269,8 @@ function digestLink(url,label){return url?'<a class="digest-link" href="'+esc(ur
 function openDigestDetail(x){
  $("digestDetailTitle").textContent=x.title;
  let html='<div class="digest-creator">'+(x.media_type==="book"?"Author":"Director")+': <b>'+esc(x.creator||"Unknown")+'</b></div>';
- if(x.rating!=null)html+='<div class="digest-big-rating">'+esc(x.rating)+' / '+esc(x.rating_scale||5)+'</div>';\n if(x.description)html+='<div class="digest-description">'+esc(x.description)+'</div>';
+ if(x.rating!=null)html+='<div class="digest-big-rating">'+esc(x.rating)+' / '+esc(x.rating_scale||5)+'</div>';
+ if(x.description)html+='<div class="digest-description">'+esc(x.description)+'</div>';
  if(x.review)html+='<div class="digest-review">'+esc(x.review)+'</div>';
  if(x.media_type==="book"){
    html+='<div class="digest-links">'+digestLink(x.amazon_url,"Amazon");
@@ -278,12 +279,12 @@ function openDigestDetail(x){
    if(x.youtube_url&&x.youtube_url!==x.free_audio_url)html+=digestLink(x.youtube_url,"YouTube");
    html+='</div>';
  } else {
-   if(x.rotten_tomatoes_critics!=null||x.rotten_tomatoes_audience!=null)html+='<div class="rt-row"><b>Rotten Tomatoes</b><span>Critics: '+(x.rotten_tomatoes_critics??"—")+'%</span><span>Audience: '+(x.rotten_tomatoes_audience??"—")+'%</span></div>';
-   html+='<div class="digest-links">'+digestLink(x.streaming_url,x.streaming_service||"Where to watch")+digestLink(x.rotten_tomatoes_url,"Rotten Tomatoes")+'</div>';
+   html+='<div class="movie-facts"><div><span>Streaming</span><b>'+esc(x.streaming_service||"Not currently listed")+'</b></div><div class="rt-direct"><span>Rotten Tomatoes</span><b>'+((x.rotten_tomatoes_critics!=null)?x.rotten_tomatoes_critics+"% Critics":"—")+'</b><small>'+((x.rotten_tomatoes_audience!=null)?x.rotten_tomatoes_audience+"% Audience":"")+'</small></div></div>';
  }
  $("digestDetail").innerHTML=html;$("digestDetailDialog").showModal();
 }
-document.querySelectorAll(".digest-tab").forEach(b=>b.onclick=()=>{digestView=b.dataset.digestView;digestStatusView="queue";document.querySelectorAll(".digest-tab").forEach(z=>z.classList.toggle("active",z===b));document.querySelectorAll(".digest-status-tab").forEach(z=>z.classList.toggle("active",z.dataset.digestStatus==="queue"));renderDigestibles()});\ndocument.querySelectorAll(".digest-status-tab").forEach(b=>b.onclick=()=>{digestStatusView=b.dataset.digestStatus;document.querySelectorAll(".digest-status-tab").forEach(z=>z.classList.toggle("active",z===b));renderDigestibles()});
+document.querySelectorAll(".digest-tab").forEach(b=>b.onclick=()=>{digestView=b.dataset.digestView;digestStatusView="queue";document.querySelectorAll(".digest-tab").forEach(z=>z.classList.toggle("active",z===b));document.querySelectorAll(".digest-status-tab").forEach(z=>z.classList.toggle("active",z.dataset.digestStatus==="queue"));renderDigestibles()});
+document.querySelectorAll(".digest-status-tab").forEach(b=>b.onclick=()=>{digestStatusView=b.dataset.digestStatus;document.querySelectorAll(".digest-status-tab").forEach(z=>z.classList.toggle("active",z===b));renderDigestibles()});
 $("closeDigestDetail").onclick=()=>$("digestDetailDialog").close();
 
 function setPage(page){
