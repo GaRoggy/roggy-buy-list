@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#6d28d9">
 <title>Roggy Lists</title>
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="styles.css?v=30">
+<link rel="stylesheet" href="styles.css?v=31">
 <link rel="apple-touch-icon" href="icon.svg">
 </head>
 <body>
@@ -29,6 +29,40 @@
   <button class="page-tab drawer-page-tab" data-page="drivers" onclick="document.getElementById('moreToggle').checked=false">Bad Drivers</button>
   <button class="page-tab drawer-page-tab" data-page="budget" onclick="document.getElementById('moreToggle').checked=false">Budget 🔒</button>
   <button class="page-tab drawer-page-tab" data-page="digestibles" onclick="document.getElementById('moreToggle').checked=false">Digestibles</button>
+  <div class="drawer-divider"></div>
+  <button id="settingsShelfBtn" class="drawer-page-tab settings-open" type="button">Settings <span>⚙</span></button>
+</aside>
+
+<input id="settingsToggle" class="settings-toggle" type="checkbox" hidden>
+<label class="settings-backdrop" for="settingsToggle" aria-label="Close settings"></label>
+<aside class="settings-shelf" aria-label="Website settings">
+  <div class="settings-head"><div><b>Settings</b><span>Make it yours.</span></div><label for="settingsToggle" class="drawer-close">✕</label></div>
+  <section class="setting-group">
+    <h3>Color</h3>
+    <div id="themeColors" class="theme-colors">
+      <button type="button" class="color-choice" data-theme="purple" aria-label="Purple" title="Purple" style="--swatch:#7c3aed"></button>
+      <button type="button" class="color-choice" data-theme="blue" aria-label="Blue" title="Blue" style="--swatch:#2563eb"></button>
+      <button type="button" class="color-choice" data-theme="cyan" aria-label="Cyan" title="Cyan" style="--swatch:#0891b2"></button>
+      <button type="button" class="color-choice" data-theme="teal" aria-label="Teal" title="Teal" style="--swatch:#0d9488"></button>
+      <button type="button" class="color-choice" data-theme="green" aria-label="Green" title="Green" style="--swatch:#16a34a"></button>
+      <button type="button" class="color-choice" data-theme="lime" aria-label="Lime" title="Lime" style="--swatch:#65a30d"></button>
+      <button type="button" class="color-choice" data-theme="yellow" aria-label="Yellow" title="Yellow" style="--swatch:#ca8a04"></button>
+      <button type="button" class="color-choice" data-theme="orange" aria-label="Orange" title="Orange" style="--swatch:#ea580c"></button>
+      <button type="button" class="color-choice" data-theme="red" aria-label="Red" title="Red" style="--swatch:#dc2626"></button>
+      <button type="button" class="color-choice" data-theme="pink" aria-label="Pink" title="Pink" style="--swatch:#db2777"></button>
+      <button type="button" class="color-choice" data-theme="rose" aria-label="Rose" title="Rose" style="--swatch:#e11d48"></button>
+      <button type="button" class="color-choice" data-theme="slate" aria-label="Slate" title="Slate" style="--swatch:#475569"></button>
+    </div>
+  </section>
+  <section class="setting-group">
+    <h3>Text Size</h3>
+    <div class="size-options">
+      <button type="button" class="size-choice" data-size="small">Small</button>
+      <button type="button" class="size-choice" data-size="medium">Medium</button>
+      <button type="button" class="size-choice" data-size="large">Large</button>
+    </div>
+    <p>Changes text, controls, spacing, cards, and the rest of the interface together.</p>
+  </section>
 </aside>
 
 <section id="listsPage">
@@ -185,5 +219,5 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
-<script src="app.js?v=28"></script>
+<script src="app.js?v=31"></script>
 </body></html>
