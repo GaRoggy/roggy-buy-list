@@ -52,6 +52,7 @@ export async function syncFinance(source, api, now=new Date()) {
     } catch(e) { if(e.code!=='TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION'||restart===2)throw e; }
   }
   const accounts=await api('/accounts/get');
+  if(accounts.item?.item_id && accounts.item.item_id!==source.external_id)throw new MonitorError('PLAID_ITEM_MISMATCH',{terminal:true});
   const result=[...records.values()];
   for(const a of accounts.accounts||[]) {
     const payload={account_id:a.account_id,name:a.name,type:a.type,subtype:a.subtype,

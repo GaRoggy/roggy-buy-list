@@ -4,6 +4,16 @@ import { dailyHealth, correlation } from './health.mjs';
 export function dayKey(value,zone) {
   return new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value));
 }
+function midnight(date,zone) {
+  const target=Date.parse(date+'T00:00:00Z');let guess=target;
+  const formatter=new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
+  for(let i=0;i<3;i++) {
+    const p=Object.fromEntries(formatter.formatToParts(new Date(guess)).map(x=>[x.type,x.value]));
+    const asUtc=Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);
+    guess+=target-asUtc;
+  }
+  return guess;
+}
 export function calendarAnalysis(records,now,zone) {
   const today=dayKey(now,zone), tomorrow=new Date(today+'T12:00:00Z');tomorrow.setUTCDate(tomorrow.getUTCDate()+1);
   const next=tomorrow.toISOString().slice(0,10);
@@ -11,9 +21,10 @@ export function calendarAnalysis(records,now,zone) {
   const onDay=(r,day)=>r.payload.all_day ? r.payload.start<=day&&r.payload.end>day : dayKey(r.payload.start,zone)<=day&&dayKey(new Date(Date.parse(r.payload.end)-1),zone)>=day;
   const todays=events.filter(r=>onDay(r,today)).sort((a,b)=>a.payload.start.localeCompare(b.payload.start));
   const timed=todays.filter(r=>!r.payload.all_day).sort((a,b)=>Date.parse(a.payload.start)-Date.parse(b.payload.start));
-  const conflicts=[];let occupied=0,end=0;
+  const dayStart=midnight(today,zone),dayEnd=midnight(next,zone);
+  const conflicts=[];let occupied=0,end=dayStart;
   for(let i=0;i<timed.length;i++) {
-    const a=timed[i],s=Date.parse(a.payload.start),e=Date.parse(a.payload.end);
+    const a=timed[i],s=Math.max(dayStart,Date.parse(a.payload.start)),e=Math.min(dayEnd,Date.parse(a.payload.end));
     occupied+=Math.max(0,e-Math.max(s,end));end=Math.max(e,end);
     for(let j=i+1;j<timed.length;j++) {
       const b=timed[j];if(Date.parse(b.payload.start)>=e)break;

@@ -11,6 +11,10 @@ test('brief contains structured empty sections and unknown health rather than sa
   assert.deepEqual(Object.keys(b.sections),['TODAY','IMPORTANT','MONEY','HEALTH','REMINDERS','PACKAGES']);
   assert.equal(b.sections.HEALTH.sleep_stress_association.status,'insufficient_data');assert.deepEqual(b.alerts,[]);
 });
+test('busy-day duration clips overnight events at local midnight across DST',()=>{
+  const s=calendarAnalysis([event('overnight','2026-10-31T22:00:00-05:00','2026-11-01T02:00:00-06:00')],new Date('2026-11-01T08:00:00-06:00'),'America/Chicago');
+  assert.equal(s.scheduled_hours,3);
+});
 test('cross-source links require exact evidence, not shared dates or partial identifiers',()=>{
   const emails=[{id:'e',payload:{order_information:'ABC12345'}}];
   assert.equal(linkContexts(emails,[{id:'t',payload:{name:'ABC123456'}}]).length,0);

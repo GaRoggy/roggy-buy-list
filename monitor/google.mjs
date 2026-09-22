@@ -5,8 +5,8 @@ import { request, MonitorError } from './core.mjs';
 export function protect(value, decrypt = false) {
   if (process.platform !== 'win32') throw new MonitorError('WINDOWS_SECRET_STORE_REQUIRED', { terminal: true });
   const script = decrypt
-    ? '$v=[Console]::In.ReadToEnd(); $s=ConvertTo-SecureString $v; $p=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($s); try {[Console]::Out.Write([Runtime.InteropServices.Marshal]::PtrToStringBSTR($p))} finally {[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($p)}'
-    : '$v=[Console]::In.ReadToEnd(); [Console]::Out.Write((ConvertTo-SecureString $v -AsPlainText -Force | ConvertFrom-SecureString))';
+    ? "[void][Reflection.Assembly]::LoadWithPartialName('System.Security'); $v=[Convert]::FromBase64String([Console]::In.ReadToEnd()); [Console]::Out.Write([Text.Encoding]::UTF8.GetString([Security.Cryptography.ProtectedData]::Unprotect($v,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)))"
+    : "[void][Reflection.Assembly]::LoadWithPartialName('System.Security'); $v=[Text.Encoding]::UTF8.GetBytes([Console]::In.ReadToEnd()); [Console]::Out.Write([Convert]::ToBase64String([Security.Cryptography.ProtectedData]::Protect($v,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)))";
   const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { input: value, encoding: 'utf8', windowsHide: true });
   if (result.status !== 0) throw new MonitorError('SECRET_STORE_ERROR', { terminal: true });
   return result.stdout.trim();

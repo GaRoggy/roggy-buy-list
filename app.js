@@ -29,9 +29,10 @@ Obese:{Yes:37.5,No:62.5}
 
 let data={buy:[],groceries:[]},currentPage="reminders",currentView="active",currentFilter="all";
 let baseline=FALLBACK_BASELINE,drivers=[],driverView="overview",charts={};
-let reminders=[],reminderView="today";
+let reminders=[],reminderView="today",remindersLoaded=false,reminderSessionVersion=0;
+let monitorEmails=[],monitorEmailMessage="Sign in to view monitored email.";
 let digestibles=[],digestView="books",digestStatusView="queue";
-const IMPORTANT_EMAILS=[]; // Sensitive email content must never be hard-coded into the public client.
+
 
 function esc(s=""){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 function showErr(e,target="status"){const el=$(target);if(el)el.textContent="Sync error: "+(e?.message||e)}
@@ -174,7 +175,13 @@ $("driverForm").addEventListener("submit",e=>{if(e.submitter?.value==="cancel")r
 $("closeDriverDetail").onclick=()=>$("driverDetailDialog").close();
 
 async function loadReminders(){
-  const {data:r,error}=await sb.from("reminders").select("*").eq("completed",false).order("start_at",{ascending:true});
+  const version=reminderSessionVersion;
+  const {data:{session}}=await sb.auth.getSession();
+  if(version!==reminderSessionVersion)return;
+  if(!isOwnerSession(session)){reminders=[];remindersLoaded=true;$("reminderStatus").textContent="Sign in to view private reminders.";renderReminders();return}
+  const {data:r,error}=await sb.from("reminders").select("*").eq("user_id",session.user.id).eq("completed",false).is("cancelled_at",null).order("start_at",{ascending:true});
+  if(version!==reminderSessionVersion)return;
+  remindersLoaded=true;if(!error)$("reminderStatus").textContent="";
   if(error){showErr(error,"reminderStatus");reminders=[]}else reminders=r||[];
   renderReminders();
 }
@@ -186,9 +193,9 @@ function renderReminders(){
   let start=today,end=tomorrow;
   if(reminderView==="tomorrow"){start=tomorrow;end=afterTomorrow}
   if(reminderView==="week"){start=today;end=weekEnd}
-  const rows=reminders.filter(x=>{const d=new Date(x.start_at);return d>=start&&d<end});
+  const rows=reminders.filter(x=>{const d=reminderStart(x),finish=reminderEnd(x);return d<end&&(finish>start||d>=start)});
   $("reminderList").innerHTML=rows.length?"":'<div class="card empty">Nothing scheduled here.</div>';
-  rows.forEach(x=>{const d=new Date(x.start_at),el=document.createElement("article");el.className="reminder-card";
+  rows.forEach(x=>{const d=reminderStart(x),el=document.createElement("article");el.className="reminder-card";
     const when=x.all_day?"All day":d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});
     const day=reminderView==="week"?d.toLocaleDateString([],{weekday:"short",month:"short",day:"numeric"}):"";
     el.innerHTML=`<div class="reminder-date">${esc(day)}</div><div class="reminder-body"><b>${esc(x.title)}</b><span>${esc(when)}</span></div>${x.source==="google_calendar"?'<span class="calendar-badge">Calendar</span>':""}`;
@@ -327,7 +334,9 @@ function setPrivacyGate(session){
  const owner=isOwnerSession(session);gate.hidden=owner;document.documentElement.classList.toggle("privacy-locked",!owner);
  if(session&&!owner){const st=document.getElementById("privacyGateStatus");if(st)st.textContent="This account is not authorized."}
 }
-function applyAuthSession(session){const owner=isOwnerSession(session);$("authBtn").textContent=session?"Sign out":"Sign in";$("authBtn").title=session?.user?.email||"Sign in with GitHub";setPrivacyGate(owner?session:null)}
+function reminderStart(x){return x.all_day&&x.start_date?new Date(x.start_date+"T00:00:00"):new Date(x.start_at)}
+function reminderEnd(x){return x.all_day&&x.end_date?new Date(x.end_date+"T00:00:00"):new Date(x.end_at||x.start_at)}
+function applyAuthSession(session){session=isOwnerSession(session)?session:null;setPrivacyGate(session);reminderSessionVersion++;reminders=[];remindersLoaded=false;monitorEmails=[];monitorEmailMessage=session?"Loading monitored email…":"Sign in to view monitored email.";renderImportantEmails();window.dispatchEvent(new CustomEvent("roggy-auth",{detail:{signedIn:!!session}}));if(currentPage==="home")renderHome();$("authBtn").textContent=session?"Sign out":"Sign in";$("authBtn").title=session?.user?.email||"Sign in with GitHub"}
 async function finishOAuthRedirect(){const p=new URLSearchParams(location.search),code=p.get("code"),err=p.get("error_description")||p.get("error");if(err){$("status").textContent="Sign-in error: "+err;history.replaceState({},document.title,location.pathname);return}if(!code)return;const {data,error}=await sb.auth.exchangeCodeForSession(code);history.replaceState({},document.title,location.pathname);if(error){$("status").textContent="Sign-in error: "+error.message;applyAuthSession(null);return}applyAuthSession(data.session);$("status").textContent=""}
 async function updateAuth(){const {data:{session},error}=await sb.auth.getSession();if(error)showErr(error);if(session&&!isOwnerSession(session)){await sb.auth.signOut({scope:"local"});applyAuthSession(null);return null}applyAuthSession(session);return session}
 $("authBtn").onclick=async()=>{const {data:{session}}=await sb.auth.getSession();if(session){const {error}=await sb.auth.signOut({scope:"local"});if(error)showErr(error);else applyAuthSession(null);return}const {data,error}=await sb.auth.signInWithOAuth({provider:"github",options:{redirectTo:"https://garoggy.github.io/roggy-buy-list/",skipBrowserRedirect:true}});if(error){showErr(error);return}if(data?.url)window.location.assign(data.url);else $("status").textContent="Sign-in error: Supabase did not return an authorization URL."};
@@ -340,19 +349,16 @@ function renderHome(){
  $("homeDate").textContent=new Date().toLocaleDateString([],{weekday:"long",month:"long",day:"numeric"});
  $("homeGreeting").textContent=new Date().getHours()<12?"Good morning.":new Date().getHours()<17?"Good afternoon.":"Good evening.";
  const now=new Date(),tomorrow=new Date(now);tomorrow.setHours(24,0,0,0);
- const todays=(reminders||[]).filter(x=>{const d=new Date(x.start_at);return d>=new Date(now.getFullYear(),now.getMonth(),now.getDate())&&d<tomorrow}).slice(0,4);
+ const todays=(reminders||[]).filter(x=>{const d=reminderStart(x),finish=reminderEnd(x);return d<tomorrow&&(finish>localDay(now)||d>=localDay(now))}).slice(0,4);
  $("homeTimeline").innerHTML='<div class="section-head"><div><span class="eyebrow">TODAY</span><h3>Next up</h3></div><button class="text-action" data-home-jump="reminders">See all</button></div>'+(todays.length?todays.map(x=>'<button class="timeline-row" data-home-jump="reminders"><span>'+esc(x.all_day?"All day":new Date(x.start_at).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}))+'</span><b>'+esc(x.title)+'</b></button>').join(""):'<div class="quiet-state">Nothing demanding your attention right now.</div>');
  renderImportantEmails();
  renderBrainPreview();
  document.querySelectorAll("[data-home-jump]").forEach(b=>b.onclick=()=>setPage(b.dataset.homeJump));
- if(!reminders?.length)loadReminders().then(()=>{if(currentPage==="home")renderHome()}).catch(()=>{});
+ if(!remindersLoaded){remindersLoaded=true;loadReminders().then(()=>{if(currentPage==="home")renderHome()}).catch(()=>{})}
 }
-async function renderImportantEmails(){
+function renderImportantEmails(){
  if(!$("importantEmailList"))return;
- const {data:{session}}=await sb.auth.getSession();
- if(!session){$("importantEmailList").innerHTML='<div class="quiet-state">Sign in to view private email information.</div>';return}
- // Email summaries must be loaded from an owner-scoped authenticated backend. Never embed them in this public JavaScript bundle.
- $("importantEmailList").innerHTML='<div class="quiet-state">Private email feed is locked until the authenticated email monitor is connected.</div>';
+ $("importantEmailList").innerHTML=monitorEmails.length?monitorEmails.map(x=>'<a class="important-email" href="https://mail.google.com/mail/u/0/#all/'+encodeURIComponent(x.source_message_id)+'" target="_blank" rel="noopener noreferrer"><span class="email-kind">'+esc(x.category)+'</span><div><b>'+esc(x.subject)+'</b><small>'+esc(x.sender)+' · '+esc(x.summary)+'</small><small>'+esc(x.reason||"")+'</small></div><time>'+esc(new Date(x.timestamp).toLocaleDateString())+'</time></a>').join(""):'<div class="quiet-state">'+esc(monitorEmailMessage)+'</div>';
 }
 function renderBrainPreview(){if(!$("brainDumpPreview"))return;$("brainDumpPreview").innerHTML=brainDump.length?brainDump.slice(0,4).map((x,i)=>'<div class="brain-row"><span>•</span><p>'+esc(x.text)+'</p><button data-brain-delete="'+i+'">×</button></div>').join(""):'<div class="quiet-state">Your head is clear. Dump thoughts here before they disappear.</div>';document.querySelectorAll("[data-brain-delete]").forEach(b=>b.onclick=()=>{brainDump.splice(+b.dataset.brainDelete,1);saveBrain();renderBrainPreview()})}
 function openBrainDump(){$("brainDumpDialog").showModal();setTimeout(()=>$("brainDumpText").focus(),50)}
