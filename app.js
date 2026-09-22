@@ -31,13 +31,7 @@ let data={buy:[],groceries:[]},currentPage="reminders",currentView="active",curr
 let baseline=FALLBACK_BASELINE,drivers=[],driverView="overview",charts={};
 let reminders=[],reminderView="today";
 let digestibles=[],digestView="books",digestStatusView="queue";
-const IMPORTANT_EMAILS=[
- {from:"Marty Lenss",subject:"E-Introductions",summary:"Introduction to Tom Schnell at the University of Iowa OPL center.",date:"Sep 18",url:"https://mail.google.com/mail/u/?authuser=garoggy32%40gmail.com#all/1a0b654fb00c2739",kind:"Career"},
- {from:"GitHub",subject:"Please review this sign in",summary:"GitHub reported a sign-in from a location it did not recognize.",date:"Sep 17",url:"https://mail.google.com/mail/u/?authuser=garoggy32%40gmail.com#all/1a0b29fdb6901a6c",kind:"Security"},
- {from:"Amazon",subject:"amazon.com: Sign-in",summary:"Amazon reported an account sign-in through the eero iOS app.",date:"Sep 18",url:"https://mail.google.com/mail/u/?authuser=garoggy32%40gmail.com#all/1a0b536613dbaeb1",kind:"Security"},
- {from:"Mediacom",subject:"Shipment Confirmation",summary:"Your Mediacom equipment order has shipped.",date:"Sep 16",url:"https://mail.google.com/mail/u/?authuser=garoggy32%40gmail.com#all/1a0aa9efcf5e447b",kind:"Action"},
- {from:"Collins",subject:"Flag Football 9/24 Games Cancelled",summary:"The September 24 games were cancelled because of field conditions.",date:"Sep 17",url:"https://mail.google.com/mail/u/?authuser=garoggy32%40gmail.com#all/1a0afdf30332f581",kind:"Schedule"}
-];
+const IMPORTANT_EMAILS=[]; // Sensitive email content must never be hard-coded into the public client.
 
 function esc(s=""){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 function showErr(e,target="status"){const el=$(target);if(el)el.textContent="Sync error: "+(e?.message||e)}
@@ -345,9 +339,12 @@ function renderHome(){
  document.querySelectorAll("[data-home-jump]").forEach(b=>b.onclick=()=>setPage(b.dataset.homeJump));
  if(!reminders?.length)loadReminders().then(()=>{if(currentPage==="home")renderHome()}).catch(()=>{});
 }
-function renderImportantEmails(){
+async function renderImportantEmails(){
  if(!$("importantEmailList"))return;
- $("importantEmailList").innerHTML=IMPORTANT_EMAILS.length?IMPORTANT_EMAILS.map(x=>'<a class="important-email" href="'+x.url+'" target="_blank" rel="noopener"><span class="email-kind">'+esc(x.kind)+'</span><div><b>'+esc(x.subject)+'</b><small>'+esc(x.from)+' · '+esc(x.summary)+'</small></div><time>'+esc(x.date)+'</time></a>').join(""):'<div class="quiet-state">No important mail needs your attention.</div>';
+ const {data:{session}}=await sb.auth.getSession();
+ if(!session){$("importantEmailList").innerHTML='<div class="quiet-state">Sign in to view private email information.</div>';return}
+ // Email summaries must be loaded from an owner-scoped authenticated backend. Never embed them in this public JavaScript bundle.
+ $("importantEmailList").innerHTML='<div class="quiet-state">Private email feed is locked until the authenticated email monitor is connected.</div>';
 }
 function renderBrainPreview(){if(!$("brainDumpPreview"))return;$("brainDumpPreview").innerHTML=brainDump.length?brainDump.slice(0,4).map((x,i)=>'<div class="brain-row"><span>•</span><p>'+esc(x.text)+'</p><button data-brain-delete="'+i+'">×</button></div>').join(""):'<div class="quiet-state">Your head is clear. Dump thoughts here before they disappear.</div>';document.querySelectorAll("[data-brain-delete]").forEach(b=>b.onclick=()=>{brainDump.splice(+b.dataset.brainDelete,1);saveBrain();renderBrainPreview()})}
 function openBrainDump(){$("brainDumpDialog").showModal();setTimeout(()=>$("brainDumpText").focus(),50)}
