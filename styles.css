@@ -295,3 +295,15 @@ html[data-mode="dark"] .drawer-backdrop,html[data-mode="dark"] .settings-backdro
  html[data-mode="dark"] body{background:radial-gradient(circle at 8% 0%,color-mix(in srgb,var(--accent) 24%,transparent),transparent 30%),radial-gradient(circle at 94% 14%,color-mix(in srgb,var(--accent2) 14%,transparent),transparent 28%),linear-gradient(145deg,#08070c 0%,color-mix(in srgb,#121019 90%,var(--accent) 10%) 54%,#08070c 100%)}
  html[data-mode="dark"] .page-tabs{background:rgba(17,15,23,.80);border-color:rgba(255,255,255,.08);box-shadow:0 8px 30px rgba(0,0,0,.28)}
 }
+
+
+/* Owner-only privacy gate v39 */
+#privacyGate[hidden]{display:none!important}
+#privacyGate{position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;padding:24px;background:var(--bg,linear-gradient(135deg,#f5efff,#efe7ff));backdrop-filter:blur(24px)}
+.privacy-gate-card{width:min(430px,100%);padding:32px;border:1px solid var(--line,rgba(0,0,0,.08));border-radius:32px;background:var(--surface,#fff);box-shadow:0 24px 80px rgba(0,0,0,.18);text-align:center}
+.privacy-gate-card h2{margin:0 0 8px;font-size:clamp(26px,5vw,38px)}
+.privacy-gate-card p{margin:0 0 22px;color:var(--muted,#666)}
+.privacy-gate-card button{border:0;border-radius:999px;padding:13px 22px;font:inherit;font-weight:800;cursor:pointer;background:var(--accent,#7c3aed);color:#fff}
+.privacy-gate-card small{display:block;min-height:1.4em;margin-top:14px;color:var(--muted,#666)}
+html.privacy-locked body> :not(#privacyGate){visibility:hidden!important;pointer-events:none!important}
+html.privacy-locked #privacyGate{visibility:visible!important;pointer-events:auto!important}
