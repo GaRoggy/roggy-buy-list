@@ -4,8 +4,10 @@ import { syncCalendar } from './calendar.mjs';
 import { syncGmail } from './gmail.mjs';
 import { syncGarmin } from './health.mjs';
 import { plaidClient, syncFinance } from './finance.mjs';
+import { syncBrief } from './brief.mjs';
 
 export async function collect(source, env, store) {
+  if (source.kind === 'brief') return syncBrief(source,env,store);
   if (source.kind === 'calendar') return syncCalendar(source, await googleClient(env), await store.records('calendar_event'));
   if (source.kind === 'gmail') return syncGmail(source, await googleClient(env), await store.records('email'));
   if (source.kind === 'garmin') return syncGarmin();
