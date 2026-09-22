@@ -363,17 +363,19 @@ function renderGlobalSearch(q){q=q.toLowerCase().trim();let rows=[];(data.buy||[
 $("globalSearchInput").oninput=e=>renderGlobalSearch(e.target.value);
 
 /* Appearance settings v31 */
-const THEME_KEY="roggy-theme",UI_SIZE_KEY="roggy-ui-size";
+const THEME_KEY="roggy-theme",UI_SIZE_KEY="roggy-ui-size",COLOR_MODE_KEY="roggy-color-mode";
 function applyAppearance(){
- const theme=localStorage.getItem(THEME_KEY)||"purple",size=localStorage.getItem(UI_SIZE_KEY)||"medium";
- document.documentElement.dataset.theme=theme;document.documentElement.dataset.uiSize=size;
+ const theme=localStorage.getItem(THEME_KEY)||"purple",size=localStorage.getItem(UI_SIZE_KEY)||"medium",mode=localStorage.getItem(COLOR_MODE_KEY)||"light";
+ document.documentElement.dataset.theme=theme;document.documentElement.dataset.uiSize=size;document.documentElement.dataset.mode=mode;
  document.querySelectorAll(".color-choice").forEach(b=>b.classList.toggle("active",b.dataset.theme===theme));
  document.querySelectorAll(".size-choice").forEach(b=>b.classList.toggle("active",b.dataset.size===size));
+ document.querySelectorAll(".mode-choice").forEach(b=>b.classList.toggle("active",b.dataset.mode===mode));
  const swatch=document.querySelector('.color-choice[data-theme="'+theme+'"]');if(swatch){const color=swatch.style.getPropertyValue("--swatch");document.querySelector('meta[name="theme-color"]')?.setAttribute("content",color)}
 }
 applyAppearance();
 document.querySelectorAll(".color-choice").forEach(b=>b.onclick=()=>{localStorage.setItem(THEME_KEY,b.dataset.theme);applyAppearance()});
 document.querySelectorAll(".size-choice").forEach(b=>b.onclick=()=>{localStorage.setItem(UI_SIZE_KEY,b.dataset.size);applyAppearance()});
+document.querySelectorAll(".mode-choice").forEach(b=>b.onclick=()=>{localStorage.setItem(COLOR_MODE_KEY,b.dataset.mode);applyAppearance()});
 $("settingsShelfBtn").onclick=()=>{$("moreToggle").checked=false;$("settingsToggle").checked=true};
 
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");
