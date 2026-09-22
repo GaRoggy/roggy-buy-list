@@ -319,11 +319,19 @@ $("addBtn").onclick=()=>currentPage==="drivers"?$("driverDialog").showModal():op
 
 $("backupBtn").onclick=()=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="roggy-lists-backup.json";a.click();URL.revokeObjectURL(a.href)};
 
-function applyAuthSession(session){$("authBtn").textContent=session?"Sign out":"Sign in";$("authBtn").title=session?.user?.email||"Sign in with GitHub"}
+const OWNER_USER_ID="9c1fcb62-644b-486a-9f87-36246e2e50de";
+function isOwnerSession(session){return !!session?.user&&session.user.id===OWNER_USER_ID}
+function setPrivacyGate(session){
+ let gate=document.getElementById("privacyGate");
+ if(!gate){gate=document.createElement("div");gate.id="privacyGate";gate.innerHTML='<div class="privacy-gate-card"><h2>Private Roggy OS</h2><p>This site is restricted to its owner.</p><button id="privacySignIn" type="button">Sign in with GitHub</button><small id="privacyGateStatus"></small></div>';document.body.appendChild(gate);document.getElementById("privacySignIn").onclick=()=>document.getElementById("authBtn").click()}
+ const owner=isOwnerSession(session);gate.hidden=owner;document.documentElement.classList.toggle("privacy-locked",!owner);
+ if(session&&!owner){const st=document.getElementById("privacyGateStatus");if(st)st.textContent="This account is not authorized."}
+}
+function applyAuthSession(session){const owner=isOwnerSession(session);$("authBtn").textContent=session?"Sign out":"Sign in";$("authBtn").title=session?.user?.email||"Sign in with GitHub";setPrivacyGate(owner?session:null)}
 async function finishOAuthRedirect(){const p=new URLSearchParams(location.search),code=p.get("code"),err=p.get("error_description")||p.get("error");if(err){$("status").textContent="Sign-in error: "+err;history.replaceState({},document.title,location.pathname);return}if(!code)return;const {data,error}=await sb.auth.exchangeCodeForSession(code);history.replaceState({},document.title,location.pathname);if(error){$("status").textContent="Sign-in error: "+error.message;applyAuthSession(null);return}applyAuthSession(data.session);$("status").textContent=""}
-async function updateAuth(){const {data:{session},error}=await sb.auth.getSession();if(error)showErr(error);applyAuthSession(session);return session}
+async function updateAuth(){const {data:{session},error}=await sb.auth.getSession();if(error)showErr(error);if(session&&!isOwnerSession(session)){await sb.auth.signOut({scope:"local"});applyAuthSession(null);return null}applyAuthSession(session);return session}
 $("authBtn").onclick=async()=>{const {data:{session}}=await sb.auth.getSession();if(session){const {error}=await sb.auth.signOut({scope:"local"});if(error)showErr(error);else applyAuthSession(null);return}const {data,error}=await sb.auth.signInWithOAuth({provider:"github",options:{redirectTo:"https://garoggy.github.io/roggy-buy-list/",skipBrowserRedirect:true}});if(error){showErr(error);return}if(data?.url)window.location.assign(data.url);else $("status").textContent="Sign-in error: Supabase did not return an authorization URL."};
-sb.auth.onAuthStateChange((event,session)=>{applyAuthSession(session);setTimeout(()=>{loadLists();if(currentPage==="drivers")loadDrivers();if(currentPage==="reminders")loadReminders();if(currentPage==="budget"&&budgetUnlocked)loadBudgetData();if(currentPage==="digestibles")loadDigestibles()},0)});
+sb.auth.onAuthStateChange((event,session)=>{if(session&&!isOwnerSession(session)){setTimeout(()=>sb.auth.signOut({scope:"local"}),0);applyAuthSession(null);return}applyAuthSession(session);if(!session)return;setTimeout(()=>{loadLists();if(currentPage==="drivers")loadDrivers();if(currentPage==="reminders")loadReminders();if(currentPage==="budget"&&budgetUnlocked)loadBudgetData();if(currentPage==="digestibles")loadDigestibles()},0)});
 
 
 
@@ -376,4 +384,4 @@ document.querySelectorAll(".mode-choice").forEach(b=>b.onclick=()=>{localStorage
 $("settingsShelfBtn").onclick=()=>{$("moreToggle").checked=false;$("settingsToggle").checked=true};
 
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");
-updateAuth();loadLists().then(()=>{setPage("home")});
+updateAuth().then(session=>{if(isOwnerSession(session))loadLists().then(()=>{setPage("home")});else setPage("home")});
