@@ -1,0 +1,12 @@
+{
+  "name": "roggy-lists",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=24"},
+  "scripts": {
+    "test": "node --test monitor/test/*.test.mjs",
+    "monitor": "node --env-file=.env monitor/worker.mjs",
+    "monitor:once": "node --env-file=.env monitor/worker.mjs --once",
+    "google:auth": "node --env-file=.env monitor/google-auth.mjs"
+  }
+}
