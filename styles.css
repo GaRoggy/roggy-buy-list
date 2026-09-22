@@ -217,3 +217,45 @@ html[data-ui-size="small"] .home-main,html[data-ui-size="small"] .system-main{pa
 
 /* Important mail dashboard v36 */
 .mail-filter-badge{font-size:9px;font-weight:900;color:var(--accent);background:var(--accent-pale);padding:5px 8px;border-radius:999px}.important-email-list{display:grid}.important-email{display:grid;grid-template-columns:auto 1fr auto;gap:9px;align-items:start;padding:11px 1px;border-top:1px solid color-mix(in srgb,var(--accent) 9%,transparent);text-decoration:none;color:var(--ink)}.important-email:first-child{border-top:0}.important-email div{display:grid;gap:3px;min-width:0}.important-email b{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.important-email small{font-size:10px;line-height:1.35;color:var(--muted)}.important-email time{font-size:9px;color:var(--muted);white-space:nowrap}.email-kind{font-size:8px;font-weight:900;text-transform:uppercase;letter-spacing:.04em;color:var(--accent);background:var(--accent-pale);padding:4px 6px;border-radius:999px}.email-section{overflow:hidden}
+
+
+/* Desktop workspace v37 — intentionally isolated from phone/PWA UI */
+@media (min-width: 900px){
+  body{min-height:100vh;background:radial-gradient(circle at 8% 0%,color-mix(in srgb,var(--accent-soft) 48%,transparent),transparent 30%),radial-gradient(circle at 94% 14%,color-mix(in srgb,var(--accent2) 18%,transparent),transparent 28%),linear-gradient(145deg,#fbfbff 0%,var(--accent-pale) 54%,#fff 100%)}
+  header{max-width:1440px;margin:18px auto 0;padding:18px 24px;border-radius:28px 20px 30px 22px;position:relative}
+  header h1{font-size:30px;line-height:1.05} header p{font-size:12px}
+  .page-tabs{max-width:1440px;margin:10px auto 0;padding:7px 9px;gap:8px;background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.82);border-radius:24px;box-shadow:0 8px 28px rgba(31,41,55,.07);backdrop-filter:blur(18px);position:sticky;top:10px;z-index:20}
+  .page-tab,.more-tab{flex:0 0 auto;min-width:116px;padding:10px 18px;border-radius:18px 13px 20px 14px}
+  .more-tab{margin-left:auto}
+  main,.home-main,.system-main,.driver-main,.reminder-main,.digest-main,.budget-main{max-width:1320px;margin-left:auto;margin-right:auto}
+  .home-main{padding:18px 24px 80px}
+  .command-search{max-width:none}
+  .today-hero{padding:26px 30px;border-radius:32px 22px 35px 24px}
+  .command-grid{grid-template-columns:repeat(4,1fr);gap:14px}
+  .command-card{min-height:112px;padding:20px;border-radius:26px 18px 28px 20px}
+  .home-section{padding:20px 22px;border-radius:26px 18px 29px 20px}
+  .toolbar{max-width:1320px;margin:0 auto;padding-left:24px;padding-right:24px}
+  .summary{max-width:1320px;margin:0 auto;padding-left:24px;padding-right:24px}
+  .list{max-width:1320px;margin:0 auto;padding-left:24px;padding-right:24px}
+  .chart-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .side-drawer{left:auto;right:18px;top:92px;bottom:auto;width:340px;max-height:calc(100vh - 116px);border-radius:30px 20px 32px 22px;transform:translateX(calc(100% + 40px))}
+  .drawer-toggle:checked~.side-drawer{transform:translateX(0)}
+  .settings-shelf{left:auto;right:18px;bottom:18px;width:380px;border-radius:32px 22px 34px 24px}
+  .budget-main{padding:22px 24px 90px}
+  .budget-head{padding:2px 4px 6px}.budget-head h2{font-size:28px}
+  .budget-summary{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+  .budget-summary div{padding:18px 20px;border-radius:22px;box-shadow:0 8px 26px rgba(31,41,55,.06)}
+  .budget-summary b{font-size:26px}
+  .budget-panel{padding:22px;margin-top:16px;border-radius:26px;box-shadow:0 10px 32px rgba(31,41,55,.07)}
+  .budget-flow{display:block!important;width:100%!important;min-height:680px!important;overflow-x:auto!important;overflow-y:visible!important}
+  .sankey-d3{display:block!important;width:100%!important;min-width:1080px!important;min-height:680px!important;height:auto!important;visibility:visible!important;opacity:1!important}
+  .budget-table{width:100%}
+  .table-scroll{overflow-x:auto}
+  dialog{max-width:min(720px,calc(100vw - 80px))}
+}
+
+/* Desktop-only Sankey safety: never let a parent collapse the SVG. */
+@media (min-width: 1100px){
+  #budgetFlow{min-height:700px!important}
+  #budgetFlow > svg{width:100%!important;min-width:1080px!important;height:auto!important;aspect-ratio:auto!important}
+}
