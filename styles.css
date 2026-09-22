@@ -259,3 +259,39 @@ html[data-ui-size="small"] .home-main,html[data-ui-size="small"] .system-main{pa
   #budgetFlow{min-height:700px!important}
   #budgetFlow > svg{width:100%!important;min-width:1080px!important;height:auto!important;aspect-ratio:auto!important}
 }
+
+
+/* Light/dark appearance v38 — color themes remain the accent system in both modes */
+.mode-options{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.mode-choice{border:0;border-radius:20px 13px 21px 14px;padding:11px 8px;background:rgba(255,255,255,.8);color:var(--muted);font-weight:800}
+.mode-choice.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;box-shadow:0 6px 18px var(--accent-shadow)}
+
+html[data-mode="dark"]{
+ color-scheme:dark;
+ --ink:#f4f4f7;--muted:#a7a6b0;--glass:color-mix(in srgb,#15131b 90%,var(--accent) 10%);
+ --surface:#17151d;--surface2:#211d29;--line:rgba(255,255,255,.10);
+ --accent-pale:color-mix(in srgb,var(--accent) 24%,#15131b);
+ --accent-wash:color-mix(in srgb,var(--accent2) 12%,#0d0c11);
+}
+html[data-mode="dark"] body{color:var(--ink);background:radial-gradient(circle at 12% 4%,color-mix(in srgb,var(--accent) 25%,transparent),transparent 31%),radial-gradient(circle at 88% 22%,color-mix(in srgb,var(--accent2) 16%,transparent),transparent 31%),linear-gradient(145deg,#09080d 0%,color-mix(in srgb,#111018 90%,var(--accent) 10%) 50%,#09080d 100%)}
+html[data-mode="dark"] .page-tabs,html[data-mode="dark"] .sub-tabs,html[data-mode="dark"] .digest-status-tabs{background:rgba(18,16,24,.78);border-color:rgba(255,255,255,.08)}
+html[data-mode="dark"] .page-tab,html[data-mode="dark"] .more-tab,html[data-mode="dark"] .sub-tab,html[data-mode="dark"] .driver-tab,html[data-mode="dark"] .reminder-tab,html[data-mode="dark"] .digest-tab,html[data-mode="dark"] .digest-status-tab{color:#b9b6c2}
+html[data-mode="dark"] .card,html[data-mode="dark"] .summary div,html[data-mode="dark"] .driver-summary div,html[data-mode="dark"] .chart-card,html[data-mode="dark"] .analysis-card,html[data-mode="dark"] .reminder-card,html[data-mode="dark"] .digest-card,html[data-mode="dark"] .budget-panel,html[data-mode="dark"] .budget-summary div,html[data-mode="dark"] .budget-lock,html[data-mode="dark"] .system-card,html[data-mode="dark"] .metric-grid>div,html[data-mode="dark"] .project-card{background:var(--surface);color:var(--ink);border-color:var(--line)}
+html[data-mode="dark"] .home-timeline,html[data-mode="dark"] .home-section,html[data-mode="dark"] .command-card,html[data-mode="dark"] .command-search{background:color-mix(in srgb,var(--surface) 90%,var(--accent) 10%);border-color:var(--line);color:var(--ink)}
+html[data-mode="dark"] input,html[data-mode="dark"] select,html[data-mode="dark"] textarea{background:#15131b;color:var(--ink);border-color:rgba(255,255,255,.12)}
+html[data-mode="dark"] option{background:#15131b;color:var(--ink)}
+html[data-mode="dark"] .secondary,html[data-mode="dark"] .filter,html[data-mode="dark"] .budget-mode button,html[data-mode="dark"] .size-choice,html[data-mode="dark"] .mode-choice{background:#25212d;color:#d7d4de}
+html[data-mode="dark"] .side-drawer,html[data-mode="dark"] .settings-shelf,html[data-mode="dark"] dialog{background:linear-gradient(155deg,#17151d,color-mix(in srgb,#17151d 86%,var(--accent) 14%));color:var(--ink);border-color:var(--line)}
+html[data-mode="dark"] .drawer-page-tab,html[data-mode="dark"] .settings-open{background:rgba(255,255,255,.045);color:#d1cbd9}
+html[data-mode="dark"] .research-option,html[data-mode="dark"] .budget-empty,html[data-mode="dark"] .digest-review,html[data-mode="dark"] .rt-row,html[data-mode="dark"] .search-results button{background:#201d27;color:var(--ink)}
+html[data-mode="dark"] .budget-table th,html[data-mode="dark"] .budget-table td{border-color:rgba(255,255,255,.09);color:var(--ink)}
+html[data-mode="dark"] .sankey-d3 .sk-item{fill:#211e28;stroke:#413a4b}
+html[data-mode="dark"] .sankey-d3 .sk-item-label,html[data-mode="dark"] .sankey-d3 .sk-mid-label{fill:#f4f4f7}
+html[data-mode="dark"] .sankey-d3 .sk-item-value,html[data-mode="dark"] .sankey-d3 .sk-mid-value{fill:#bbb6c4}
+html[data-mode="dark"] .sankey-d3 .sk-source-sub{fill:#d2ced8}
+html[data-mode="dark"] .plain-link{color:#c7c2ce}
+html[data-mode="dark"] .drawer-backdrop,html[data-mode="dark"] .settings-backdrop{background:rgba(0,0,0,.58)}
+@media (min-width:900px){
+ html[data-mode="dark"] body{background:radial-gradient(circle at 8% 0%,color-mix(in srgb,var(--accent) 24%,transparent),transparent 30%),radial-gradient(circle at 94% 14%,color-mix(in srgb,var(--accent2) 14%,transparent),transparent 28%),linear-gradient(145deg,#08070c 0%,color-mix(in srgb,#121019 90%,var(--accent) 10%) 54%,#08070c 100%)}
+ html[data-mode="dark"] .page-tabs{background:rgba(17,15,23,.80);border-color:rgba(255,255,255,.08);box-shadow:0 8px 30px rgba(0,0,0,.28)}
+}
