@@ -16,7 +16,7 @@
 - Disposable PostgreSQL/PGlite tests applying the real migrations: queue/record/reminder deduplication, transaction rollback, lease recovery/fencing, owner isolation, anonymous denial, DST, completion preservation and cancellations including legacy reminders.
 - Headless Edge/Playwright fixture checks: rendering, HTML escaping, empty-reminder request loop prevention, sign-out state clearing, no page exceptions.
 - PowerShell installer syntax check and JavaScript syntax checks.
-- Live database privilege/count checks: 19 reminders, all owned, zero imported monitor records, anonymous SELECT denied, worker RPC execution denied to browser roles.
+- Initial live database checks: all 19 existing reminders preserved and owned, zero imported monitor records, anonymous SELECT denied, worker RPC execution denied to browser roles. A later check after unrelated ongoing app work found 28 reminders, all owned, and still zero imported monitor records.
 - Live Supabase security advisor: existing leaked-password-protection Auth warning only; remediation linked in README.
 
 ## Not yet activated or verified
@@ -33,3 +33,5 @@
 Semantic email extraction remains conservative (ambiguous dates/currencies/actions stay unknown). Garmin activities, sleep stages and provider mappings need approved schemas. Statistical unusual-spending detection, confirmed bills/subscriptions, savings trends and richer cross-source contexts remain future work. Current finance heuristics report candidates, not facts. Health correlations are descriptive only and do not establish statistical significance. Automated retention and push notifications are not implemented. Additional scheduled job types require new handlers.
 
 See README for exact authentication, source setup, start/stop, recovery and extension instructions. These limits mean the complete always-on monitoring goal is **not yet achieved**.
+
+The final branch was reconciled with main at 7516751422636b772e06d87f4f0bde6c391cf9ca, preserving the newer owner-only privacy gate, desktop styles and light/dark appearance controls. The fixture browser check passed again against that combined version.
