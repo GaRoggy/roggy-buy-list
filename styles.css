@@ -307,3 +307,7 @@ html[data-mode="dark"] .drawer-backdrop,html[data-mode="dark"] .settings-backdro
 .privacy-gate-card small{display:block;min-height:1.4em;margin-top:14px;color:var(--muted,#666)}
 html.privacy-locked body> :not(#privacyGate){visibility:hidden!important;pointer-events:none!important}
 html.privacy-locked #privacyGate{visibility:visible!important;pointer-events:auto!important}
+.monitor-section{margin-top:24px}
+.monitor-source{display:grid;grid-template-columns:1fr auto;gap:6px;padding:12px 0;border-bottom:1px solid rgba(128,128,128,.2)}
+.monitor-source small{grid-column:1/-1;opacity:.75}
+.monitor-alert{padding:12px 0;border-bottom:1px solid rgba(128,128,128,.2)}

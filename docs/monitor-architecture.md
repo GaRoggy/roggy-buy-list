@@ -19,7 +19,7 @@ Source state and job queue are durable in Supabase. Unique active source jobs pr
 ## Ordered delivery
 
 1. Infrastructure: additive owner-protected tables; atomic jobs, leases, retries, structured logs, configuration and tests.
-2. Calendar: OAuth read-only, paginated per-calendar synchronization, deletions and 410 reset, recurrence instances and all-day dates; stable reminder mapping after privacy migration.
+2. Calendar: OAuth read-only, complete paginated per-calendar rolling-window snapshots, safe disappearance reconciliation, recurrence instances and all-day dates; stable reminder mapping after privacy migration. Chosen over sync tokens so the moving recurrence window is reconciled correctly.
 3. Gmail: read-only OAuth, history cursors and recovery, deterministic multi-category classification and conservative extraction. Promotions stay off the dashboard.
 4. Garmin: official Health/Activity access gate, timestamped metric model, null for unavailable metrics. No credential scraping or fabricated live data.
 5. Finance: authorized Plaid Transactions sync (pending/posted changes and removals), balance snapshots, transfer exclusion and currency-separated analysis. No payment APIs.

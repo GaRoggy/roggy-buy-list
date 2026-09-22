@@ -13,7 +13,7 @@ async function authorize() {
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, redirect);
     const actual = url.searchParams.get('state') || '';
-    if (url.pathname !== '/' || actual.length !== state.length || !timingSafeEqual(Buffer.from(actual), Buffer.from(state))) {
+    if (req.method !== 'GET' || url.pathname !== '/' || !/^[a-f0-9]{64}$/.test(actual) || !timingSafeEqual(Buffer.from(actual), Buffer.from(state))) {
       res.writeHead(400); res.end('Invalid authorization response.'); return;
     }
     if (busy) { res.writeHead(409); res.end(); return; } busy = true;
