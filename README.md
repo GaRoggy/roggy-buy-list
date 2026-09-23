@@ -1,5 +1,9 @@
 # Roggy Lists personal monitor
 
+## Private local AI
+
+The existing PWA now includes **More → Local AI**. It talks to Ollama through a Windows-only bridge that validates the signed-in owner with Supabase, calls Ollama only on `127.0.0.1:11434`, and exposes the bridge privately through Tailscale Serve. It does not add a public endpoint, store conversation history in Supabase, or place privileged keys in browser code. Complete the PC and iPhone setup in [docs/ollama-setup.md](docs/ollama-setup.md).
+
 The existing static PWA remains the frontend. A separate Node 24 Windows process reads authorized providers and writes owner-protected Supabase records. Architecture and the inspected baseline are in [docs/monitor-architecture.md](docs/monitor-architecture.md).
 
 ## Delivery status
@@ -79,7 +83,7 @@ JSON lines appear in the console and `logs/monitor-YYYY-MM-DD.jsonl`. Delete old
 
 Transient network/API errors retry up to five attempts with exponential backoff, jitter and Retry-After where available. Exhausted jobs are retained; the source can be scheduled again after an hour. Authentication/config errors disable that source until corrected and re-enabled with setup. A process crash leaves a lease that expires after two minutes; the new worker resumes it. A stale worker cannot commit records or advance cursors. Database loss pauses progress and preserves upstream cursors. No source failure crashes another source's collector.
 
-Tests: `node --test monitor/test/*.test.mjs`. Database integration tests run on disposable PGlite 0.5.8: `node monitor/test/database.mjs C:\path\to\pglite\dist\index.js`. The suite creates mock auth roles and the existing table shapes, then applies real migrations and tests SQL invariants. Synthetic fixture data is confined to the disposable test database. This is not a substitute for live OAuth, API permission, reboot and authenticated browser verification.
+Tests: `node --test monitor/test/*.test.mjs ai/test/*.test.mjs` (or `npm test`). The AI suite uses synthetic Supabase/Ollama responses and tests owner authorization, request limits, private model discovery, streaming, cancellation, timeouts, redacted logs and offline errors. Database integration tests run on disposable PGlite 0.5.8: `node monitor/test/database.mjs C:\path\to\pglite\dist\index.js`. The suite creates mock auth roles and the existing table shapes, then applies real migrations and tests SQL invariants. Synthetic fixture data is confined to the disposable test database. This is not a substitute for live OAuth, API permission, reboot and authenticated browser verification.
 
 Browser smoke test (Playwright with installed Microsoft Edge): `node monitor/test/browser.mjs C:\path\to\playwright\index.mjs`. Optional third argument saves a screenshot. This test uses an isolated browser and synthetic API fixtures, not your live account.
 

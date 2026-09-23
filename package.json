@@ -4,7 +4,11 @@
   "type": "module",
   "engines": {"node": ">=24"},
   "scripts": {
-    "test": "node --test monitor/test/*.test.mjs",
+    "test": "node --test monitor/test/*.test.mjs ai/test/*.test.mjs",
+    "build": "node scripts/build.mjs",
+    "ollama-bridge": "node --env-file=.env ai/bridge/server.mjs",
+    "ai:configure": "node --env-file=.env scripts/configure-ai.mjs",
+    "test:ai": "node --test ai/test/*.test.mjs",
     "monitor": "node --env-file=.env monitor/worker.mjs",
     "monitor:once": "node --env-file=.env monitor/worker.mjs --once",
     "google:auth": "node --env-file=.env monitor/google-auth.mjs"
