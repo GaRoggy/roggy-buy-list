@@ -1,5 +1,5 @@
 const CACHE='roggy-lists-v42';
-const ASSETS=['./','index.html','styles.css?v=41','app.js?v=41','monitor-ui.js?v=41','manifest.json','icon.svg','ai-config.js?v=41','ai-ui.js?v=41','ai/browser/provider.js','ai/shared/protocol.js'];
+const ASSETS=['./','index.html','styles.css?v=41','app.js?v=41','monitor-ui.js?v=41','manifest.json','icon.svg','ai-config.js?v=42','ai-ui.js?v=41','ai/browser/provider.js','ai/shared/protocol.js'];
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)))});
 self.addEventListener('activate',e=>e.waitUntil(Promise.all([
   caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('roggy-lists-')&&k!==CACHE).map(k=>caches.delete(k)))),
