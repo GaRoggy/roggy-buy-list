@@ -105,7 +105,7 @@ The first Safari request may ask to allow access to devices on the local network
 - `The bridge is reachable, but Ollama is offline`: start Ollama and verify `http://127.0.0.1:11434/api/tags` locally on the PC.
 - `This account is not authorized`: the signed-in Supabase user ID does not equal `OLLAMA_ALLOWED_USER_ID`; update the local configuration only if the account is intentionally changed.
 - `No local models`: install a model with Ollama, then refresh. Cloud aliases and remote models are intentionally excluded.
-- If the website was recently deployed, refresh the service worker once. The cache is versioned `v41`.
+- If the website was recently deployed, refresh the service worker once. The cache is versioned `v42`.
 
 ## Validation commands
 
