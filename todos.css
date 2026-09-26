@@ -12,3 +12,10 @@ html[data-mode="dark"] .todo-priority.high{background:rgba(239,68,68,.24);color:
 html[data-mode="dark"] .home-high-todo{background:var(--surface2);border-color:var(--line)}
 
 .todo-priority-control{display:flex;align-items:center;gap:5px;flex:0 0 auto}.todo-priority-btn{width:30px;height:30px;padding:0;border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);border-radius:9px;background:color-mix(in srgb,var(--accent) 8%,var(--glass));color:var(--ink);font-weight:900;line-height:1}html[data-mode="dark"] .todo-priority-btn{background:var(--surface2);border-color:var(--line)}
+
+/* Make task priority controls unmistakable v57 */
+.todo-title-row{align-items:flex-start;gap:10px}
+.todo-priority-control{display:grid!important;grid-template-columns:38px auto 38px;align-items:center;gap:6px;min-width:max-content}
+.todo-priority-btn{display:grid!important;place-items:center;width:38px!important;height:38px!important;min-width:38px!important;padding:0!important;border:1.5px solid color-mix(in srgb,var(--accent) 42%,transparent)!important;border-radius:11px!important;background:color-mix(in srgb,var(--accent) 18%,var(--surface2))!important;color:var(--ink)!important;font-size:20px!important;font-weight:900!important;opacity:1!important;visibility:visible!important}
+.todo-priority{white-space:nowrap}
+@media(max-width:500px){.todo-title-row{display:grid!important;grid-template-columns:1fr}.todo-priority-control{justify-self:start;margin-top:5px}}
