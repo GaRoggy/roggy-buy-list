@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#6d28d9">
 <title>Roggy Lists</title>
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="styles.css?v=66">
+<link rel="stylesheet" href="styles.css?v=67">
 <link rel="stylesheet" href="todos.css?v=61">
 <link rel="apple-touch-icon" href="icon.svg">
 </head>
@@ -87,15 +87,15 @@
   <main class="home-main">
     <button id="globalSearchBtn" class="command-search">⌕ <span>Search everything…</span><kbd>Search</kbd></button>
     <section class="today-hero compact-command"><div><span class="eyebrow">COMMAND CENTER</span><p id="homeDate"></p></div></section>
-    <section id="homeTimeline" class="home-timeline"></section>
     <section class="home-focus-strip"><button type="button" data-focus-jump="todos"><span>Tasks</span><b id="focusTaskCount">—</b><small>open</small></button><button type="button" data-focus-jump="reminders"><span>Today</span><b id="focusTodayCount">—</b><small>events</small></button><button type="button" data-focus-jump="projects"><span>Projects</span><b id="focusProjectCount">—</b><small>active</small></button></section>
+    <section id="homeHighTodos" class="home-section high-todos-section" hidden><div class="section-head"><div><span class="eyebrow">HIGH PRIORITY</span><h3>Tasks</h3></div><button id="homeHighTodosAll" class="text-action" type="button">See all</button></div><div id="homeHighTodoList" class="home-high-todo-list"></div></section>
+    <section id="homeTimeline" class="home-timeline"></section>
     <section class="command-grid">
       <button class="command-card" data-jump="projects"><span>◈</span><div><b>Projects</b><small>Ideas → active work</small></div></button>
       <button class="command-card command-card-disabled" type="button" disabled><span>♥</span><div><b>Health</b><small>Under construction</small></div></button>
       <button class="command-card command-card-disabled" type="button" disabled><span>◆</span><div><b>Vehicle</b><small>Under construction</small></div></button>
       <button class="command-card" data-jump="digestibles"><span>◉</span><div><b>Digestibles</b><small>Books · movies · anime</small></div></button>
     </section>
-    <section id="homeHighTodos" class="home-section high-todos-section" hidden><div class="section-head"><div><span class="eyebrow">HIGH PRIORITY</span><h3>Tasks</h3></div><button id="homeHighTodosAll" class="text-action" type="button">See all</button></div><div id="homeHighTodoList" class="home-high-todo-list"></div></section>
     <section class="home-section email-section"><div class="section-head"><div><span class="eyebrow">EMAIL</span><h3>Potentially Important</h3></div><span class="mail-filter-badge">No ads</span></div><div id="importantEmailList" class="important-email-list"></div></section>
   </main>
 </section>
