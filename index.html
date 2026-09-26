@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#6d28d9">
 <title>Roggy Lists</title>
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="styles.css?v=45">
+<link rel="stylesheet" href="styles.css?v=46">
 <link rel="stylesheet" href="todos.css?v=44">
 <link rel="apple-touch-icon" href="icon.svg">
 </head>
@@ -31,11 +31,14 @@
   <button class="page-tab drawer-page-tab" data-page="ai">Local AI</button>
   <button class="page-tab drawer-page-tab" data-page="groceries" onclick="document.getElementById('moreToggle').checked=false">Groceries</button>
   <button class="page-tab drawer-page-tab" data-page="projects" onclick="document.getElementById('moreToggle').checked=false">Projects</button>
-  <button class="page-tab drawer-page-tab" data-page="health" onclick="document.getElementById('moreToggle').checked=false">Health</button>
-  <button class="page-tab drawer-page-tab" data-page="vehicle" onclick="document.getElementById('moreToggle').checked=false">Vehicle</button>
   <button class="page-tab drawer-page-tab" data-page="drivers" onclick="document.getElementById('moreToggle').checked=false">Bad Drivers</button>
   <button class="page-tab drawer-page-tab" data-page="budget" onclick="document.getElementById('moreToggle').checked=false">Budget 🔒</button>
   <button class="page-tab drawer-page-tab" data-page="digestibles" onclick="document.getElementById('moreToggle').checked=false">Digestibles</button>
+  <div class="under-construction-group">
+    <div class="under-construction-title">Under Construction</div>
+    <button class="drawer-page-tab under-construction-item" type="button" disabled>Health <span>Garmin</span></button>
+    <button class="drawer-page-tab under-construction-item" type="button" disabled>Vehicle <span>Coming soon</span></button>
+  </div>
   <div class="drawer-divider"></div>
   <button id="settingsShelfBtn" class="drawer-page-tab settings-open" type="button">Settings <span>⚙</span></button>
 </aside>
