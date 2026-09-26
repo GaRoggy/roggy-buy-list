@@ -589,3 +589,5 @@ input:focus,select:focus,textarea:focus{border-color:color-mix(in srgb,var(--acc
 @media(max-width:500px){.digest-main,.budget-main,.driver-main,.reminder-main{padding-left:10px;padding-right:10px}.page-tabs,.sub-tabs{gap:6px}}
 
 *{scrollbar-color:color-mix(in srgb,var(--accent2) 58%,transparent) transparent}
+
+.empty,.budget-empty,.research-empty{border:1px dashed color-mix(in srgb,var(--accent2) 34%,transparent);background:color-mix(in srgb,var(--accent) 7%,var(--glass));color:#d7cbea}
