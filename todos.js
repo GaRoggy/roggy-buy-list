@@ -3,7 +3,7 @@ let todos=[],todoFilter="open";
 async function loadTodos(){
   const {data,error}=await sb.from("todos").select("*").order("status",{ascending:true}).order("priority",{ascending:true}).order("created_at",{ascending:false});
   if(error){$("todoStatus").textContent="Sync error: "+error.message;todos=[];renderTodos();return}
-  todos=data||[];$("todoStatus").textContent="";renderTodos();
+  todos=data||[];$("todoStatus").textContent="";renderTodos();renderHomeHighTodos();
 }
 function todoPriorityRank(p){return p==="high"?0:p==="medium"?1:2}
 function todoDueLabel(x){
@@ -28,7 +28,10 @@ function renderTodos(){
   }).join(""):'<div class="system-card empty-project"><b>Nothing here.</b><p>Either you are terrifyingly efficient or this filter is empty.</p></div>';
   document.querySelectorAll("[data-todo-toggle]").forEach(b=>b.onclick=()=>toggleTodo(b.dataset.todoToggle));
   document.querySelectorAll("[data-todo-delete]").forEach(b=>b.onclick=()=>deleteTodo(b.dataset.todoDelete));
+  renderHomeHighTodos();
 }
+function renderHomeHighTodos(){const section=$("homeHighTodos"),list=$("homeHighTodoList");if(!section||!list)return;const rows=todos.filter(x=>x.status==="open"&&x.priority==="high").sort((a,b)=>String(a.due_date||"9999").localeCompare(String(b.due_date||"9999"))||String(a.created_at||"").localeCompare(String(b.created_at||"")));section.hidden=!rows.length;if(!rows.length){list.innerHTML="";return}list.innerHTML=rows.map(x=>'<button class="home-high-todo" data-home-todo="todos"><span class="high-todo-dot"></span><div><b>'+esc(x.title)+'</b><small>'+esc(x.category||"To Do")+(x.due_date?" · "+todoDueLabel(x).replace(/<[^>]+>/g,""):"")+'</small></div><span>→</span></button>').join("");document.querySelectorAll("[data-home-todo]").forEach(b=>b.onclick=()=>setPage("todos"));}
+if($("homeHighTodosAll"))$("homeHighTodosAll").onclick=()=>setPage("todos");
 async function toggleTodo(id){
   const x=todos.find(t=>t.id===id);if(!x)return;
   const done=x.status!=="done",patch={status:done?"done":"open",completed_at:done?new Date().toISOString():null,updated_at:new Date().toISOString()};
