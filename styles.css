@@ -347,3 +347,10 @@ html.privacy-locked #privacyGate{visibility:visible!important;pointer-events:aut
  .drawer-toggle:checked~.side-drawer{transform:translateX(0)}
  .page-tabs{grid-template-columns:repeat(4,minmax(116px,1fr))}
 }
+
+/* Under construction drawer group v46 */
+.under-construction-group{margin-top:18px;padding:12px;border:1px solid color-mix(in srgb,var(--accent) 18%,transparent);border-radius:22px 14px 24px 16px;background:color-mix(in srgb,var(--accent) 7%,var(--glass));display:grid;gap:8px}
+.under-construction-title{padding:1px 5px 4px;font-size:10px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.under-construction-item{width:100%;opacity:.55;cursor:not-allowed!important;filter:saturate(.65);display:flex;align-items:center;justify-content:space-between;gap:8px}
+.under-construction-item span{font-size:9px;font-weight:800;color:var(--muted);text-transform:uppercase}
+html[data-mode="dark"] .under-construction-group{background:color-mix(in srgb,var(--accent) 10%,#15131b);border-color:color-mix(in srgb,var(--accent) 22%,transparent)}
