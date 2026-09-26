@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#6d28d9">
 <title>Roggy Lists</title>
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="styles.css?v=50">
+<link rel="stylesheet" href="styles.css?v=51">
 <link rel="stylesheet" href="todos.css?v=44">
 <link rel="apple-touch-icon" href="icon.svg">
 </head>
@@ -86,7 +86,7 @@
 <section id="homePage">
   <main class="home-main">
     <button id="globalSearchBtn" class="command-search">⌕ <span>Search everything…</span><kbd>Search</kbd></button>
-    <section class="today-hero"><div><span class="eyebrow">COMMAND CENTER</span><h2 id="homeGreeting">Today</h2><p id="homeDate"></p></div></section>
+    <section class="today-hero compact-command"><div><span class="eyebrow">COMMAND CENTER</span><p id="homeDate"></p></div></section>
     <section id="homeTimeline" class="home-timeline"></section>
     <section class="command-grid">
       <button class="command-card" data-jump="projects"><span>◈</span><div><b>Projects</b><small>Ideas → active work</small></div></button>
@@ -129,7 +129,7 @@
       <div class="searchrow"><input id="search" placeholder="Search items..." autocomplete="off"><select id="sort"><option value="priority">Priority</option><option value="name">A–Z</option></select></div>
     </section>
     <section id="status" class="status"></section>
-    <div id="restoreHeading" class="restore-heading">Restore</div><section id="list" class="list"></section>
+    <div id="restoreHeading" class="restore-heading"><span></span><span>Restore</span></div><section id="list" class="list"></section>
   </main>
 </section>
 
@@ -307,7 +307,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
-<script src="app.js?v=50"></script>
+<script src="app.js?v=51"></script>
 <script src="monitor-ui.js?v=43"></script>
 <script src="todos.js?v=43"></script>
 <script src="ai-config.js?v=42"></script>
