@@ -7,7 +7,7 @@
 <title>Roggy Lists</title>
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="styles.css?v=53">
-<link rel="stylesheet" href="todos.css?v=54">
+<link rel="stylesheet" href="todos.css?v=55">
 <link rel="apple-touch-icon" href="icon.svg">
 </head>
 <body>
@@ -20,7 +20,7 @@
 <nav class="page-tabs">
   <button class="page-tab active" data-page="home">Home</button>
   <button class="page-tab" data-page="reminders">Reminders</button>
-  <button class="page-tab" data-page="todos">To Dos</button>
+  <button class="page-tab" data-page="todos">Tasks</button>
   <button class="page-tab" data-page="buy">Buy</button>
 </nav>
 
@@ -94,7 +94,7 @@
       <button class="command-card" data-jump="vehicle"><span>◆</span><div><b>Vehicle</b><small>RAV4 maintenance</small></div></button>
       <button class="command-card" data-jump="digestibles"><span>◉</span><div><b>Digestibles</b><small>Books · movies · anime</small></div></button>
     </section>
-    <section id="homeHighTodos" class="home-section high-todos-section" hidden><div class="section-head"><div><span class="eyebrow">HIGH PRIORITY</span><h3>To Dos</h3></div><button id="homeHighTodosAll" class="text-action" type="button">See all</button></div><div id="homeHighTodoList" class="home-high-todo-list"></div></section>
+    <section id="homeHighTodos" class="home-section high-todos-section" hidden><div class="section-head"><div><span class="eyebrow">HIGH PRIORITY</span><h3>Tasks</h3></div><button id="homeHighTodosAll" class="text-action" type="button">See all</button></div><div id="homeHighTodoList" class="home-high-todo-list"></div></section>
     <section class="home-section email-section"><div class="section-head"><div><span class="eyebrow">EMAIL</span><h3>Potentially Important</h3></div><span class="mail-filter-badge">No ads</span></div><div id="importantEmailList" class="important-email-list"></div></section>
   </main>
 </section>
@@ -190,10 +190,10 @@
 <section id="todosPage" hidden>
   <main class="todo-main">
     <section class="todo-hero">
-      <div><span class="eyebrow">TO DOS</span><h2>Get it out of your head.</h2><p>Quick tasks, follow-ups, errands, and anything that needs a finish line.</p></div>
+      <div><span class="eyebrow">TASKS</span><h2>Get it out of your head.</h2><p>Quick tasks, follow-ups, errands, and anything that needs a finish line.</p></div>
       <button id="newTodoBtn" class="wide-action todo-add-top">＋ Add To Do</button>
     </section>
-    <nav class="todo-filters" aria-label="To do filters">
+    <nav class="todo-filters" aria-label="Task filters">
       <button class="todo-filter active" data-todo-filter="open">Open</button>
       <button class="todo-filter" data-todo-filter="high">High priority</button>
       <button class="todo-filter" data-todo-filter="done">Done</button>
@@ -310,7 +310,7 @@
 <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
 <script src="app.js?v=51"></script>
 <script src="monitor-ui.js?v=52"></script>
-<script src="todos.js?v=54"></script>
+<script src="todos.js?v=55"></script>
 <script src="ai-config.js?v=42"></script>
 <script type="module" src="ai-ui.js?v=41"></script>
 </body></html>
