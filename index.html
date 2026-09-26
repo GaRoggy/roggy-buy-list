@@ -6,13 +6,14 @@
 <meta name="theme-color" content="#6d28d9">
 <title>Roggy Lists</title>
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="styles.css?v=43">
+<link rel="stylesheet" href="styles.css?v=45">
 <link rel="stylesheet" href="todos.css?v=44">
 <link rel="apple-touch-icon" href="icon.svg">
 </head>
 <body>
 <header>
-  <div><h1 id="pageTitle">Buy List</h1><p id="pageSubtitle">Needs first. Luxuries later.</p></div>
+  <label class="header-menu" for="moreToggle" aria-label="Open menu">☰</label>
+  <div class="header-title"><h1 id="pageTitle">Buy List</h1><p id="pageSubtitle">Needs first. Luxuries later.</p></div>
   <div class="header-actions"><button id="authBtn" class="auth-btn">Sign in</button><button id="backupBtn" class="icon-btn" aria-label="Backup">⇩</button></div>
 </header>
 
@@ -21,7 +22,6 @@
   <button class="page-tab" data-page="reminders">Reminders</button>
   <button class="page-tab" data-page="todos">To Dos</button>
   <button class="page-tab" data-page="buy">Buy</button>
-  <label class="more-tab" for="moreToggle">More <span>☰</span></label>
 </nav>
 
 <input id="moreToggle" class="drawer-toggle" type="checkbox" hidden>
