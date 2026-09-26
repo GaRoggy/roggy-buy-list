@@ -352,10 +352,17 @@ sb.auth.onAuthStateChange((event,session)=>{if(session&&!isOwnerSession(session)
 function renderHome(){
  $("homeDate").textContent=new Date().toLocaleDateString([],{weekday:"long",month:"long",day:"numeric"});
  const now=new Date(),tomorrow=new Date(now);tomorrow.setHours(24,0,0,0);
- const todays=(reminders||[]).filter(x=>{const d=reminderStart(x),finish=reminderEnd(x);return d<tomorrow&&(finish>localDay(now)||d>=localDay(now))}).slice(0,4);
+ const allTodays=(reminders||[]).filter(x=>{const d=reminderStart(x),finish=reminderEnd(x);return d<tomorrow&&(finish>localDay(now)||d>=localDay(now))});
+ const todays=allTodays.slice(0,4);
+ const taskCount=(typeof todos!=="undefined"?todos:[]).filter(x=>x.status==="open").length;
+ ensureBuiltinProjects();const projectCount=projects.filter(x=>!["Done","Completed"].includes(x.status)).length;
+ if($("focusTaskCount"))$("focusTaskCount").textContent=String(taskCount);
+ if($("focusTodayCount"))$("focusTodayCount").textContent=String(allTodays.length);
+ if($("focusProjectCount"))$("focusProjectCount").textContent=String(projectCount);
  $("homeTimeline").innerHTML='<div class="section-head"><div><span class="eyebrow">TODAY</span><h3>Next up</h3></div><button class="text-action" data-home-jump="reminders">See all</button></div>'+(todays.length?todays.map(x=>'<button class="timeline-row" data-home-jump="reminders"><span>'+esc(x.all_day?"All day":new Date(x.start_at).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}))+'</span><b>'+esc(x.title)+'</b></button>').join(""):'<div class="quiet-state">Nothing demanding your attention right now.</div>');
  renderImportantEmails();
  document.querySelectorAll("[data-home-jump]").forEach(b=>b.onclick=()=>setPage(b.dataset.homeJump));
+ document.querySelectorAll("[data-focus-jump]").forEach(b=>b.onclick=()=>setPage(b.dataset.focusJump));
  if(!remindersLoaded){remindersLoaded=true;loadReminders().then(()=>{if(currentPage==="home")renderHome()}).catch(()=>{})}
 }
 function renderImportantEmails(){
