@@ -4,3 +4,9 @@ html[data-mode="dark"] .todo-card{background:var(--surface);color:var(--ink);bor
 html[data-mode="dark"] .todo-filter:not(.active){background:var(--surface2);color:var(--ink)}
 html[data-mode="dark"] .todo-meta>span,html[data-mode="dark"] .todo-email,html[data-mode="dark"] .todo-priority{color:var(--ink);background:color-mix(in srgb,var(--accent) 22%,var(--surface2))}
 html[data-mode="dark"] .todo-priority.high{background:rgba(239,68,68,.24);color:#fecaca}
+
+.high-todos-section{border-color:color-mix(in srgb,#ef4444 26%,var(--line,transparent))}
+.home-high-todo-list{display:grid;gap:7px}
+.home-high-todo{width:100%;display:grid;grid-template-columns:10px 1fr auto;align-items:center;gap:11px;text-align:left;border:1px solid color-mix(in srgb,var(--accent) 12%,transparent);border-radius:16px;padding:11px 12px;background:color-mix(in srgb,var(--accent) 5%,var(--glass));color:var(--ink);font:inherit}
+.home-high-todo b{display:block;font-size:13px}.home-high-todo small{display:block;margin-top:3px;color:var(--muted);font-size:10px}.home-high-todo>span:last-child{color:var(--accent);font-weight:900}.high-todo-dot{width:8px;height:8px;border-radius:50%;background:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.13)}
+html[data-mode="dark"] .home-high-todo{background:var(--surface2);border-color:var(--line)}
