@@ -583,3 +583,5 @@ input:focus,select:focus,textarea:focus{border-color:color-mix(in srgb,var(--acc
 /* UI polish v71c */
 .chevron{transition:transform .18s ease,color .18s ease}
 .expanded .chevron{transform:rotate(180deg) scale(1.08)}
+
+.meta,.digest-card div span,.reminder-body span,.project-detail-hero p,.project-device p{color:#c7bdd8}
