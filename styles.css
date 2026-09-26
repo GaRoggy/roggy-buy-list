@@ -492,3 +492,70 @@ html[data-mode="dark"] .home-focus-strip button{background:color-mix(in srgb,var
   .home-primary-grid .timeline-row span{font-size:9px}
   .home-primary-grid .timeline-row b{font-size:12px;line-height:1.3}
 }
+
+
+/* Spectrum tabs + layered liquid background v70 */
+body{
+  position:relative;
+  isolation:isolate;
+  background:
+    radial-gradient(ellipse at 8% 8%,color-mix(in srgb,var(--accent2) 30%,transparent) 0%,transparent 34%),
+    radial-gradient(ellipse at 92% 18%,color-mix(in srgb,var(--accent) 24%,transparent) 0%,transparent 32%),
+    linear-gradient(145deg,#120b25 0%,#1a1031 46%,#10091f 100%)!important;
+  background-attachment:fixed!important;
+}
+body::before,body::after{
+  content:"";
+  position:fixed;
+  left:-12vw;
+  width:124vw;
+  pointer-events:none;
+  z-index:-1;
+  filter:blur(.2px);
+}
+body::before{
+  bottom:-9vh;
+  height:46vh;
+  border-radius:48% 52% 0 0 / 38% 44% 0 0;
+  transform:rotate(-4deg);
+  background:
+    radial-gradient(ellipse at 58% 18%,color-mix(in srgb,var(--accent2) 42%,transparent),transparent 48%),
+    linear-gradient(120deg,color-mix(in srgb,var(--accent) 48%,#20103f),color-mix(in srgb,var(--accent2) 24%,#251044) 62%,#25113f);
+  opacity:.72;
+}
+body::after{
+  bottom:-21vh;
+  height:45vh;
+  border-radius:58% 42% 0 0 / 45% 38% 0 0;
+  transform:rotate(5deg);
+  background:linear-gradient(115deg,#1a0b39 4%,color-mix(in srgb,var(--accent) 38%,#160b35) 52%,#0e0920 100%);
+  opacity:.94;
+}
+
+/* Every tab gets a purple-spectrum surface instead of flat gray. */
+.page-tab,.sub-tab,.driver-tab,.reminder-tab,.digest-tab,.digest-status-tab,.more-tab,.drawer-page-tab{
+  color:#ddd6fe!important;
+  border:1px solid color-mix(in srgb,var(--accent2) 28%,transparent)!important;
+  background:
+    linear-gradient(120deg,
+      color-mix(in srgb,#24164a 88%,var(--accent) 12%) 0%,
+      color-mix(in srgb,#2e1b59 78%,var(--accent2) 22%) 48%,
+      color-mix(in srgb,#251541 88%,var(--accent) 12%) 100%)!important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.07),
+    0 7px 20px rgba(9,4,24,.18);
+}
+.page-tab.active,.sub-tab.active,.driver-tab.active,.reminder-tab.active,.digest-tab.active,.digest-status-tab.active,.drawer-page-tab.active{
+  color:#fff!important;
+  border-color:color-mix(in srgb,var(--accent2) 72%,#fff 28%)!important;
+  background:
+    linear-gradient(110deg,
+      color-mix(in srgb,var(--accent) 90%,#4c1d95) 0%,
+      var(--accent2) 48%,
+      color-mix(in srgb,#c026d3 66%,var(--accent2) 34%) 100%)!important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.16),
+    inset 0 8px 18px rgba(255,255,255,.06),
+    0 0 0 1px color-mix(in srgb,var(--accent2) 28%,transparent),
+    0 8px 24px color-mix(in srgb,var(--accent) 28%,transparent)!important;
+}
