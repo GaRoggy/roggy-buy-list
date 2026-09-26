@@ -7,7 +7,7 @@
 <title>Roggy Lists</title>
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="styles.css?v=53">
-<link rel="stylesheet" href="todos.css?v=57">
+<link rel="stylesheet" href="todos.css?v=58">
 <link rel="apple-touch-icon" href="icon.svg">
 </head>
 <body>
@@ -191,7 +191,7 @@
   <main class="todo-main">
     <section class="todo-hero">
       <div><span class="eyebrow">TASKS</span><h2>Get it out of your head.</h2><p>Quick tasks, follow-ups, errands, and anything that needs a finish line.</p></div>
-      <button id="newTodoBtn" class="wide-action todo-add-top">＋ Add To Do</button>
+      <button id="newTodoBtn" class="wide-action todo-add-top">＋ Add Task</button>
     </section>
     <nav class="todo-filters" aria-label="Task filters">
       <button class="todo-filter active" data-todo-filter="open">Open</button>
@@ -205,7 +205,7 @@
 </section>
 
 <dialog id="todoDialog"><form method="dialog" id="todoForm">
-  <div class="dialog-head"><h2>Add To Do</h2><button value="cancel" class="plain">✕</button></div>
+  <div class="dialog-head"><h2>Add Task</h2><button value="cancel" class="plain">✕</button></div>
   <label>Task<input id="todoTitle" required maxlength="180" placeholder="What needs to get done?"></label>
   <div class="grid2">
     <label>Priority<select id="todoPriority"><option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option></select></label>
@@ -308,9 +308,9 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
-<script src="app.js?v=56"></script>
+<script src="app.js?v=58"></script>
 <script src="monitor-ui.js?v=52"></script>
-<script src="todos.js?v=57"></script>
+<script src="todos.js?v=58"></script>
 <script src="ai-config.js?v=42"></script>
 <script type="module" src="ai-ui.js?v=41"></script>
 </body></html>
