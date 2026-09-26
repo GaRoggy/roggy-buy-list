@@ -585,3 +585,5 @@ input:focus,select:focus,textarea:focus{border-color:color-mix(in srgb,var(--acc
 .expanded .chevron{transform:rotate(180deg) scale(1.08)}
 
 .meta,.digest-card div span,.reminder-body span,.project-detail-hero p,.project-device p{color:#c7bdd8}
+
+@media(max-width:500px){.digest-main,.budget-main,.driver-main,.reminder-main{padding-left:10px;padding-right:10px}.page-tabs,.sub-tabs{gap:6px}}
