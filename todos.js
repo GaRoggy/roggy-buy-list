@@ -3,7 +3,7 @@ let todos=[],todoFilter="open";
 async function loadTodos(){
   const {data,error}=await sb.from("todos").select("*").order("status",{ascending:true}).order("priority",{ascending:true}).order("created_at",{ascending:false});
   if(error){$("todoStatus").textContent="Sync error: "+error.message;todos=[];renderTodos();return}
-  todos=data||[];$("todoStatus").textContent="";renderTodos();renderHomeHighTodos();
+  todos=data||[];$("todoStatus").textContent="";renderTodos();renderHomeHighTodos();if(typeof renderHome==="function"&&typeof currentPage!=="undefined"&&currentPage==="home")renderHome();
 }
 function todoPriorityRank(p){return p==="high"?0:p==="medium"?1:2}
 function todoDueLabel(x){
