@@ -465,3 +465,9 @@ button:active,.command-card:active,.project-open:active,.project-device:active{t
 /* 14 */ .fab{width:58px;height:58px;font-size:32px;box-shadow:0 12px 30px color-mix(in srgb,var(--accent) 28%,transparent)}
 /* 15 */ @media(max-width:500px){.command-grid{gap:10px}.command-card{padding:13px 12px}.home-focus-strip{gap:6px}.home-focus-strip button{padding:10px 8px;border-radius:15px}.home-focus-strip b{font-size:19px}}
 html[data-mode="dark"] .home-focus-strip button{background:color-mix(in srgb,var(--surface2) 88%,var(--accent) 12%);border-color:color-mix(in srgb,var(--accent) 16%,var(--line))}
+
+/* Bought history + permanent delete v66 */
+.bottom-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.danger-action{margin-left:auto;background:color-mix(in srgb,#ef4444 12%,var(--surface2));color:#ef6b6b;border:1px solid color-mix(in srgb,#ef4444 28%,transparent);border-radius:12px;padding:10px 14px;font-weight:850}
+.danger-action:active{background:color-mix(in srgb,#ef4444 20%,var(--surface2))}
+.deleted-view .deleted-row .meta{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
