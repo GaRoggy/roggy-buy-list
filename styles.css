@@ -365,3 +365,20 @@ html[data-mode="dark"] .under-construction-group{background:color-mix(in srgb,va
 .project-device-list{display:grid;gap:8px}.project-device{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px;background:color-mix(in srgb,var(--accent) 7%,var(--glass));border:1px solid color-mix(in srgb,var(--accent) 12%,transparent);border-radius:18px;text-decoration:none;color:var(--ink)}.project-device p{margin:3px 0 0;font-size:11px}.project-device>span{color:var(--accent);font-size:20px}
 html[data-mode="dark"] .project-detail-hero,html[data-mode="dark"] .project-detail-section{background:var(--surface);border-color:var(--line)}
 html[data-mode="dark"] .project-device{background:var(--surface2);border-color:var(--line)}
+
+/* Buy/Grocery polish v50 */
+.restore-heading{display:none;padding:16px 16px 4px;color:var(--ink);font-size:13px;font-weight:900;letter-spacing:.11em;text-transform:uppercase}
+.deleted-view .restore-heading{display:block}
+.deleted-view .deleted-row{grid-template-columns:minmax(0,1fr) 44px;display:grid;gap:12px;align-items:center}
+.deleted-view .restorebtn{width:44px;height:44px;min-width:44px;padding:0;border:1px solid color-mix(in srgb,var(--accent) 32%,transparent);border-radius:13px;background:color-mix(in srgb,var(--accent) 14%,var(--surface,#fff));color:var(--accent);display:grid;place-items:center;box-shadow:none}
+.restore-icon{font-family:Arial,sans-serif;font-size:25px;font-weight:400;line-height:1}
+.filter{background:color-mix(in srgb,var(--accent) 8%,var(--glass));color:var(--ink);border:1px solid color-mix(in srgb,var(--accent) 10%,transparent)}
+.filter.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-color:transparent}
+#search,#sort{background:color-mix(in srgb,var(--accent) 5%,var(--glass));color:var(--ink);border:1px solid color-mix(in srgb,var(--accent) 20%,transparent)}
+#search::placeholder{color:color-mix(in srgb,var(--ink) 62%,transparent);opacity:1}
+#sort{color:var(--ink)}
+.sub-tab{color:var(--ink);background:color-mix(in srgb,var(--accent) 8%,var(--glass))}
+.sub-tab.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+html[data-mode="dark"] .filter:not(.active),html[data-mode="dark"] #search,html[data-mode="dark"] #sort,html[data-mode="dark"] .sub-tab:not(.active){background:color-mix(in srgb,var(--surface2) 88%,var(--accent) 12%);color:var(--ink);border-color:color-mix(in srgb,var(--accent) 20%,var(--line))}
+html[data-mode="dark"] #search::placeholder{color:#c7c2ce}
+html[data-mode="dark"] .restorebtn{background:color-mix(in srgb,var(--surface2) 78%,var(--accent) 22%);color:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 38%,var(--line))}
