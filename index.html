@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#6d28d9">
 <title>Roggy Lists</title>
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="styles.css?v=41">
+<link rel="stylesheet" href="styles.css?v=41">\n<link rel="stylesheet" href="todos.css?v=1">
 <link rel="apple-touch-icon" href="icon.svg">
 </head>
 <body>
@@ -17,7 +17,7 @@
 
 <nav class="page-tabs">
   <button class="page-tab active" data-page="home">Home</button>
-  <button class="page-tab" data-page="reminders">Reminders</button>
+  <button class="page-tab" data-page="reminders">Reminders</button>\n  <button class="page-tab" data-page="todos">To Dos</button>
   <button class="page-tab" data-page="buy">Buy</button>
   <label class="more-tab" for="moreToggle">More <span>☰</span></label>
 </nav>
@@ -180,7 +180,37 @@
   </main>
 </section>
 
-<section id="remindersPage" hidden>
+
+<section id="todosPage" hidden>
+  <main class="todo-main">
+    <section class="todo-hero">
+      <div><span class="eyebrow">TO DOS</span><h2>Get it out of your head.</h2><p>Quick tasks, follow-ups, errands, and anything that needs a finish line.</p></div>
+      <button id="newTodoBtn" class="wide-action todo-add-top">＋ Add To Do</button>
+    </section>
+    <nav class="todo-filters" aria-label="To do filters">
+      <button class="todo-filter active" data-todo-filter="open">Open</button>
+      <button class="todo-filter" data-todo-filter="high">High priority</button>
+      <button class="todo-filter" data-todo-filter="done">Done</button>
+      <button class="todo-filter" data-todo-filter="all">All</button>
+    </nav>
+    <section id="todoStatus" class="status"></section>
+    <section id="todoList" class="todo-list"></section>
+  </main>
+</section>
+
+<dialog id="todoDialog"><form method="dialog" id="todoForm">
+  <div class="dialog-head"><h2>Add To Do</h2><button value="cancel" class="plain">✕</button></div>
+  <label>Task<input id="todoTitle" required maxlength="180" placeholder="What needs to get done?"></label>
+  <div class="grid2">
+    <label>Priority<select id="todoPriority"><option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option></select></label>
+    <label>Category<input id="todoCategory" maxlength="80" placeholder="Email, Home, Smart Home…"></label>
+  </div>
+  <label>Due date<input id="todoDueDate" type="date"></label>
+  <label>Notes<textarea id="todoNotes" rows="3" maxlength="1200" placeholder="Optional details"></textarea></label>
+  <label>Email link<input id="todoEmailUrl" type="url" placeholder="Optional Gmail link"></label>
+  <div class="actions"><button value="cancel" class="secondary">Cancel</button><button value="default" class="primary">Add task</button></div>
+</form></dialog>
+\n<section id="remindersPage" hidden>
   <nav class="sub-tabs reminder-subtabs">
     <button class="reminder-tab active" data-reminder-view="today">Today</button>
     <button class="reminder-tab" data-reminder-view="tomorrow">Tomorrow</button>
@@ -273,7 +303,7 @@
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
 <script src="app.js?v=41"></script>
-<script src="monitor-ui.js?v=41"></script>
+<script src="monitor-ui.js?v=41"></script>\n<script src="todos.js?v=1"></script>
 <script src="ai-config.js?v=42"></script>
 <script type="module" src="ai-ui.js?v=41"></script>
 </body></html>
