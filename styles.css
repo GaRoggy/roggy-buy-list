@@ -447,3 +447,21 @@ button:active,.command-card:active,.project-open:active,.project-device:active{t
 
 /* 15. Scrollbars inherit the chosen accent instead of browser-default gray where supported. */
 *{scrollbar-color:color-mix(in srgb,var(--accent) 55%,transparent) transparent;scrollbar-width:thin}
+
+/* Broader product/UI pass v63 */
+/* 1 */ .home-focus-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+/* 2 */ .home-focus-strip button{border:1px solid var(--line);background:color-mix(in srgb,var(--accent) 7%,var(--glass));color:var(--ink);border-radius:18px;padding:11px 10px;text-align:left;display:grid;gap:1px}
+/* 3 */ .home-focus-strip span{font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}.home-focus-strip b{font-size:22px;line-height:1.1}.home-focus-strip small{font-size:9px;color:var(--muted)}
+/* 4 */ .command-card-disabled{opacity:.48;filter:saturate(.55);cursor:default!important}
+/* 5 */ .command-card-disabled:active{transform:none!important}
+/* 6 */ .home-timeline .timeline-row:last-child{padding-bottom:4px}
+/* 7 */ .home-section .section-head h3,.home-timeline .section-head h3{font-size:18px;letter-spacing:-.015em}
+/* 8 */ .home-main{display:block}.home-main>section{scroll-margin-top:110px}
+/* 9 */ .command-search{position:relative;border-color:color-mix(in srgb,var(--accent) 16%,var(--line));background:color-mix(in srgb,var(--accent) 4%,var(--glass))}
+/* 10 */ .command-search::after{content:"";position:absolute;inset:auto 18px 0;height:1px;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--accent) 45%,transparent),transparent)}
+/* 11 */ .side-drawer .drawer-page-tab{min-height:48px;font-weight:800}
+/* 12 */ .side-drawer .drawer-page-tab:not(:disabled):active{background:color-mix(in srgb,var(--accent) 18%,var(--surface2))}
+/* 13 */ dialog{max-height:min(82dvh,760px);overflow:auto;overscroll-behavior:contain}
+/* 14 */ .fab{width:58px;height:58px;font-size:32px;box-shadow:0 12px 30px color-mix(in srgb,var(--accent) 28%,transparent)}
+/* 15 */ @media(max-width:500px){.command-grid{gap:10px}.command-card{padding:13px 12px}.home-focus-strip{gap:6px}.home-focus-strip button{padding:10px 8px;border-radius:15px}.home-focus-strip b{font-size:19px}}
+html[data-mode="dark"] .home-focus-strip button{background:color-mix(in srgb,var(--surface2) 88%,var(--accent) 12%);border-color:color-mix(in srgb,var(--accent) 16%,var(--line))}
