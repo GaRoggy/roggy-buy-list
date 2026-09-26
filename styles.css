@@ -382,3 +382,11 @@ html[data-mode="dark"] .project-device{background:var(--surface2);border-color:v
 html[data-mode="dark"] .filter:not(.active),html[data-mode="dark"] #search,html[data-mode="dark"] #sort,html[data-mode="dark"] .sub-tab:not(.active){background:color-mix(in srgb,var(--surface2) 88%,var(--accent) 12%);color:var(--ink);border-color:color-mix(in srgb,var(--accent) 20%,var(--line))}
 html[data-mode="dark"] #search::placeholder{color:#c7c2ce}
 html[data-mode="dark"] .restorebtn{background:color-mix(in srgb,var(--surface2) 78%,var(--accent) 22%);color:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 38%,var(--line))}
+
+/* Home command center + restore alignment v51 */
+.restore-heading{display:none;grid-template-columns:minmax(0,1fr) 44px;gap:12px;align-items:center;padding:14px 16px 3px}
+.deleted-view .restore-heading{display:grid}
+.restore-heading span:last-child{text-align:center;font-size:10px;letter-spacing:.08em}
+.compact-command{padding:11px 15px!important;min-height:0!important;display:block!important}
+.compact-command .eyebrow{font-size:9px}
+.compact-command #homeDate{margin:2px 0 0!important;font-size:11px!important;opacity:.78}
