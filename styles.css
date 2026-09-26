@@ -578,3 +578,8 @@ dialog::backdrop{background:rgba(5,2,14,.68);backdrop-filter:blur(8px)}
 input,select,textarea{transition:border-color .16s ease,box-shadow .16s ease,background .16s ease}
 input:focus,select:focus,textarea:focus{border-color:color-mix(in srgb,var(--accent2) 70%,#fff 10%)!important;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent)}
 ::selection{background:color-mix(in srgb,var(--accent2) 58%,#c026d3 42%);color:#fff}
+
+
+/* UI polish v71c */
+.chevron{transition:transform .18s ease,color .18s ease}
+.expanded .chevron{transform:rotate(180deg) scale(1.08)}
