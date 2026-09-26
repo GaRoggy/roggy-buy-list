@@ -397,3 +397,53 @@ html[data-mode="dark"] .restorebtn{background:color-mix(in srgb,var(--surface2) 
 .compact-command .eyebrow{font-size:18px!important;font-weight:950!important;letter-spacing:.08em;line-height:1.05;color:#fff}
 .compact-command #homeDate{margin:7px 0 0!important;font-size:13px!important;font-weight:650;opacity:.86}
 .compact-command{padding:15px 18px!important}
+
+/* Micro-polish pass v62 — deliberately small consistency/accessibility fixes */
+
+/* 1. Respect iPhone safe areas without adding dead space on desktop. */
+header{padding-top:max(12px,env(safe-area-inset-top))}
+
+/* 2. Keep important compact controls at a reliable finger-sized target. */
+.header-menu,.drawer-close,.icon-btn,.text-action,.settings-open{min-width:44px;min-height:44px}
+
+/* 3. One keyboard/focus language across the whole app. */
+button:focus-visible,a:focus-visible,label[for]:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 72%,#fff);outline-offset:3px}
+
+/* 4. Active primary navigation gets a quiet inner edge so it reads selected in every theme. */
+.page-tabs>.page-tab.active{box-shadow:inset 0 0 0 1px rgba(255,255,255,.20),0 5px 16px color-mix(in srgb,var(--accent) 14%,transparent)}
+
+/* 5. Buttons/cards give subtle tactile feedback instead of feeling static. */
+button,.command-card,.project-open,.project-device{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+button:active,.command-card:active,.project-open:active,.project-device:active{transform:scale(.985)}
+
+/* 6. Honor Reduce Motion and remove all press/transition movement for those users. */
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}button:active,.command-card:active,.project-open:active,.project-device:active{transform:none}}
+
+/* 7. Long task/item/project names wrap cleanly instead of shoving controls off-screen. */
+.item-name,.todo-title-row h3,.project-card h3,.home-high-todo b,.important-email-list b{overflow-wrap:anywhere;word-break:normal;min-width:0}
+
+/* 8. Cards cannot create accidental sideways scrolling on narrow phones. */
+.card,.todo-card,.home-section,.command-card,.project-card,.project-device{min-width:0;max-width:100%;box-sizing:border-box}
+
+/* 9. Home command cards keep a uniform visual height even when labels wrap. */
+.command-card{min-height:92px;align-items:center}
+
+/* 10. Home section rhythm is consistent from Timeline through Tasks and Email. */
+.home-main>.home-section,.home-main>.command-grid,.home-main>.home-timeline{margin-top:14px}
+
+/* 11. Under-construction rows are truly inert, including labels and nested content. */
+.under-construction-item,.under-construction-item *{pointer-events:none!important;user-select:none}
+.under-construction-item{cursor:default!important}
+
+/* 12. Selected Appearance choices get a tiny check mark in addition to the border. */
+.mode-choice.active,.size-choice.active{position:relative}
+.mode-choice.active::after,.size-choice.active::after{content:"✓";position:absolute;right:10px;top:7px;font-size:10px;font-weight:950;color:#fff;opacity:.9}
+
+/* 13. Drawer close control is centered and no longer has a tiny visual hit area. */
+.drawer-close{display:grid;place-items:center;border-radius:12px}
+
+/* 14. Hide the redundant “Search” keyboard-style chip on small phones to give the query more room. */
+@media(max-width:500px){.command-search kbd{display:none}.command-search span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+
+/* 15. Scrollbars inherit the chosen accent instead of browser-default gray where supported. */
+*{scrollbar-color:color-mix(in srgb,var(--accent) 55%,transparent) transparent;scrollbar-width:thin}
