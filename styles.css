@@ -471,3 +471,24 @@ html[data-mode="dark"] .home-focus-strip button{background:color-mix(in srgb,var
 .danger-action{margin-left:auto;background:color-mix(in srgb,#ef4444 12%,var(--surface2));color:#ef6b6b;border:1px solid color-mix(in srgb,#ef4444 28%,transparent);border-radius:12px;padding:10px 14px;font-weight:850}
 .danger-action:active{background:color-mix(in srgb,#ef4444 20%,var(--surface2))}
 .deleted-view .deleted-row .meta{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+
+/* Home Tasks + Calendar side-by-side v69 */
+.home-primary-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;align-items:start}
+.home-primary-grid>.home-section,.home-primary-grid>.home-timeline{margin-top:0;height:100%}
+.home-primary-grid .home-high-todo-list{display:grid;gap:7px}
+.home-primary-grid .home-high-todo{padding:10px 11px}
+.home-primary-grid .timeline-row{grid-template-columns:58px 1fr;gap:8px}
+.home-primary-grid .section-head{gap:8px}
+@media(max-width:700px){
+  .home-primary-grid{grid-template-columns:1fr 1fr;gap:8px}
+  .home-primary-grid>.home-section,.home-primary-grid>.home-timeline{padding:12px}
+  .home-primary-grid .section-head{align-items:flex-start}
+  .home-primary-grid .section-head h3{font-size:16px}
+  .home-primary-grid .text-action{padding:6px 8px;font-size:10px}
+  .home-primary-grid .home-high-todo{grid-template-columns:8px 1fr auto;gap:8px;padding:9px}
+  .home-primary-grid .home-high-todo b{font-size:12px}
+  .home-primary-grid .home-high-todo small{font-size:9px}
+  .home-primary-grid .timeline-row{grid-template-columns:1fr;gap:2px;padding:10px 1px}
+  .home-primary-grid .timeline-row span{font-size:9px}
+  .home-primary-grid .timeline-row b{font-size:12px;line-height:1.3}
+}
