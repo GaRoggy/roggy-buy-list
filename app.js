@@ -3,9 +3,8 @@ const SUPABASE_KEY="sb_publishable_4WYS4v4U7PSgXesYNNJUfA_69lJaBX1";
 const KEY="roggy-lists-v1";
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{flowType:"pkce",detectSessionInUrl:true,persistSession:true,autoRefreshToken:true}});
 const $=id=>document.getElementById(id);
-const BRAIN_KEY="roggy-brain-v1",PROJECT_KEY="roggy-projects-v1";
-let brainDump=JSON.parse(localStorage.getItem(BRAIN_KEY)||"[]"),projects=JSON.parse(localStorage.getItem(PROJECT_KEY)||"[]");
-function saveBrain(){localStorage.setItem(BRAIN_KEY,JSON.stringify(brainDump))}
+const PROJECT_KEY="roggy-projects-v1";
+let projects=JSON.parse(localStorage.getItem(PROJECT_KEY)||"[]");
 function saveProjects(){localStorage.setItem(PROJECT_KEY,JSON.stringify(projects))}
 
 const seed={buy:[
@@ -301,7 +300,7 @@ $("closeDigestDetail").onclick=()=>$("digestDetailDialog").close();
 
 function setPage(page){
  currentPage=page;document.querySelectorAll(".page-tab").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
- const special=["home","drivers","reminders","todos","budget","digestibles","projects","health","vehicle","ai"],isSpecial=special.includes(page);
+ const special=["home","drivers","reminders","todos","budget","digestibles","projects","project-detail","health","vehicle","ai"],isSpecial=special.includes(page);
  $("listsPage").hidden=isSpecial;
  special.forEach(p=>{const el=$(p+"Page");if(el)el.hidden=page!==p});
  $("backupBtn").style.display=isSpecial?"none":"";$("addBtn").style.display="";
@@ -364,17 +363,37 @@ function renderImportantEmails(){
  if(!$("importantEmailList"))return;
  $("importantEmailList").innerHTML=monitorEmails.length?monitorEmails.map(x=>'<a class="important-email" href="https://mail.google.com/mail/u/0/#all/'+encodeURIComponent(x.source_message_id)+'" target="_blank" rel="noopener noreferrer"><span class="email-kind">'+esc(x.category)+'</span><div><b>'+esc(x.subject)+'</b><small>'+esc(x.sender)+' · '+esc(x.summary)+'</small><small>'+esc(x.reason||"")+'</small></div><time>'+esc(new Date(x.timestamp).toLocaleDateString())+'</time></a>').join(""):'<div class="quiet-state">'+esc(monitorEmailMessage)+'</div>';
 }
-function renderBrainPreview(){if(!$("brainDumpPreview"))return;$("brainDumpPreview").innerHTML=brainDump.length?brainDump.slice(0,4).map((x,i)=>'<div class="brain-row"><span>•</span><p>'+esc(x.text)+'</p><button data-brain-delete="'+i+'">×</button></div>').join(""):'<div class="quiet-state">Your head is clear. Dump thoughts here before they disappear.</div>';document.querySelectorAll("[data-brain-delete]").forEach(b=>b.onclick=()=>{brainDump.splice(+b.dataset.brainDelete,1);saveBrain();renderBrainPreview()})}
-function openBrainDump(){$("brainDumpDialog").showModal();setTimeout(()=>$("brainDumpText").focus(),50)}
-$("brainDumpBtn").onclick=openBrainDump;$("brainDumpAddInline").onclick=openBrainDump;
-$("brainDumpForm").addEventListener("submit",e=>{if(e.submitter?.value==="cancel")return;e.preventDefault();brainDump.unshift({text:$("brainDumpText").value.trim(),created:new Date().toISOString()});saveBrain();$("brainDumpForm").reset();$("brainDumpDialog").close();renderBrainPreview()});
-function renderProjects(){$("projectList").innerHTML=projects.length?projects.map((p,i)=>'<article class="project-card"><div><span class="project-status">'+esc(p.status)+'</span><h3>'+esc(p.title)+'</h3><p>'+esc(p.description||"No description yet.")+'</p></div><div class="project-foot"><span>'+esc(p.priority)+' priority</span><button data-project-delete="'+i+'">×</button></div></article>').join(""):'<div class="system-card empty-project"><b>No projects yet.</b><p>Create one for anything that needs multiple steps, research, purchases, notes or a finish line.</p></div>';document.querySelectorAll("[data-project-delete]").forEach(b=>b.onclick=()=>{projects.splice(+b.dataset.projectDelete,1);saveProjects();renderProjects()})}
+const BUILTIN_PROJECTS={
+"Smart Home":{
+ description:"Build a local-first apartment automation system that your AI can sense and control without relying on Alexa as the assistant.",
+ steps:["Install Home Assistant or the chosen local automation service on the PC","Connect the Zigbee/Thread coordinator and pair sensors","Set up ATOM Voice units for room voice input","Pair presence/motion and door/window sensors","Connect dimmable smart lighting and validate API/local control","Expose safe device controls to the local AI agent","Test voice → AI → device actions and fallback behavior"],
+ devices:[
+  {name:"M5Stack ATOM Voice / Echo ×3",note:"Wall-powered room microphone/speaker nodes.",url:"https://shop.m5stack.com/products/atom-echo-smart-speaker-dev-kit"},
+  {name:"Home Assistant Connect ZBT-1",note:"USB Zigbee coordinator for local sensors.",url:"https://www.home-assistant.io/connectzbt1"},
+  {name:"Aqara Door & Window Sensors",note:"Zigbee contact sensors for doors/windows.",url:"https://www.aqara.com/us/product/door-and-window-sensor/"},
+  {name:"Aqara Presence / Motion Sensor",note:"Presence sensing for room automations.",url:"https://www.aqara.com/us/product/sensor/"},
+  {name:"Govee dimmable smart lighting",note:"Lighting controlled through supported Govee APIs/models.",url:"https://developer.govee.com/"}
+ ]},
+"Smart Car":{
+ description:"Create a car telemetry system that records OBD-II and location data, then syncs trips and vehicle status back to your PC/app.",
+ steps:["Plug the vLinker FD into the RAV4 OBD-II port","Build/configure the in-car bridge for automatic Bluetooth OBD connection","Add GNSS if you want independent trip/location logging","Cache trip data locally when the PC/phone is unavailable","Use the phone or Wi-Fi bridge to sync completed trips home","Add vehicle telemetry endpoints to the local AI/app","Test ignition, reconnect, unplug/replug and full-trip recording","Install dashcam separately; keep integration optional"],
+ devices:[
+  {name:"Vgate vLinker FD OBD-II adapter",note:"Bluetooth OBD-II telemetry source.",url:"https://www.vgatemall.com/products/vlinker-fd-bluetooth-obd2-scanner"},
+  {name:"ESP32 development board",note:"Optional always-in-car bridge/data logger.",url:"https://www.espressif.com/en/products/devkits/esp32-devkitc/overview"},
+  {name:"GNSS module",note:"Optional independent trip/location logging.",url:"https://www.adafruit.com/category/58"},
+  {name:"Dashcam",note:"Separate recording system; integration is optional.",url:"https://www.garmin.com/en-US/c/automotive/dash-cams/"}
+ ]}
+};
+function ensureBuiltinProjects(){for(const [title,d] of Object.entries(BUILTIN_PROJECTS)){if(!projects.some(p=>p.title===title))projects.push({title,description:d.description,status:"Active",priority:"High",builtin:true,created:new Date().toISOString()})}saveProjects()}
+function renderProjects(){ensureBuiltinProjects();$("projectList").innerHTML=projects.map((p,i)=>'<button class="project-card project-open" data-project-open="'+i+'"><div><span class="project-status">'+esc(p.status)+'</span><h3>'+esc(p.title)+'</h3><p>'+esc(p.description||"No description yet.")+'</p></div><div class="project-foot"><span>'+esc(p.priority)+' priority</span><span>Open →</span></div></button>').join("");document.querySelectorAll("[data-project-open]").forEach(b=>b.onclick=()=>openProject(+b.dataset.projectOpen))}
+function openProject(i){const p=projects[i];if(!p)return;const built=BUILTIN_PROJECTS[p.title];$("pageTitle").textContent=p.title;$("pageSubtitle").textContent="Project";document.querySelectorAll("body>section[id$='Page']").forEach(x=>x.hidden=true);$("projectDetailPage").hidden=false;let html='<section class="project-detail-hero"><span class="project-status">'+esc(p.status)+'</span><h2>'+esc(p.title)+'</h2><p>'+esc(p.description||"")+'</p></section>';if(built){html+='<section class="project-detail-section"><h3>Implementation</h3><ul>'+built.steps.map(x=>'<li>'+esc(x)+'</li>').join("")+'</ul></section><section class="project-detail-section"><h3>Devices / hardware</h3><div class="project-device-list">'+built.devices.map(d=>'<a class="project-device" href="'+d.url+'" target="_blank" rel="noopener"><div><b>'+esc(d.name)+'</b><p>'+esc(d.note)+'</p></div><span>↗</span></a>').join("")+'</div></section>'}else html+='<section class="project-detail-section"><h3>Project notes</h3><p>'+esc(p.description||"No notes yet.")+'</p></section>';$("projectDetailContent").innerHTML=html}
+$("projectBackBtn").onclick=()=>setPage("projects");
 $("newProjectBtn").onclick=()=>$("projectDialog").showModal();
 $("projectForm").addEventListener("submit",e=>{if(e.submitter?.value==="cancel")return;e.preventDefault();projects.unshift({title:$("projectTitle").value.trim(),description:$("projectDescription").value.trim(),status:$("projectStatus").value,priority:$("projectPriority").value,created:new Date().toISOString()});saveProjects();$("projectForm").reset();$("projectDialog").close();renderProjects()});
 document.querySelectorAll(".command-card").forEach(b=>b.onclick=()=>setPage(b.dataset.jump));
 function openGlobalSearch(){$("globalSearchDialog").showModal();$("globalSearchInput").value="";renderGlobalSearch("");setTimeout(()=>$("globalSearchInput").focus(),50)}
 $("globalSearchBtn").onclick=openGlobalSearch;$("closeGlobalSearch").onclick=()=>$("globalSearchDialog").close();
-function renderGlobalSearch(q){q=q.toLowerCase().trim();let rows=[];(data.buy||[]).filter(x=>!x.deleted).forEach(x=>rows.push({type:"Buy",title:x.item,page:"buy"}));(data.groceries||[]).filter(x=>!x.deleted).forEach(x=>rows.push({type:"Grocery",title:x.item,page:"groceries"}));brainDump.forEach(x=>rows.push({type:"Brain Dump",title:x.text,page:"home"}));projects.forEach(x=>rows.push({type:"Project",title:x.title,page:"projects"}));(reminders||[]).forEach(x=>rows.push({type:"Reminder",title:x.title,page:"reminders"}));(digestibles||[]).forEach(x=>rows.push({type:x.media_type,title:x.title,page:"digestibles"}));if(q)rows=rows.filter(x=>(x.type+" "+x.title).toLowerCase().includes(q));else rows=rows.slice(0,8);$("globalSearchResults").innerHTML=rows.slice(0,30).map((x,i)=>'<button data-search-index="'+i+'"><span>'+esc(x.type)+'</span><b>'+esc(x.title)+'</b></button>').join("")||'<div class="quiet-state">No matches.</div>';document.querySelectorAll("[data-search-index]").forEach((b)=>b.onclick=()=>{$("globalSearchDialog").close();setPage(rows[+b.dataset.searchIndex].page)})}
+function renderGlobalSearch(q){q=q.toLowerCase().trim();let rows=[];(data.buy||[]).filter(x=>!x.deleted).forEach(x=>rows.push({type:"Buy",title:x.item,page:"buy"}));(data.groceries||[]).filter(x=>!x.deleted).forEach(x=>rows.push({type:"Grocery",title:x.item,page:"groceries"}));projects.forEach(x=>rows.push({type:"Project",title:x.title,page:"projects"}));(reminders||[]).forEach(x=>rows.push({type:"Reminder",title:x.title,page:"reminders"}));(digestibles||[]).forEach(x=>rows.push({type:x.media_type,title:x.title,page:"digestibles"}));if(q)rows=rows.filter(x=>(x.type+" "+x.title).toLowerCase().includes(q));else rows=rows.slice(0,8);$("globalSearchResults").innerHTML=rows.slice(0,30).map((x,i)=>'<button data-search-index="'+i+'"><span>'+esc(x.type)+'</span><b>'+esc(x.title)+'</b></button>').join("")||'<div class="quiet-state">No matches.</div>';document.querySelectorAll("[data-search-index]").forEach((b)=>b.onclick=()=>{$("globalSearchDialog").close();setPage(rows[+b.dataset.searchIndex].page)})}
 $("globalSearchInput").oninput=e=>renderGlobalSearch(e.target.value);
 
 /* Appearance settings v31 */
