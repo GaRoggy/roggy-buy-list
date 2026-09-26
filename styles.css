@@ -354,3 +354,14 @@ html.privacy-locked #privacyGate{visibility:visible!important;pointer-events:aut
 .under-construction-item{width:100%;opacity:.55;cursor:not-allowed!important;filter:saturate(.65);display:flex;align-items:center;justify-content:space-between;gap:8px}
 .under-construction-item span{font-size:9px;font-weight:800;color:var(--muted);text-transform:uppercase}
 html[data-mode="dark"] .under-construction-group{background:color-mix(in srgb,var(--accent) 10%,#15131b);border-color:color-mix(in srgb,var(--accent) 22%,transparent)}
+
+/* Dedicated project pages v47 */
+.project-open{width:100%;font:inherit;text-align:left;color:var(--ink);cursor:pointer}
+.project-open .project-foot span:last-child{color:var(--accent);font-weight:900}
+.project-back{border:0;background:var(--accent-pale);color:var(--accent);border-radius:999px;padding:9px 13px;font-weight:900;margin:4px 0 12px}
+.project-detail-hero,.project-detail-section{background:var(--glass);border:1px solid rgba(255,255,255,.75);border-radius:27px 17px 29px 19px;padding:18px;margin-bottom:12px;box-shadow:0 8px 24px color-mix(in srgb,var(--accent) 8%,transparent)}
+.project-detail-hero h2{font-size:28px;margin:7px 0}.project-detail-hero p,.project-detail-section li,.project-device p{color:var(--muted);line-height:1.5}
+.project-detail-section h3{margin:0 0 10px}.project-detail-section ul{margin:0;padding-left:21px;display:grid;gap:8px}
+.project-device-list{display:grid;gap:8px}.project-device{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px;background:color-mix(in srgb,var(--accent) 7%,var(--glass));border:1px solid color-mix(in srgb,var(--accent) 12%,transparent);border-radius:18px;text-decoration:none;color:var(--ink)}.project-device p{margin:3px 0 0;font-size:11px}.project-device>span{color:var(--accent);font-size:20px}
+html[data-mode="dark"] .project-detail-hero,html[data-mode="dark"] .project-detail-section{background:var(--surface);border-color:var(--line)}
+html[data-mode="dark"] .project-device{background:var(--surface2);border-color:var(--line)}
