@@ -61,6 +61,7 @@ function renderLists(){
   $("pageTitle").textContent=currentPage==="buy"?"Buy List":"Groceries";
   $("pageSubtitle").textContent=currentPage==="buy"?"Needs first. Luxuries later.":"Food and immediate grocery items.";
   document.querySelector(".toolbar").style.display=currentView==="deleted"?"none":"";
+   document.body.classList.toggle("deleted-view",currentView==="deleted");
   $("summary").style.display=currentView==="deleted"?"none":"";
   $("addBtn").style.display=currentView==="deleted"?"none":"";
   $("priorityFilters").style.display=currentPage==="groceries"?"none":"";
@@ -76,7 +77,7 @@ function renderLists(){
   shown.forEach(x=>{
     const c=document.createElement("article");c.className="card "+(x.status==="Bought"?"bought":"");
     if(currentView==="deleted"){
-      c.innerHTML=`<div class="deleted-row"><div><div class="item-name">${esc(x.item)}</div><div class="meta"><span>${esc(x.category||"Other")}</span></div></div><button class="restorebtn">↩ Restore</button></div>`;
+      c.innerHTML=`<div class="deleted-row"><div><div class="item-name">${esc(x.item)}</div><div class="meta"><span>${esc(x.category||"Other")}</span></div></div><button class="restorebtn" aria-label="Restore item" title="Restore item"><span class="restore-icon" aria-hidden="true">↶</span></button></div>`;
       c.querySelector(".restorebtn").onclick=()=>{x.deleted=false;x.status="Looking";saveItem(x).catch(showErr);renderLists()};$("list").appendChild(c);return;
     }
     c.innerHTML=`<div class="card-summary"><button class="removebtn icon-action remove-left">✕</button><div class="summary-main"><div class="item-name">${esc(x.item)}${x.quantity&&x.quantity!=="1"?` <small>×${esc(x.quantity)}</small>`:""}</div><div class="meta"><span>${esc(x.category||"Other")}</span><span>${esc(x.status)}</span></div></div><div class="card-controls">${currentPage==="buy"?`<button class="prioritybtn icon-action" data-dir="up">↑</button><span class="badge ${esc(x.priority)}">${esc(x.priority)}</span><button class="prioritybtn icon-action" data-dir="down">↓</button>`:""}<span class="chevron">⌄</span></div></div><div class="card-details collapsed"><div class="quick"><button class="statusbtn ${x.status==="Looking"?"selected":""}" data-s="Looking">Looking</button><button class="statusbtn ${x.status==="Ready to Buy"?"selected":""}" data-s="Ready to Buy">Ready</button><button class="statusbtn ${x.status==="Bought"?"selected":""}" data-s="Bought">✓ Bought</button></div>${x.notes?`<div class="detail-notes">${esc(x.notes)}</div>`:""}${currentPage==="buy"?renderResearch(x):""}<div class="bottom-actions"><button class="editbtn">Edit details</button></div></div>`;
