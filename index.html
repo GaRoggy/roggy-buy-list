@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#6d28d9">
 <title>Roggy Lists</title>
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="styles.css?v=53">
+<link rel="stylesheet" href="styles.css?v=62">
 <link rel="stylesheet" href="todos.css?v=61">
 <link rel="apple-touch-icon" href="icon.svg">
 </head>
@@ -27,7 +27,7 @@
 <input id="moreToggle" class="drawer-toggle" type="checkbox" hidden>
 <label class="drawer-backdrop" for="moreToggle" aria-label="Close menu"></label>
 <aside class="side-drawer" aria-label="More sections">
-  <div class="drawer-head"><b>More</b><label for="moreToggle" class="drawer-close">✕</label></div>
+  <div class="drawer-head"><b>More</b><label for="moreToggle" class="drawer-close" aria-label="Close navigation" tabindex="0">✕</label></div>
   <button class="page-tab drawer-page-tab" data-page="ai">Local AI</button>
   <button class="page-tab drawer-page-tab" data-page="groceries" onclick="document.getElementById('moreToggle').checked=false">Groceries</button>
   <button class="page-tab drawer-page-tab" data-page="projects" onclick="document.getElementById('moreToggle').checked=false">Projects</button>
@@ -46,7 +46,7 @@
 <input id="settingsToggle" class="settings-toggle" type="checkbox" hidden>
 <label class="settings-backdrop" for="settingsToggle" aria-label="Close settings"></label>
 <aside class="settings-shelf" aria-label="Website settings">
-  <div class="settings-head"><div><b>Settings</b><span>Make it yours.</span></div><label for="settingsToggle" class="drawer-close">✕</label></div>
+  <div class="settings-head"><div><b>Settings</b><span>Make it yours.</span></div><label for="settingsToggle" class="drawer-close" aria-label="Close settings" tabindex="0">✕</label></div>
   <section class="setting-group">
     <h3>Color</h3>
     <div id="themeColors" class="theme-colors">
