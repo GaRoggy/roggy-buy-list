@@ -390,3 +390,10 @@ html[data-mode="dark"] .restorebtn{background:color-mix(in srgb,var(--surface2) 
 .compact-command{padding:11px 15px!important;min-height:0!important;display:block!important}
 .compact-command .eyebrow{font-size:9px}
 .compact-command #homeDate{margin:2px 0 0!important;font-size:11px!important;opacity:.78}
+
+/* Selected settings + stronger command center v53 */
+.mode-choice.active,.size-choice.active{border:2px solid rgba(255,255,255,.92)!important;box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 42%,transparent),0 8px 20px color-mix(in srgb,var(--accent) 16%,transparent);background:color-mix(in srgb,var(--accent) 20%,var(--surface2))!important}
+.color-choice.active{outline:3px solid #fff!important;outline-offset:3px;box-shadow:0 0 0 5px color-mix(in srgb,var(--accent) 45%,transparent)}
+.compact-command .eyebrow{font-size:18px!important;font-weight:950!important;letter-spacing:.08em;line-height:1.05;color:#fff}
+.compact-command #homeDate{margin:7px 0 0!important;font-size:13px!important;font-weight:650;opacity:.86}
+.compact-command{padding:15px 18px!important}
