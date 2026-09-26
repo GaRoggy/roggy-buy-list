@@ -312,7 +312,7 @@ function setPage(page){
  else if(page==="vehicle"){ $("pageTitle").textContent="Vehicle";$("pageSubtitle").textContent="Maintenance and ownership."; $("addBtn").style.display="none"; }
  else if(page==="drivers"){ $("pageTitle").textContent="Bad Drivers";$("pageSubtitle").textContent="Track observations and compare demographics.";loadDrivers() }
  else if(page==="reminders"){ $("pageTitle").textContent="Reminders";$("pageSubtitle").textContent="What is coming up.";$("addBtn").style.display="none";loadReminders() }
- else if(page==="todos"){ $("pageTitle").textContent="To Dos";$("pageSubtitle").textContent="Things that need doing.";$("addBtn").style.display="none";loadTodos() }
+ else if(page==="todos"){ $("pageTitle").textContent="Tasks";$("pageSubtitle").textContent="Things that need doing.";$("addBtn").style.display="none";loadTodos() }
  else if(page==="digestibles"){ $("pageTitle").textContent="Digestibles";$("pageSubtitle").textContent="Books, movies, and anime worth consuming.";$("addBtn").style.display="none";loadDigestibles() }
  else if(page==="budget"){ $("pageTitle").textContent="Budget 🔒";$("pageSubtitle").textContent="Private financial dashboard.";$("addBtn").style.display="none";lockBudget() }
  else {currentView="active";document.querySelectorAll(".sub-tab").forEach(z=>z.classList.toggle("active",z.dataset.view==="active"));renderLists()}
