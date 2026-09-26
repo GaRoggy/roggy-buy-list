@@ -355,7 +355,6 @@ function renderHome(){
  const todays=(reminders||[]).filter(x=>{const d=reminderStart(x),finish=reminderEnd(x);return d<tomorrow&&(finish>localDay(now)||d>=localDay(now))}).slice(0,4);
  $("homeTimeline").innerHTML='<div class="section-head"><div><span class="eyebrow">TODAY</span><h3>Next up</h3></div><button class="text-action" data-home-jump="reminders">See all</button></div>'+(todays.length?todays.map(x=>'<button class="timeline-row" data-home-jump="reminders"><span>'+esc(x.all_day?"All day":new Date(x.start_at).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}))+'</span><b>'+esc(x.title)+'</b></button>').join(""):'<div class="quiet-state">Nothing demanding your attention right now.</div>');
  renderImportantEmails();
- renderBrainPreview();
  document.querySelectorAll("[data-home-jump]").forEach(b=>b.onclick=()=>setPage(b.dataset.homeJump));
  if(!remindersLoaded){remindersLoaded=true;loadReminders().then(()=>{if(currentPage==="home")renderHome()}).catch(()=>{})}
 }
