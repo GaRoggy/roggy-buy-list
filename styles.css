@@ -758,3 +758,9 @@ body::before,body::after{display:none!important}
 }
 .is-swiping .mountain-panorama{transition:none}
 html:not(.is-swiping) .mountain-panorama{transition:transform .24s cubic-bezier(.22,.72,.24,1)}
+
+/* Softer swipe settling v82 */
+.swipe-panel{transition:transform .42s cubic-bezier(.16,.78,.22,1)!important}
+.is-swiping .swipe-panel{transition:none!important}
+.mountain-panorama{transition:transform .42s cubic-bezier(.16,.78,.22,1)!important}
+.is-swiping .mountain-panorama{transition:none!important}
