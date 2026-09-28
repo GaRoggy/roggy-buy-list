@@ -742,3 +742,19 @@ body::before,body::after{display:none!important}
 .swipe-neighbor{position:fixed!important;inset:auto 0 0 0;top:var(--swipe-page-top,0px);height:calc(100dvh - var(--swipe-page-top,0px));overflow-y:hidden;background:transparent;z-index:3}
 .swipe-animating{transition:transform .23s cubic-bezier(.2,.75,.25,1)!important}
 @media(prefers-reduced-motion:reduce){.swipe-animating{transition:none!important}}
+
+/* Panorama navigation refinement v81 */
+.page-tabs,.reminder-subtabs{background:transparent!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important}
+#remindersPage{background:transparent!important}
+.page-tabs,.reminder-subtabs,#homePage,#remindersPage,#todosPage,#listsPage{touch-action:pan-y}
+.mountain-panorama{
+  width:auto!important;
+  min-width:100vw!important;
+  height:118vh!important;
+  min-height:118vh!important;
+  object-fit:cover!important;
+  object-position:left top;
+  transition:transform .08s linear;
+}
+.is-swiping .mountain-panorama{transition:none}
+html:not(.is-swiping) .mountain-panorama{transition:transform .24s cubic-bezier(.22,.72,.24,1)}
