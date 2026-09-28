@@ -513,6 +513,20 @@ document.addEventListener("keydown",e=>{
 /* Primary-page live panorama navigation v80 */
 const PRIMARY_SWIPE_PAGES=["home","reminders","todos","buy"];
 let swipeStartX=0,swipeStartY=0,swipeLastX=0,swipeTracking=false,swipeAxis=null,swipeNeighbor=null,swipeNeighborPage=null,swipePointerId=null;
+let swipeVisualCurrent=null,swipeSettleTimer=null;
+function ensureSwipeHUD(){
+ if(document.querySelector(".swipe-hud"))return;
+ const hud=document.createElement("div");hud.className="swipe-hud";hud.setAttribute("aria-hidden","true");
+ hud.innerHTML='<span class="swipe-edge swipe-edge-left">‹</span><div class="swipe-dots">'+PRIMARY_SWIPE_PAGES.map((p,n)=>'<i data-swipe-dot="'+p+'" style="--dot-index:'+n+'"></i>').join("")+'</div><span class="swipe-edge swipe-edge-right">›</span><div class="swipe-progress-track"><b></b></div>';
+ document.querySelector(".page-tabs")?.insertAdjacentElement("afterend",hud);updateSwipeHUD(currentPage);
+}
+function updateSwipeHUD(page=currentPage,progress=0,direction=0){
+ const idx=PRIMARY_SWIPE_PAGES.indexOf(page);
+ document.querySelectorAll("[data-swipe-dot]").forEach((d,n)=>d.classList.toggle("active",n===idx));
+ document.documentElement.style.setProperty("--swipe-progress",Math.max(0,Math.min(1,progress)).toFixed(3));
+ document.documentElement.style.setProperty("--swipe-dir",direction);
+ document.documentElement.dataset.swipeFrom=page;
+}
 function swipeBlockedTarget(t){return !!t.closest("dialog,input,textarea,select,a,[contenteditable=true],.fab,.side-drawer")}
 function primaryPageEl(page){
  if(page==="home")return $("homePage");if(page==="reminders")return $("remindersPage");if(page==="todos")return $("todosPage");if(page==="buy")return $("listsPage");return null;
@@ -534,9 +548,10 @@ function setMountainView(page=currentPage,dragPx=0){
  document.documentElement.style.setProperty("--panorama-y",y.toFixed(1)+"px");
 }
 function clearSwipeStyles(){
- [primaryPageEl(currentPage),swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating");el.style.removeProperty("--panel-x")});
+ [swipeVisualCurrent,primaryPageEl(currentPage),swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating");el.style.removeProperty("--panel-x");el.style.removeProperty("--swipe-opacity");});
  if(swipeNeighbor&&swipeNeighborPage!==currentPage)swipeNeighbor.hidden=true;
- swipeNeighbor=null;swipeNeighborPage=null;document.documentElement.classList.remove("is-swiping");
+ swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-swiping","is-settling");
+ updateSwipeHUD(currentPage,0,0);
 }
 function prepareSwipeNeighbor(direction){
  const idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),next=idx+direction;
@@ -552,7 +567,7 @@ function prepareSwipeNeighbor(direction){
 function positionSwipePanels(dx){
  const headerBottom=document.querySelector(".page-tabs")?.getBoundingClientRect().bottom||document.querySelector("header")?.getBoundingClientRect().bottom||0;
  document.documentElement.style.setProperty("--swipe-page-top",Math.max(0,headerBottom)+"px");
- const w=window.innerWidth||1,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,current=primaryPageEl(currentPage);
+ const w=window.innerWidth||1,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,current=primaryPageEl(currentPage),progress=Math.min(1,Math.abs(dx)/(w*.25)); swipeVisualCurrent=current;updateSwipeHUD(currentPage,progress,direction);
  if(idx===0&&direction===-1){
    document.documentElement.classList.add("is-swiping");if(current){current.classList.add("swipe-panel");current.style.setProperty("--panel-x",Math.min(dx,w*.12)+"px")}
    setMountainView(currentPage,Math.min(dx,w*.12));return;
@@ -573,13 +588,13 @@ function settleSwipe(commit,dx){
  const current=primaryPageEl(currentPage),w=window.innerWidth||1,direction=dx<0?1:-1;
  // Finger is up: leave drag mode BEFORE enabling transitions. Drag mode intentionally
  // disables transitions, so keeping it here made every release teleport.
- document.documentElement.classList.remove("is-swiping");
- [current,swipeNeighbor].filter(Boolean).forEach(el=>el.classList.add("swipe-animating"));
+ document.documentElement.classList.remove("is-swiping");document.documentElement.classList.add("is-settling");
+ swipeVisualCurrent=current;[current,swipeNeighbor].filter(Boolean).forEach(el=>el.classList.add("swipe-animating"));
  if(commit&&swipeNeighbor){
    const target=swipeNeighborPage;
    // Logical navigation commits immediately on finger release so another swipe can
    // target the next page without waiting for the visual glide to finish.
-   currentPage=target;
+   currentPage=target;updateSwipeHUD(target,1,direction);
    document.querySelectorAll(".page-tab").forEach(b=>b.classList.toggle("active",b.dataset.page===target));
    window.dispatchEvent(new CustomEvent("roggy-page",{detail:{page:target}}));
    // Keep the old/new DOM panels intact while their 420ms visual transition finishes.
@@ -588,7 +603,7 @@ function settleSwipe(commit,dx){
      swipeNeighbor.style.setProperty("--panel-x","0px");
      setMountainView(target,0);
    }));
-   setTimeout(()=>{
+   clearTimeout(swipeSettleTimer);swipeSettleTimer=setTimeout(()=>{
      [current,swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating");el.style.removeProperty("--panel-x")});
      if(current&&current!==primaryPageEl(target))current.hidden=true;
      swipeNeighbor=null;swipeNeighborPage=null;
@@ -596,12 +611,13 @@ function settleSwipe(commit,dx){
      setMountainView(target,0);
    },420);
  }else{
+   updateSwipeHUD(currentPage,0,0);
    requestAnimationFrame(()=>requestAnimationFrame(()=>{
      if(current)current.style.setProperty("--panel-x","0px");
      if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x",(direction*w)+"px");
      setMountainView(currentPage,0);
    }));
-   setTimeout(clearSwipeStyles,520);
+   clearTimeout(swipeSettleTimer);swipeSettleTimer=setTimeout(clearSwipeStyles,520);
  }
 }
 function finishSwipe(){
@@ -618,6 +634,12 @@ function finishSwipe(){
 }
 function beginPrimarySwipe(x,y,target,pointerId=null){
  if(swipeBlockedTarget(target)||!PRIMARY_SWIPE_PAGES.includes(currentPage))return false;
+ if(document.documentElement.classList.contains("is-settling")){
+   clearTimeout(swipeSettleTimer);
+   [swipeVisualCurrent,swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating");el.style.removeProperty("--panel-x")});
+   document.querySelectorAll("#homePage,#remindersPage,#todosPage,#listsPage").forEach(el=>el.hidden=el!==primaryPageEl(currentPage));
+   swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-settling");
+ }
  clearSwipeStyles();swipeStartX=swipeLastX=x;swipeStartY=y;swipeTracking=true;swipeAxis=null;swipePointerId=pointerId;return true;
 }
 function movePrimarySwipe(x,y){
@@ -650,7 +672,7 @@ document.addEventListener("pointermove",e=>{
 document.addEventListener("pointerup",e=>{if(swipeTracking&&e.pointerType==="mouse"&&e.pointerId===swipePointerId)finishSwipe()},{passive:true});
 document.addEventListener("pointercancel",e=>{if(swipeTracking&&e.pointerType==="mouse"&&e.pointerId===swipePointerId){swipeTracking=false;swipeAxis=null;swipePointerId=null;settleSwipe(false,0)}},{passive:true});
 window.addEventListener("roggy-page",e=>setMountainView(e.detail.page,0));
-setMountainView(currentPage,0);
+ensureSwipeHUD();setMountainView(currentPage,0);
 window.addEventListener("resize",()=>setMountainView(currentPage,0));
 let mountainScrollRAF=0;
 window.addEventListener("scroll",()=>{
