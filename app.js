@@ -577,15 +577,21 @@ function settleSwipe(commit,dx){
  [current,swipeNeighbor].filter(Boolean).forEach(el=>el.classList.add("swipe-animating"));
  if(commit&&swipeNeighbor){
    const target=swipeNeighborPage;
-   // Preserve the exact finger-release frame, then animate from it to the destination.
+   // Logical navigation commits immediately on finger release so another swipe can
+   // target the next page without waiting for the visual glide to finish.
+   currentPage=target;
+   document.querySelectorAll(".page-tab").forEach(b=>b.classList.toggle("active",b.dataset.page===target));
+   window.dispatchEvent(new CustomEvent("roggy-page",{detail:{page:target}}));
+   // Keep the old/new DOM panels intact while their 420ms visual transition finishes.
    requestAnimationFrame(()=>requestAnimationFrame(()=>{
      if(current)current.style.setProperty("--panel-x",(-direction*w)+"px");
      swipeNeighbor.style.setProperty("--panel-x","0px");
      setMountainView(target,0);
    }));
    setTimeout(()=>{
-     currentPage=target;
-     clearSwipeStyles();
+     [current,swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating");el.style.removeProperty("--panel-x")});
+     if(current&&current!==primaryPageEl(target))current.hidden=true;
+     swipeNeighbor=null;swipeNeighborPage=null;
      setPage(target);
      setMountainView(target,0);
    },420);
