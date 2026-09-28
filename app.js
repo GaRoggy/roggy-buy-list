@@ -571,29 +571,31 @@ function positionSwipePanels(dx){
 }
 function settleSwipe(commit,dx){
  const current=primaryPageEl(currentPage),w=window.innerWidth||1,direction=dx<0?1:-1;
+ // Finger is up: leave drag mode BEFORE enabling transitions. Drag mode intentionally
+ // disables transitions, so keeping it here made every release teleport.
+ document.documentElement.classList.remove("is-swiping");
  [current,swipeNeighbor].filter(Boolean).forEach(el=>el.classList.add("swipe-animating"));
  if(commit&&swipeNeighbor){
    const target=swipeNeighborPage;
-   // Force the dragged positions to paint before starting the long finishing glide.
+   // Preserve the exact finger-release frame, then animate from it to the destination.
    requestAnimationFrame(()=>requestAnimationFrame(()=>{
      if(current)current.style.setProperty("--panel-x",(-direction*w)+"px");
      swipeNeighbor.style.setProperty("--panel-x","0px");
      setMountainView(target,0);
    }));
    setTimeout(()=>{
-     // Make the neighbor the real current page before removing the temporary sliding shell.
      currentPage=target;
      clearSwipeStyles();
      setPage(target);
      setMountainView(target,0);
-   },560);
+   },680);
  }else{
    requestAnimationFrame(()=>requestAnimationFrame(()=>{
      if(current)current.style.setProperty("--panel-x","0px");
      if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x",(direction*w)+"px");
      setMountainView(currentPage,0);
    }));
-   setTimeout(clearSwipeStyles,430);
+   setTimeout(clearSwipeStyles,520);
  }
 }
 function finishSwipe(){
