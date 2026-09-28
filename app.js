@@ -520,16 +520,20 @@ function primaryPageEl(page){
 function mountainPagePosition(page=currentPage){
  const idx=PRIMARY_SWIPE_PAGES.indexOf(page);return idx<0?0:idx/(PRIMARY_SWIPE_PAGES.length-1);
 }
+let mountainScrollY=window.scrollY||0;
 function setMountainView(page=currentPage,dragPx=0){
- const progress=mountainPagePosition(page),w=window.innerWidth||1;
- // Finished pixel offsets avoid unsupported CSS variable multiplication.
- // Drag follows the finger; persistent page offset reveals a new part of the 2.5-page panorama.
- const far=(-w*.28*progress)+(dragPx*.16);
- const mid=(-w*.48*progress)+(dragPx*.28);
- const near=(-w*.72*progress)+(dragPx*.42);
+ const progress=mountainPagePosition(page),w=window.innerWidth||1,scroll=mountainScrollY;
+ // Strong depth separation: distant terrain barely moves, foreground responds heavily.
+ const far=(-w*.16*progress)+(dragPx*.08);
+ const mid=(-w*.52*progress)+(dragPx*.30);
+ const near=(-w*.98*progress)+(dragPx*.58);
+ const farY=Math.min(scroll*.025,22),midY=Math.min(scroll*.075,64),nearY=Math.min(scroll*.16,132);
  document.documentElement.style.setProperty("--mountain-far-x",far.toFixed(1)+"px");
  document.documentElement.style.setProperty("--mountain-mid-x",mid.toFixed(1)+"px");
  document.documentElement.style.setProperty("--mountain-near-x",near.toFixed(1)+"px");
+ document.documentElement.style.setProperty("--mountain-far-y",farY.toFixed(1)+"px");
+ document.documentElement.style.setProperty("--mountain-mid-y",midY.toFixed(1)+"px");
+ document.documentElement.style.setProperty("--mountain-near-y",nearY.toFixed(1)+"px");
 }
 function clearSwipeStyles(){
  [primaryPageEl(currentPage),swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating");el.style.removeProperty("--panel-x")});
@@ -606,3 +610,10 @@ window.addEventListener("roggy-page",e=>setMountainView(e.detail.page,0));
 setMountainView(currentPage,0);
 
 window.addEventListener("resize",()=>setMountainView(currentPage,0));
+
+let mountainScrollRAF=0;
+window.addEventListener("scroll",()=>{
+ mountainScrollY=window.scrollY||document.documentElement.scrollTop||0;
+ if(mountainScrollRAF)return;
+ mountainScrollRAF=requestAnimationFrame(()=>{mountainScrollRAF=0;if(!swipeTracking)setMountainView(currentPage,0)});
+},{passive:true});
