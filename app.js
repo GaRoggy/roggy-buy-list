@@ -576,16 +576,16 @@ function settleSwipe(commit,dx){
    if(current)current.style.setProperty("--panel-x",(-direction*w)+"px");
    swipeNeighbor.style.setProperty("--panel-x","0px");
    const target=swipeNeighborPage;setMountainView(target,0);
-   setTimeout(()=>{clearSwipeStyles();setPage(target);setMountainView(target,0)},420);
+   setTimeout(()=>{clearSwipeStyles();setPage(target);setMountainView(target,0)},220);
  }else{
    if(current)current.style.setProperty("--panel-x","0px");
    if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x",(direction*w)+"px");
-   setMountainView(currentPage,0);setTimeout(clearSwipeStyles,420);
+   setMountainView(currentPage,0);setTimeout(clearSwipeStyles,220);
  }
 }
 function finishSwipe(){
  if(!swipeTracking)return;
- const dx=swipeLastX-swipeStartX,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,threshold=Math.min(72,(window.innerWidth||1)*.16);
+ const dx=swipeLastX-swipeStartX,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,threshold=Math.min(88,(window.innerWidth||1)*.19);
  swipeTracking=false;swipePointerId=null;
  if(swipeAxis==="x"&&idx===0&&direction===-1){
    const open=Math.abs(dx)>=threshold;clearSwipeStyles();setMountainView(currentPage,0);if(open)$("moreToggle").checked=true;
