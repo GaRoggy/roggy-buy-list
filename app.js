@@ -523,17 +523,15 @@ function mountainPagePosition(page=currentPage){
 let mountainScrollY=window.scrollY||0;
 function setMountainView(page=currentPage,dragPx=0){
  const progress=mountainPagePosition(page),w=window.innerWidth||1,scroll=mountainScrollY;
- // Strong depth separation: distant terrain barely moves, foreground responds heavily.
- const far=(-w*.16*progress)+(dragPx*.08);
- const mid=(-w*.52*progress)+(dragPx*.30);
- const near=(-w*.98*progress)+(dragPx*.58);
- const farY=-Math.min(scroll*.015,14),midY=-Math.min(scroll*.085,76),nearY=-Math.min(scroll*.22,180);
- document.documentElement.style.setProperty("--mountain-far-x",far.toFixed(1)+"px");
- document.documentElement.style.setProperty("--mountain-mid-x",mid.toFixed(1)+"px");
- document.documentElement.style.setProperty("--mountain-near-x",near.toFixed(1)+"px");
- document.documentElement.style.setProperty("--mountain-far-y",farY.toFixed(1)+"px");
- document.documentElement.style.setProperty("--mountain-mid-y",midY.toFixed(1)+"px");
- document.documentElement.style.setProperty("--mountain-near-y",nearY.toFixed(1)+"px");
+ const layers=[
+  ["r8",.10,.045,.010,10],["r7",.18,.075,.020,20],["r6",.28,.12,.035,34],["r5",.40,.18,.055,50],
+  ["r4",.54,.26,.080,72],["r3",.70,.36,.115,100],["r2",.86,.48,.160,140],["r1",1.02,.60,.225,190]
+ ];
+ layers.forEach(([name,pageRate,dragRate,scrollRate,cap])=>{
+   const x=(-w*pageRate*progress)+(dragPx*dragRate),y=-Math.min(scroll*scrollRate,cap);
+   document.documentElement.style.setProperty("--mountain-"+name+"-x",x.toFixed(1)+"px");
+   document.documentElement.style.setProperty("--mountain-"+name+"-y",y.toFixed(1)+"px");
+ });
 }
 function clearSwipeStyles(){
  [primaryPageEl(currentPage),swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating");el.style.removeProperty("--panel-x")});
