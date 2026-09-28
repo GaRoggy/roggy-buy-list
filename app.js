@@ -588,7 +588,7 @@ function settleSwipe(commit,dx){
      clearSwipeStyles();
      setPage(target);
      setMountainView(target,0);
-   },680);
+   },420);
  }else{
    requestAnimationFrame(()=>requestAnimationFrame(()=>{
      if(current)current.style.setProperty("--panel-x","0px");
