@@ -281,13 +281,15 @@
 <dialog id="projectDialog"><form method="dialog" id="projectForm"><div class="dialog-head"><h2>New Project</h2><button value="cancel" class="plain">✕</button></div><label>Project<input id="projectTitle" required placeholder="Apartment, Ant Farm, Trip…"></label><label>What is the goal?<textarea id="projectDescription" rows="3"></textarea></label><div class="grid2"><label>Status<select id="projectStatus"><option>Idea</option><option selected>Active</option><option>On Hold</option><option>Completed</option></select></label><label>Priority<select id="projectPriority"><option>Low</option><option selected>Medium</option><option>High</option></select></label></div><div class="actions"><button value="cancel" class="secondary">Cancel</button><button value="default" class="primary">Create</button></div></form></dialog>
 
 <dialog id="itemDialog"><form method="dialog" id="itemForm">
-  <div class="dialog-head"><h2 id="dialogTitle">Add item</h2><button value="cancel" class="plain">✕</button></div>
+  <div class="dialog-head"><div><span class="dialog-kicker">QUICK ADD</span><h2 id="dialogTitle">Add item</h2></div><button id="itemDialogClose" type="button" class="plain dialog-close" aria-label="Close">✕</button></div>
   <input type="hidden" id="itemId">
+  <div id="itemDestinationWrap" class="item-destination"><span>Add to</span><div class="destination-options" role="group" aria-label="Choose list"><button type="button" class="destination-choice" data-destination="buy">Buy List</button><button type="button" class="destination-choice" data-destination="groceries">Groceries</button></div></div>
+  <input type="hidden" id="itemDestination" value="buy">
   <label>Item<input id="item" required></label>
   <div class="grid2"><label>Category<input id="category" placeholder="Home, Kitchen, Produce..."></label><label>Priority<select id="priority"><option>Need</option><option>Want</option><option>Eventually</option></select></label></div>
   <div class="grid2"><label>Quantity<input id="quantity" placeholder="1"></label><label>Status<select id="itemStatus"><option>Looking</option><option>Ready to Buy</option><option>Bought</option></select></label></div>
   <label>Notes<textarea id="notes" rows="3"></textarea></label>
-  <div class="actions"><button value="cancel" class="secondary">Cancel</button><button id="saveBtn" value="default" class="primary">Save</button></div>
+  <div class="actions"><button id="itemDialogCancel" type="button" class="secondary">Cancel</button><button id="saveBtn" type="submit" value="default" class="primary">Save</button></div>
 </form></dialog>
 
 <dialog id="driverDialog"><form method="dialog" id="driverForm">
