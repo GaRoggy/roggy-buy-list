@@ -99,14 +99,22 @@ function renderResearch(x){
   return out+'</div>';
 }
 function changePriority(x,dir){const levels=["Eventually","Want","Need"],i=levels.indexOf(x.priority),n=Math.max(0,Math.min(2,i+(dir==="up"?1:-1)));x.priority=levels[n];saveItem(x).catch(showErr);renderLists()}
-function openEdit(x){$("dialogTitle").textContent="Edit item";$("itemId").value=x.id;$("item").value=x.item;$("category").value=x.category||"";$("priority").value=x.priority||"Need";$("quantity").value=x.quantity||"";$("itemStatus").value=x.status||"Looking";$("notes").value=x.notes||"";$("itemDialog").showModal()}
-function openAddItem(){$("dialogTitle").textContent=currentPage==="buy"?"Add purchase":"Add grocery";$("itemId").value="";$("itemForm").reset();$("priority").value="Need";$("itemDialog").showModal()}
+function setItemDestination(dest){
+ dest=dest==="groceries"?"groceries":"buy";$("itemDestination").value=dest;
+ document.querySelectorAll(".destination-choice").forEach(b=>{const active=b.dataset.destination===dest;b.classList.toggle("active",active);b.setAttribute("aria-pressed",active?"true":"false")});
+ $("dialogTitle").textContent=dest==="buy"?"Add purchase":"Add grocery";
+}
+function closeItemDialog(){$("itemDialog").close()}
+function openEdit(x){$("dialogTitle").textContent="Edit item";$("itemId").value=x.id;$("item").value=x.item;$("category").value=x.category||"";$("priority").value=x.priority||"Need";$("quantity").value=x.quantity||"";$("itemStatus").value=x.status||"Looking";$("notes").value=x.notes||"";$("itemDestinationWrap").hidden=true;$("itemDestination").value=currentPage;$("itemDialog").showModal()}
+function openAddItem(){$("itemId").value="";$("itemForm").reset();$("priority").value="Need";$("itemDestinationWrap").hidden=false;setItemDestination(currentPage==="buy"?"buy":"groceries");$("itemDialog").showModal();setTimeout(()=>$("item").focus(),50)}
+document.querySelectorAll(".destination-choice").forEach(b=>b.onclick=()=>setItemDestination(b.dataset.destination));
+$("itemDialogClose").onclick=closeItemDialog;$("itemDialogCancel").onclick=closeItemDialog;
 
 $("itemForm").addEventListener("submit",e=>{
-  if(e.submitter?.value==="cancel")return;e.preventDefault();const id=$("itemId").value;let x=id?data[currentPage].find(v=>v.id===id):null;
-  if(!x){x={id:crypto.randomUUID(),deleted:false,created:new Date().toISOString().slice(0,10)};data[currentPage].push(x)}
+  e.preventDefault();const id=$("itemId").value,target=id?currentPage:$("itemDestination").value;let x=id?data[target].find(v=>v.id===id):null;
+  if(!x){x={id:crypto.randomUUID(),deleted:false,created:new Date().toISOString().slice(0,10)};data[target].push(x)}
   Object.assign(x,{item:$("item").value.trim(),category:$("category").value.trim(),priority:$("priority").value,quantity:$("quantity").value.trim(),status:$("itemStatus").value,notes:$("notes").value.trim()});
-  (id?saveItem(x):insertItem(x)).catch(showErr);$("itemDialog").close();renderLists();
+  const previousPage=currentPage;currentPage=target;(id?saveItem(x):insertItem(x)).catch(showErr);$("itemDialog").close();currentPage=previousPage;renderLists();
 });
 
 async function loadDrivers(){
