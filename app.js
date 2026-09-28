@@ -306,6 +306,17 @@ function openDigestDetail(x){
 document.querySelectorAll(".digest-tab").forEach(b=>b.onclick=()=>{digestView=b.dataset.digestView;digestStatusView="queue";document.querySelectorAll(".digest-tab").forEach(z=>z.classList.toggle("active",z===b));document.querySelectorAll(".digest-status-tab").forEach(z=>z.classList.toggle("active",z.dataset.digestStatus==="queue"));renderDigestibles()});
 document.querySelectorAll(".digest-status-tab").forEach(b=>b.onclick=()=>{digestStatusView=b.dataset.digestStatus;document.querySelectorAll(".digest-status-tab").forEach(z=>z.classList.toggle("active",z===b));renderDigestibles()});
 $("closeDigestDetail").onclick=()=>$("digestDetailDialog").close();
+$("digestAddClose").onclick=()=>$("digestAddDialog").close();$("digestAddCancel").onclick=()=>$("digestAddDialog").close();
+$("digestAddForm").addEventListener("submit",async e=>{
+ e.preventDefault();
+ const row={media_type:$("digestAddType").value,status:$("digestAddStatus").value,title:$("digestAddTitle").value.trim(),creator:$("digestAddCreator").value.trim()||null,description:$("digestAddDescription").value.trim()||null};
+ const {data:created,error}=await sb.from("digestibles").insert(row).select().single();
+ if(error){showErr(error,"digestStatus");return}
+ digestibles.push(created);digestView=created.media_type==="book"?"books":created.media_type==="movie"?"movies":"animes";digestStatusView=created.status;
+ document.querySelectorAll(".digest-tab").forEach(z=>z.classList.toggle("active",z.dataset.digestView===digestView));
+ document.querySelectorAll(".digest-status-tab").forEach(z=>z.classList.toggle("active",z.dataset.digestStatus===digestStatusView));
+ $("digestAddDialog").close();$("digestAddForm").reset();if(currentPage==="digestibles")renderDigestibles();
+});
 
 function setPage(page){
  currentPage=page;
@@ -314,15 +325,15 @@ function setPage(page){
  $("listsPage").hidden=isSpecial;
  special.forEach(p=>{const el=$(p==="project-detail"?"projectDetailPage":p+"Page");if(el)el.hidden=page!==p});
  $("backupBtn").style.display=isSpecial?"none":"";$("addBtn").style.display="";
- if(page==="home"){ $("pageTitle").textContent="Roggy";$("pageSubtitle").textContent="Your command center."; $("addBtn").style.display="none";renderHome(); }
+ if(page==="home"){ $("pageTitle").textContent="Roggy";$("pageSubtitle").textContent="Your command center.";renderHome(); }
  else if(page==="ai"){ $("pageTitle").textContent="Local AI";$("pageSubtitle").textContent="A private conversation with your PC.";$("addBtn").style.display="none"; }
- else if(page==="projects"){ $("pageTitle").textContent="Projects";$("pageSubtitle").textContent="Everything with a finish line."; $("addBtn").style.display="none";renderProjects(); }
+ else if(page==="projects"){ $("pageTitle").textContent="Projects";$("pageSubtitle").textContent="Everything with a finish line.";renderProjects(); }
  else if(page==="health"){ $("pageTitle").textContent="Health";$("pageSubtitle").textContent="Garmin-powered wellness."; $("addBtn").style.display="none"; }
  else if(page==="vehicle"){ $("pageTitle").textContent="Vehicle";$("pageSubtitle").textContent="Maintenance and ownership."; $("addBtn").style.display="none"; }
  else if(page==="drivers"){ $("pageTitle").textContent="Bad Drivers";$("pageSubtitle").textContent="Track observations and compare demographics.";loadDrivers() }
- else if(page==="reminders"){ $("pageTitle").textContent="Reminders";$("pageSubtitle").textContent="What is coming up.";$("addBtn").style.display="none";loadReminders() }
- else if(page==="todos"){ $("pageTitle").textContent="Tasks";$("pageSubtitle").textContent="Things that need doing.";$("addBtn").style.display="none";loadTodos() }
- else if(page==="digestibles"){ $("pageTitle").textContent="Digestibles";$("pageSubtitle").textContent="Books, movies, and anime worth consuming.";$("addBtn").style.display="none";loadDigestibles() }
+ else if(page==="reminders"){ $("pageTitle").textContent="Reminders";$("pageSubtitle").textContent="What is coming up.";loadReminders() }
+ else if(page==="todos"){ $("pageTitle").textContent="Tasks";$("pageSubtitle").textContent="Things that need doing.";loadTodos() }
+ else if(page==="digestibles"){ $("pageTitle").textContent="Digestibles";$("pageSubtitle").textContent="Books, movies, and anime worth consuming.";loadDigestibles() }
  else if(page==="budget"){ $("pageTitle").textContent="Budget 🔒";$("pageSubtitle").textContent="Private financial dashboard.";$("addBtn").style.display="none";lockBudget() }
  else {currentView="active";document.querySelectorAll(".sub-tab").forEach(z=>z.classList.toggle("active",z.dataset.view==="active"));renderLists()}
  $("moreToggle").checked=false;
@@ -335,7 +346,19 @@ document.querySelectorAll(".filter").forEach(b=>b.onclick=()=>{currentFilter=b.d
 $("search").oninput=renderLists;$("sort").onchange=renderLists;
 $("driverSearch").oninput=renderDriverList;$("driverSort").onchange=renderDriverList;
 $("ratioDimension").onchange=()=>{renderRatioChart();renderAnalysis()};
-$("addBtn").onclick=()=>currentPage==="drivers"?$("driverDialog").showModal():openAddItem();
+function openAddLauncher(){$("addLauncherDialog").showModal()}
+function closeAddLauncher(){$("addLauncherDialog").close()}
+function launchAddTarget(target){
+ closeAddLauncher();
+ if(target==="buy"||target==="groceries"){const previous=currentPage;currentPage=target;openAddItem();currentPage=previous;setItemDestination(target);return}
+ if(target==="todos"){$("todoForm").reset();$("todoDialog").showModal();setTimeout(()=>$("todoTitle").focus(),50);return}
+ if(target==="digestibles"){$("digestAddForm").reset();$("digestAddType").value=digestView==="movies"?"movie":digestView==="animes"?"anime":"book";$("digestAddStatus").value=digestStatusView;$("digestAddDialog").showModal();setTimeout(()=>$("digestAddTitle").focus(),50);return}
+ if(target==="drivers"){$("driverForm").reset();$("driverDialog").showModal();return}
+ if(target==="projects"){$("projectForm").reset();$("projectDialog").showModal();return}
+}
+$("addBtn").onclick=openAddLauncher;
+$("addLauncherClose").onclick=closeAddLauncher;$("addLauncherCancel").onclick=closeAddLauncher;
+document.querySelectorAll("[data-add-target]").forEach(b=>b.onclick=()=>launchAddTarget(b.dataset.addTarget));
 
 $("backupBtn").onclick=()=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="roggy-lists-backup.json";a.click();URL.revokeObjectURL(a.href)};
 
