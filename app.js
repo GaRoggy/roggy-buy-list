@@ -372,13 +372,15 @@ function renderImportantEmails(){
 const BUILTIN_PROJECTS={
 "Smart Home":{
  description:"Build a local-first apartment automation system that your AI can sense and control without relying on Alexa as the assistant.",
- steps:["Install Home Assistant or the chosen local automation service on the PC","Connect the Zigbee/Thread coordinator and pair sensors","Set up ATOM Voice units for room voice input","Pair presence/motion and door/window sensors","Connect dimmable smart lighting and validate API/local control","Expose safe device controls to the local AI agent","Test voice → AI → device actions and fallback behavior"],
+ steps:["Install Home Assistant or the chosen local automation service on the PC","Connect the Zigbee/Thread coordinator and pair sensors","Set up ATOM Voice units for room voice input","Pair presence/motion and door/window sensors","Connect dimmable smart lighting and validate API/local control","Add the SONOFF CAM-S2 to the local network and enable RTSP/ONVIF","Mount microphones/cameras with generalized mounts where needed","Expose safe device and camera controls to the local AI agent","Test voice → AI → device/camera actions and fallback behavior"],
  devices:[
   {name:"M5Stack ATOM Voice / Echo ×3",note:"Wall-powered room microphone/speaker nodes.",url:"https://shop.m5stack.com/products/atom-echo-smart-speaker-dev-kit"},
   {name:"Home Assistant Connect ZBT-1",note:"USB Zigbee coordinator for local sensors.",url:"https://www.home-assistant.io/connectzbt1"},
   {name:"Aqara Door & Window Sensors",note:"Zigbee contact sensors for doors/windows.",url:"https://www.aqara.com/us/product/door-and-window-sensor/"},
   {name:"Aqara Presence / Motion Sensor",note:"Presence sensing for room automations.",url:"https://www.aqara.com/us/product/sensor/"},
-  {name:"Govee dimmable smart lighting",note:"Lighting controlled through supported Govee APIs/models.",url:"https://developer.govee.com/"}
+  {name:"Govee dimmable smart lighting",note:"Lighting controlled through supported Govee APIs/models.",url:"https://developer.govee.com/"},
+  {name:"SONOFF CAM-S2 Indoor HD Camera",note:"1080p local AI vision camera with RTSP/ONVIF support.",url:"https://sonoff.tech/"},
+  {name:"Generalized mounts",note:"Reusable desk/wall/table mounts for microphones, cameras and other smart-home hardware.",url:""}
  ]},
 "Smart Car":{
  description:"Create a car telemetry system that records OBD-II and location data, then syncs trips and vehicle status back to your PC/app.",
@@ -390,9 +392,54 @@ const BUILTIN_PROJECTS={
   {name:"Dashcam",note:"Separate recording system; integration is optional.",url:"https://www.garmin.com/en-US/c/automotive/dash-cams/"}
  ]}
 };
+
+const PROJECT_STEP_KEY="roggy-project-step-checks-v1";
+let projectStepChecks=JSON.parse(localStorage.getItem(PROJECT_STEP_KEY)||"{}");
+function saveProjectStepChecks(){localStorage.setItem(PROJECT_STEP_KEY,JSON.stringify(projectStepChecks))}
 function ensureBuiltinProjects(){for(const [title,d] of Object.entries(BUILTIN_PROJECTS)){if(!projects.some(p=>p.title===title))projects.push({title,description:d.description,status:"Active",priority:"High",builtin:true,created:new Date().toISOString()})}saveProjects()}
 function renderProjects(){ensureBuiltinProjects();$("projectList").innerHTML=projects.map((p,i)=>'<button class="project-card project-open" data-project-open="'+i+'"><div><span class="project-status">'+esc(p.status)+'</span><h3>'+esc(p.title)+'</h3><p>'+esc(p.description||"No description yet.")+'</p></div><div class="project-foot"><span>'+esc(p.priority)+' priority</span><span>Open →</span></div></button>').join("");document.querySelectorAll("[data-project-open]").forEach(b=>b.onclick=()=>openProject(+b.dataset.projectOpen))}
-function openProject(i){const p=projects[i];if(!p)return;const built=BUILTIN_PROJECTS[p.title];$("pageTitle").textContent=p.title;$("pageSubtitle").textContent="Project";document.querySelectorAll("body>section[id$='Page']").forEach(x=>x.hidden=true);$("projectDetailPage").hidden=false;let html='<section class="project-detail-hero"><span class="project-status">'+esc(p.status)+'</span><h2>'+esc(p.title)+'</h2><p>'+esc(p.description||"")+'</p></section>';if(built){html+='<section class="project-detail-section"><h3>Implementation</h3><ul>'+built.steps.map(x=>'<li>'+esc(x)+'</li>').join("")+'</ul></section><section class="project-detail-section"><h3>Devices / hardware</h3><div class="project-device-list">'+built.devices.map(d=>'<a class="project-device" href="'+d.url+'" target="_blank" rel="noopener"><div><b>'+esc(d.name)+'</b><p>'+esc(d.note)+'</p></div><span>↗</span></a>').join("")+'</div></section>'}else html+='<section class="project-detail-section"><h3>Project notes</h3><p>'+esc(p.description||"No notes yet.")+'</p></section>';$("projectDetailContent").innerHTML=html}
+async function fetchProjectItems(title){
+ const {data:{session}}=await sb.auth.getSession();
+ if(!isOwnerSession(session))return [];
+ const {data:projectRows,error:projectError}=await sb.from("projects").select("id").eq("title",title).eq("user_id",session.user.id).limit(1);
+ if(projectError||!projectRows?.[0])return [];
+ const {data:itemRows,error:itemError}=await sb.from("project_items").select("*").eq("project_id",projectRows[0].id).eq("user_id",session.user.id).order("created_at",{ascending:true});
+ if(itemError)return [];
+ return itemRows||[];
+}
+function projectCheckButton(checked,attrs,label){
+ return '<button type="button" class="project-check '+(checked?'checked':'')+'" '+attrs+' aria-label="'+esc(label)+'" aria-pressed="'+(checked?'true':'false')+'">'+(checked?'✓':'')+'</button>';
+}
+async function toggleProjectItemCheck(id,next,title){
+ const {error}=await sb.from("project_items").update({checked:next,updated_at:new Date().toISOString()}).eq("id",id);
+ if(error){showErr(error);return}
+ const i=projects.findIndex(p=>p.title===title);
+ if(i>=0)openProject(i);
+}
+function toggleProjectStepCheck(projectTitle,index){
+ const key=projectTitle+"::"+index;
+ projectStepChecks[key]=!projectStepChecks[key];
+ saveProjectStepChecks();
+ const i=projects.findIndex(p=>p.title===projectTitle);
+ if(i>=0)openProject(i);
+}
+async function openProject(i){
+ const p=projects[i];if(!p)return;const built=BUILTIN_PROJECTS[p.title];
+ $("pageTitle").textContent=p.title;$("pageSubtitle").textContent="Project";
+ document.querySelectorAll("body>section[id$='Page']").forEach(x=>x.hidden=true);$("projectDetailPage").hidden=false;
+ let html='<section class="project-detail-hero"><span class="project-status">'+esc(p.status)+'</span><h2>'+esc(p.title)+'</h2><p>'+esc(p.description||"")+'</p></section>';
+ if(built){
+   html+='<section class="project-detail-section"><h3>Implementation</h3><div class="project-check-list">'+built.steps.map((x,index)=>{const checked=!!projectStepChecks[p.title+"::"+index];return '<div class="project-check-row">'+projectCheckButton(checked,'data-project-step="'+index+'"','Toggle '+x)+'<div class="project-check-copy">'+esc(x)+'</div></div>'}).join("")+'</div></section>';
+   let dbItems=await fetchProjectItems(p.title);
+   const byTitle=new Map(dbItems.map(x=>[x.title.toLowerCase(),x]));
+   const items=built.devices.map(d=>{const row=byTitle.get(d.name.toLowerCase());return row?{...d,...row,name:row.title,note:row.notes||d.note,url:row.product_url||d.url,checked:!!row.checked}:d});
+   dbItems.filter(row=>!items.some(x=>(x.id&&x.id===row.id)||x.name.toLowerCase()===row.title.toLowerCase())).forEach(row=>items.push({name:row.title,note:row.notes||"",url:row.product_url||"",id:row.id,checked:!!row.checked}));
+   html+='<section class="project-detail-section"><h3>Devices / hardware</h3><div class="project-device-list">'+items.map(d=>'<div class="project-device project-device-checkable">'+projectCheckButton(!!d.checked,d.id?'data-project-item="'+esc(d.id)+'" data-project-item-title="'+esc(p.title)+'"':'disabled','Toggle '+d.name)+'<div class="project-device-copy"><b>'+esc(d.name)+'</b><p>'+esc(d.note||"")+'</p></div>'+(d.url?'<a class="project-device-link" href="'+esc(d.url)+'" target="_blank" rel="noopener" aria-label="Open '+esc(d.name)+' link">↗</a>':'')+'</div>').join("")+'</div></section>';
+ } else html+='<section class="project-detail-section"><h3>Project notes</h3><p>'+esc(p.description||"No notes yet.")+'</p></section>';
+ $("projectDetailContent").innerHTML=html;
+ document.querySelectorAll("[data-project-step]").forEach(b=>b.onclick=()=>toggleProjectStepCheck(p.title,+b.dataset.projectStep));
+ document.querySelectorAll("[data-project-item]").forEach(b=>b.onclick=()=>toggleProjectItemCheck(b.dataset.projectItem,b.getAttribute("aria-pressed")!=="true",b.dataset.projectItemTitle));
+}
 $("projectBackBtn").onclick=()=>setPage("projects");
 $("newProjectBtn").onclick=()=>$("projectDialog").showModal();
 $("projectForm").addEventListener("submit",e=>{if(e.submitter?.value==="cancel")return;e.preventDefault();projects.unshift({title:$("projectTitle").value.trim(),description:$("projectDescription").value.trim(),status:$("projectStatus").value,priority:$("projectPriority").value,created:new Date().toISOString()});saveProjects();$("projectForm").reset();$("projectDialog").close();renderProjects()});
@@ -400,7 +447,7 @@ document.querySelectorAll(".command-card[data-jump]").forEach(b=>b.onclick=()=>s
 function openGlobalSearch(){$("globalSearchDialog").showModal();$("globalSearchInput").value="";renderGlobalSearch("");setTimeout(()=>$("globalSearchInput").focus(),50)}
 $("globalSearchBtn").onclick=openGlobalSearch;$("closeGlobalSearch").onclick=()=>$("globalSearchDialog").close();
 function renderGlobalSearch(q){q=q.toLowerCase().trim();let rows=[];(data.buy||[]).filter(x=>!x.deleted).forEach(x=>rows.push({type:"Buy",title:x.item,page:"buy"}));(data.groceries||[]).filter(x=>!x.deleted).forEach(x=>rows.push({type:"Grocery",title:x.item,page:"groceries"}));projects.forEach(x=>rows.push({type:"Project",title:x.title,page:"projects"}));(reminders||[]).forEach(x=>rows.push({type:"Reminder",title:x.title,page:"reminders"}));(digestibles||[]).forEach(x=>rows.push({type:x.media_type,title:x.title,page:"digestibles"}));if(q)rows=rows.filter(x=>(x.type+" "+x.title).toLowerCase().includes(q));else rows=rows.slice(0,8);$("globalSearchResults").innerHTML=rows.slice(0,30).map((x,i)=>'<button data-search-index="'+i+'"><span>'+esc(x.type)+'</span><b>'+esc(x.title)+'</b></button>').join("")||'<div class="quiet-state">No matches.</div>';document.querySelectorAll("[data-search-index]").forEach((b)=>b.onclick=()=>{$("globalSearchDialog").close();setPage(rows[+b.dataset.searchIndex].page)})}
-$("globalSearchInput").oninput=e=>renderGlobalSearch(e.target.value);
+$("globalSearchInput").oninput=e=>renderGlobalSearch("");
 
 /* Appearance settings v31 */
 const THEME_KEY="roggy-theme",UI_SIZE_KEY="roggy-ui-size",COLOR_MODE_KEY="roggy-color-mode";
