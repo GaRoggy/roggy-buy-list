@@ -510,15 +510,63 @@ document.addEventListener("keydown",e=>{
 });
 
 
-/* Primary-page swipe navigation + mountain parallax v76 */
+/* Primary-page live swipe navigation + panoramic mountain parallax v77 */
 const PRIMARY_SWIPE_PAGES=["home","reminders","todos","buy"];
-let swipeStartX=0,swipeStartY=0,swipeLastX=0,swipeTracking=false,swipeAxis=null;
-function swipeBlockedTarget(t){
- return !!t.closest("dialog,input,textarea,select,button,a,[contenteditable=true],.segmented,.page-tabs,.sub-tabs,.digest-status-tabs");
+let swipeStartX=0,swipeStartY=0,swipeLastX=0,swipeTracking=false,swipeAxis=null,swipeNeighbor=null,swipeNeighborPage=null;
+function swipeBlockedTarget(t){return !!t.closest("dialog,input,textarea,select,button,a,[contenteditable=true],.segmented,.page-tabs,.sub-tabs,.digest-status-tabs")}
+function primaryPageEl(page){
+ if(page==="home")return $("homePage");if(page==="reminders")return $("remindersPage");if(page==="todos")return $("todosPage");if(page==="buy")return $("listsPage");return null;
 }
-function setMountainParallax(px){
- const bounded=Math.max(-1,Math.min(1,px/(window.innerWidth||1)));
- document.documentElement.style.setProperty("--swipe-x",bounded.toFixed(3));
+function mountainPagePosition(page=currentPage){
+ const idx=PRIMARY_SWIPE_PAGES.indexOf(page);return idx<0?0:idx/(PRIMARY_SWIPE_PAGES.length-1);
+}
+function setMountainView(page=currentPage,dragPx=0){
+ document.documentElement.style.setProperty("--mountain-page",mountainPagePosition(page).toFixed(4));
+ document.documentElement.style.setProperty("--swipe-px",String(dragPx.toFixed(1)));
+}
+function clearSwipeStyles(){
+ [primaryPageEl(currentPage),swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating");el.style.removeProperty("--panel-x")});
+ if(swipeNeighbor&&swipeNeighborPage!==currentPage)swipeNeighbor.hidden=true;
+ swipeNeighbor=null;swipeNeighborPage=null;document.documentElement.classList.remove("is-swiping");
+}
+function prepareSwipeNeighbor(direction){
+ const idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),next=idx+direction;
+ if(next<0||next>=PRIMARY_SWIPE_PAGES.length)return false;
+ swipeNeighborPage=PRIMARY_SWIPE_PAGES[next];swipeNeighbor=primaryPageEl(swipeNeighborPage);
+ if(!swipeNeighbor)return false;
+ if(swipeNeighborPage==="reminders")loadReminders();
+ else if(swipeNeighborPage==="todos")loadTodos();
+ else if(swipeNeighborPage==="buy"){currentView="active";renderLists()}
+ swipeNeighbor.hidden=false;swipeNeighbor.classList.add("swipe-panel","swipe-neighbor");
+ return true;
+}
+function positionSwipePanels(dx){
+ const headerBottom=document.querySelector(".page-tabs")?.getBoundingClientRect().bottom||document.querySelector("header")?.getBoundingClientRect().bottom||0;document.documentElement.style.setProperty("--swipe-page-top",Math.max(0,headerBottom)+"px");
+ const w=window.innerWidth||1,direction=dx<0?1:-1,current=primaryPageEl(currentPage);
+ if(!swipeNeighbor||swipeNeighborPage!==PRIMARY_SWIPE_PAGES[PRIMARY_SWIPE_PAGES.indexOf(currentPage)+direction]){
+   if(swipeNeighbor&&swipeNeighborPage!==currentPage)swipeNeighbor.hidden=true;
+   swipeNeighbor=null;swipeNeighborPage=null;if(!prepareSwipeNeighbor(direction))dx*=.28;
+ }
+ document.documentElement.classList.add("is-swiping");
+ if(current){current.classList.add("swipe-panel");current.style.setProperty("--panel-x",dx+"px")}
+ if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x",(dx+direction*w)+"px");
+ setMountainView(currentPage,dx);
+}
+function settleSwipe(commit,dx){
+ const current=primaryPageEl(currentPage),w=window.innerWidth||1,direction=dx<0?1:-1;
+ [current,swipeNeighbor].filter(Boolean).forEach(el=>el.classList.add("swipe-animating"));
+ if(commit&&swipeNeighbor){
+   if(current)current.style.setProperty("--panel-x",(-direction*w)+"px");
+   swipeNeighbor.style.setProperty("--panel-x","0px");
+   const target=swipeNeighborPage;
+   document.documentElement.style.setProperty("--mountain-page",mountainPagePosition(target).toFixed(4));
+   document.documentElement.style.setProperty("--swipe-px","0");
+   setTimeout(()=>{clearSwipeStyles();setPage(target);setMountainView(target,0)},230);
+ }else{
+   if(current)current.style.setProperty("--panel-x","0px");
+   if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x",(direction*w)+"px");
+   setMountainView(currentPage,0);setTimeout(clearSwipeStyles,230);
+ }
 }
 document.addEventListener("touchstart",e=>{
  if(e.touches.length!==1||swipeBlockedTarget(e.target)||!PRIMARY_SWIPE_PAGES.includes(currentPage))return;
@@ -528,18 +576,13 @@ document.addEventListener("touchmove",e=>{
  if(!swipeTracking||e.touches.length!==1)return;
  const dx=e.touches[0].clientX-swipeStartX,dy=e.touches[0].clientY-swipeStartY;
  if(!swipeAxis&&Math.hypot(dx,dy)>10)swipeAxis=Math.abs(dx)>Math.abs(dy)*1.25?"x":"y";
- if(swipeAxis!=="x")return;
- swipeLastX=e.touches[0].clientX;setMountainParallax(dx);
+ if(swipeAxis!=="x")return;swipeLastX=e.touches[0].clientX;positionSwipePanels(dx);
 },{passive:true});
 document.addEventListener("touchend",()=>{
- if(!swipeTracking)return;
- const dx=swipeLastX-swipeStartX,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage);
- swipeTracking=false;swipeAxis=null;
- if(Math.abs(dx)>=Math.min(90,window.innerWidth*.18)){
-   const next=dx<0?idx+1:idx-1;
-   if(next>=0&&next<PRIMARY_SWIPE_PAGES.length)setPage(PRIMARY_SWIPE_PAGES[next]);
- }
- document.documentElement.classList.add("parallax-settle");setMountainParallax(0);
- setTimeout(()=>document.documentElement.classList.remove("parallax-settle"),260);
+ if(!swipeTracking)return;const dx=swipeLastX-swipeStartX;swipeTracking=false;
+ if(swipeAxis==="x")settleSwipe(Math.abs(dx)>=Math.min(90,(window.innerWidth||1)*.2),dx);
+ else clearSwipeStyles();swipeAxis=null;
 },{passive:true});
-document.addEventListener("touchcancel",()=>{swipeTracking=false;swipeAxis=null;setMountainParallax(0)},{passive:true});
+document.addEventListener("touchcancel",()=>{swipeTracking=false;swipeAxis=null;settleSwipe(false,0)},{passive:true});
+window.addEventListener("roggy-page",e=>setMountainView(e.detail.page,0));
+setMountainView(currentPage,0);
