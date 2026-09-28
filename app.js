@@ -525,7 +525,7 @@ function setMountainView(page=currentPage,dragPx=0){
  const idx=mountainPagePosition(page),viewportW=window.innerWidth||1,viewportH=window.innerHeight||1;
  // Use a modest slice of the panorama per page. Drag interpolation exactly matches
  // the eventual page position, so releasing a swipe never makes the image jump.
- const pageStep=viewportW*.46;
+ const pageStep=viewportW*.28;
  const dragProgress=Math.max(-1.15,Math.min(1.15,dragPx/viewportW));
  const x=-(idx*pageStep)+(dragProgress*pageStep);
  // Vertical movement is intentionally slower than content scrolling.
@@ -576,16 +576,16 @@ function settleSwipe(commit,dx){
    if(current)current.style.setProperty("--panel-x",(-direction*w)+"px");
    swipeNeighbor.style.setProperty("--panel-x","0px");
    const target=swipeNeighborPage;setMountainView(target,0);
-   setTimeout(()=>{clearSwipeStyles();setPage(target);setMountainView(target,0)},230);
+   setTimeout(()=>{clearSwipeStyles();setPage(target);setMountainView(target,0)},420);
  }else{
    if(current)current.style.setProperty("--panel-x","0px");
    if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x",(direction*w)+"px");
-   setMountainView(currentPage,0);setTimeout(clearSwipeStyles,230);
+   setMountainView(currentPage,0);setTimeout(clearSwipeStyles,420);
  }
 }
 function finishSwipe(){
  if(!swipeTracking)return;
- const dx=swipeLastX-swipeStartX,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,threshold=Math.min(90,(window.innerWidth||1)*.2);
+ const dx=swipeLastX-swipeStartX,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,threshold=Math.min(72,(window.innerWidth||1)*.16);
  swipeTracking=false;swipePointerId=null;
  if(swipeAxis==="x"&&idx===0&&direction===-1){
    const open=Math.abs(dx)>=threshold;clearSwipeStyles();setMountainView(currentPage,0);if(open)$("moreToggle").checked=true;
