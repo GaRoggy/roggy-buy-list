@@ -527,7 +527,7 @@ function setMountainView(page=currentPage,dragPx=0){
  const far=(-w*.16*progress)+(dragPx*.08);
  const mid=(-w*.52*progress)+(dragPx*.30);
  const near=(-w*.98*progress)+(dragPx*.58);
- const farY=Math.min(scroll*.025,22),midY=Math.min(scroll*.075,64),nearY=Math.min(scroll*.16,132);
+ const farY=-Math.min(scroll*.015,14),midY=-Math.min(scroll*.085,76),nearY=-Math.min(scroll*.22,180);
  document.documentElement.style.setProperty("--mountain-far-x",far.toFixed(1)+"px");
  document.documentElement.style.setProperty("--mountain-mid-x",mid.toFixed(1)+"px");
  document.documentElement.style.setProperty("--mountain-near-x",near.toFixed(1)+"px");
