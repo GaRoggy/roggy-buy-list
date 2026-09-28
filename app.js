@@ -595,19 +595,39 @@ function finishSwipe(){
  else{clearSwipeStyles();setMountainView(currentPage,0)}
  swipeAxis=null;
 }
+function beginPrimarySwipe(x,y,target,pointerId=null){
+ if(swipeBlockedTarget(target)||!PRIMARY_SWIPE_PAGES.includes(currentPage))return false;
+ clearSwipeStyles();swipeStartX=swipeLastX=x;swipeStartY=y;swipeTracking=true;swipeAxis=null;swipePointerId=pointerId;return true;
+}
+function movePrimarySwipe(x,y){
+ if(!swipeTracking)return false;
+ const dx=x-swipeStartX,dy=y-swipeStartY;
+ if(!swipeAxis&&Math.hypot(dx,dy)>8)swipeAxis=Math.abs(dx)>Math.abs(dy)*1.12?"x":"y";
+ if(swipeAxis!=="x")return false;
+ swipeLastX=x;positionSwipePanels(dx);return true;
+}
+// Native touch events are more reliable on iOS when a swipe begins over tab/button surfaces.
+document.addEventListener("touchstart",e=>{
+ if(e.touches.length!==1)return;
+ const t=e.touches[0];beginPrimarySwipe(t.clientX,t.clientY,e.target,"touch");
+},{passive:true});
+document.addEventListener("touchmove",e=>{
+ if(!swipeTracking||swipePointerId!=="touch"||e.touches.length!==1)return;
+ const t=e.touches[0];if(movePrimarySwipe(t.clientX,t.clientY))e.preventDefault();
+},{passive:false});
+document.addEventListener("touchend",()=>{if(swipeTracking&&swipePointerId==="touch")finishSwipe()},{passive:true});
+document.addEventListener("touchcancel",()=>{if(swipeTracking&&swipePointerId==="touch"){swipeTracking=false;swipeAxis=null;swipePointerId=null;settleSwipe(false,0)}},{passive:true});
+// Pointer handling remains for desktop mouse/trackpad testing, but touch is handled above.
 document.addEventListener("pointerdown",e=>{
- if((e.pointerType==="mouse"&&e.button!==0)||e.isPrimary===false||swipeBlockedTarget(e.target)||!PRIMARY_SWIPE_PAGES.includes(currentPage))return;
- swipeStartX=swipeLastX=e.clientX;swipeStartY=e.clientY;swipeTracking=true;swipeAxis=null;swipePointerId=e.pointerId;
+ if(e.pointerType!=="mouse"||e.button!==0)return;
+ beginPrimarySwipe(e.clientX,e.clientY,e.target,e.pointerId);
 },{passive:true});
 document.addEventListener("pointermove",e=>{
- if(!swipeTracking||e.pointerId!==swipePointerId)return;
- const dx=e.clientX-swipeStartX,dy=e.clientY-swipeStartY;
- if(!swipeAxis&&Math.hypot(dx,dy)>10)swipeAxis=Math.abs(dx)>Math.abs(dy)*1.25?"x":"y";
- if(swipeAxis!=="x")return;
- e.preventDefault();swipeLastX=e.clientX;positionSwipePanels(dx);
+ if(!swipeTracking||e.pointerType!=="mouse"||e.pointerId!==swipePointerId)return;
+ if(movePrimarySwipe(e.clientX,e.clientY))e.preventDefault();
 },{passive:false});
-document.addEventListener("pointerup",finishSwipe,{passive:true});
-document.addEventListener("pointercancel",()=>{if(swipeTracking){swipeTracking=false;swipeAxis=null;swipePointerId=null;settleSwipe(false,0)}},{passive:true});
+document.addEventListener("pointerup",e=>{if(swipeTracking&&e.pointerType==="mouse"&&e.pointerId===swipePointerId)finishSwipe()},{passive:true});
+document.addEventListener("pointercancel",e=>{if(swipeTracking&&e.pointerType==="mouse"&&e.pointerId===swipePointerId){swipeTracking=false;swipeAxis=null;swipePointerId=null;settleSwipe(false,0)}},{passive:true});
 window.addEventListener("roggy-page",e=>setMountainView(e.detail.page,0));
 setMountainView(currentPage,0);
 window.addEventListener("resize",()=>setMountainView(currentPage,0));
