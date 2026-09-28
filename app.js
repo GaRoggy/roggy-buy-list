@@ -549,10 +549,18 @@ function prepareSwipeNeighbor(direction){
 }
 function positionSwipePanels(dx){
  const headerBottom=document.querySelector(".page-tabs")?.getBoundingClientRect().bottom||document.querySelector("header")?.getBoundingClientRect().bottom||0;document.documentElement.style.setProperty("--swipe-page-top",Math.max(0,headerBottom)+"px");
- const w=window.innerWidth||1,direction=dx<0?1:-1,current=primaryPageEl(currentPage);
- if(!swipeNeighbor||swipeNeighborPage!==PRIMARY_SWIPE_PAGES[PRIMARY_SWIPE_PAGES.indexOf(currentPage)+direction]){
+ const w=window.innerWidth||1,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,current=primaryPageEl(currentPage);
+ // Outer boundaries: pulling outward from Home previews the menu; pulling outward from Buy is a hard stop.
+ if(idx===0&&direction===-1){
+   document.documentElement.classList.add("is-swiping");if(current){current.classList.add("swipe-panel");current.style.setProperty("--panel-x",Math.min(dx,w*.12)+"px")}
+   setMountainView(currentPage,Math.min(dx,w*.12));return;
+ }
+ if(idx===PRIMARY_SWIPE_PAGES.length-1&&direction===1){
+   if(current){current.classList.remove("swipe-panel");current.style.removeProperty("--panel-x")}setMountainView(currentPage,0);return;
+ }
+ if(!swipeNeighbor||swipeNeighborPage!==PRIMARY_SWIPE_PAGES[idx+direction]){
    if(swipeNeighbor&&swipeNeighborPage!==currentPage)swipeNeighbor.hidden=true;
-   swipeNeighbor=null;swipeNeighborPage=null;if(!prepareSwipeNeighbor(direction))dx*=.28;
+   swipeNeighbor=null;swipeNeighborPage=null;if(!prepareSwipeNeighbor(direction))return;
  }
  document.documentElement.classList.add("is-swiping");
  if(current){current.classList.add("swipe-panel");current.style.setProperty("--panel-x",dx+"px")}
@@ -585,8 +593,12 @@ document.addEventListener("touchmove",e=>{
  if(swipeAxis!=="x")return;swipeLastX=e.touches[0].clientX;positionSwipePanels(dx);
 },{passive:true});
 document.addEventListener("touchend",()=>{
- if(!swipeTracking)return;const dx=swipeLastX-swipeStartX;swipeTracking=false;
- if(swipeAxis==="x")settleSwipe(Math.abs(dx)>=Math.min(90,(window.innerWidth||1)*.2),dx);
+ if(!swipeTracking)return;const dx=swipeLastX-swipeStartX,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,threshold=Math.min(90,(window.innerWidth||1)*.2);swipeTracking=false;
+ if(swipeAxis==="x"&&idx===0&&direction===-1){
+   const open=Math.abs(dx)>=threshold;clearSwipeStyles();setMountainView(currentPage,0);if(open)$("moreToggle").checked=true;
+ }else if(swipeAxis==="x"&&idx===PRIMARY_SWIPE_PAGES.length-1&&direction===1){
+   clearSwipeStyles();setMountainView(currentPage,0);
+ }else if(swipeAxis==="x")settleSwipe(Math.abs(dx)>=threshold,dx);
  else clearSwipeStyles();swipeAxis=null;
 },{passive:true});
 document.addEventListener("touchcancel",()=>{swipeTracking=false;swipeAxis=null;settleSwipe(false,0)},{passive:true});
