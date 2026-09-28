@@ -732,7 +732,7 @@ input:focus,select:focus,textarea:focus{border-color:color-mix(in srgb,var(--acc
 
 
 /* Panoramic layered mountain background + live page swipe v77 */
-:root{--mountain-far-x:0px;--mountain-mid-x:0px;--mountain-near-x:0px}
+:root{--mountain-far-x:0px;--mountain-mid-x:0px;--mountain-near-x:0px;--mountain-far-y:0px;--mountain-mid-y:0px;--mountain-near-y:0px}
 body{background:linear-gradient(160deg,#120b25 0%,#1a1031 44%,#10091f 100%)!important;background-attachment:fixed!important;overflow-x:hidden}
 body::before,body::after{display:none!important}
 .mountain-scene{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:-1;background:
@@ -740,11 +740,16 @@ body::before,body::after{display:none!important}
  radial-gradient(ellipse at 86% 14%,color-mix(in srgb,var(--accent) 19%,transparent),transparent 35%)}
 .mountain-layer{position:absolute;bottom:-1px;width:250vw;left:0;transform-origin:50% 100%;will-change:transform;transition:transform .23s cubic-bezier(.2,.75,.25,1)}
 .is-swiping .mountain-layer{transition:none}
-.mountain-far{height:72vh;opacity:.30;background:linear-gradient(180deg,color-mix(in srgb,var(--accent2) 44%,#33215f),color-mix(in srgb,var(--accent) 28%,#17102e));clip-path:polygon(0 100%,0 72%,3% 69%,6% 64%,9% 58%,12% 52%,15% 55%,18% 61%,21% 57%,24% 49%,27% 40%,30% 31%,33% 38%,36% 48%,39% 54%,42% 50%,45% 43%,48% 35%,51% 29%,54% 34%,57% 43%,60% 51%,63% 56%,66% 53%,69% 47%,72% 38%,75% 32%,78% 37%,81% 46%,84% 52%,87% 49%,90% 42%,93% 47%,96% 56%,100% 63%,100% 100%);transform:translate3d(var(--mountain-far-x),0,0)}
-.mountain-mid{height:61vh;opacity:.58;background:linear-gradient(155deg,color-mix(in srgb,var(--accent2) 35%,#29154d),color-mix(in srgb,var(--accent) 48%,#160d31) 64%,#160b2d);clip-path:polygon(0 100%,0 76%,4% 72%,8% 65%,12% 54%,16% 45%,20% 50%,24% 60%,28% 63%,32% 58%,36% 47%,40% 34%,44% 22%,48% 30%,52% 43%,56% 52%,60% 58%,64% 54%,68% 44%,72% 36%,76% 40%,80% 51%,84% 58%,88% 53%,92% 43%,96% 51%,100% 62%,100% 100%);transform:translate3d(var(--mountain-mid-x),0,0)}
-.mountain-near{height:49vh;opacity:.94;background:linear-gradient(145deg,#1c0d3b 0%,color-mix(in srgb,var(--accent) 43%,#120a2b) 54%,#0d081d 100%);clip-path:polygon(0 100%,0 78%,5% 74%,10% 66%,15% 54%,20% 46%,25% 51%,30% 62%,35% 67%,40% 62%,45% 50%,50% 37%,55% 28%,60% 36%,65% 50%,70% 60%,75% 65%,80% 60%,85% 50%,90% 43%,95% 52%,100% 64%,100% 100%);transform:translate3d(var(--mountain-near-x),0,0);filter:drop-shadow(0 -18px 30px rgba(8,3,20,.18))}
+.mountain-far{height:72vh;opacity:.30;background:linear-gradient(180deg,color-mix(in srgb,var(--accent2) 44%,#33215f),color-mix(in srgb,var(--accent) 28%,#17102e));clip-path:polygon(0 100%,0 72%,3% 69%,6% 64%,9% 58%,12% 52%,15% 55%,18% 61%,21% 57%,24% 49%,27% 40%,30% 31%,33% 38%,36% 48%,39% 54%,42% 50%,45% 43%,48% 35%,51% 29%,54% 34%,57% 43%,60% 51%,63% 56%,66% 53%,69% 47%,72% 38%,75% 32%,78% 37%,81% 46%,84% 52%,87% 49%,90% 42%,93% 47%,96% 56%,100% 63%,100% 100%);transform:translate3d(var(--mountain-far-x),var(--mountain-far-y),0) scale(1.015)}
+.mountain-mid{height:61vh;opacity:.58;background:linear-gradient(155deg,color-mix(in srgb,var(--accent2) 35%,#29154d),color-mix(in srgb,var(--accent) 48%,#160d31) 64%,#160b2d);clip-path:polygon(0 100%,0 76%,4% 72%,8% 65%,12% 54%,16% 45%,20% 50%,24% 60%,28% 63%,32% 58%,36% 47%,40% 34%,44% 22%,48% 30%,52% 43%,56% 52%,60% 58%,64% 54%,68% 44%,72% 36%,76% 40%,80% 51%,84% 58%,88% 53%,92% 43%,96% 51%,100% 62%,100% 100%);transform:translate3d(var(--mountain-mid-x),var(--mountain-mid-y),0) scale(1.025)}
+.mountain-near{height:49vh;opacity:.94;background:linear-gradient(145deg,#1c0d3b 0%,color-mix(in srgb,var(--accent) 43%,#120a2b) 54%,#0d081d 100%);clip-path:polygon(0 100%,0 78%,5% 74%,10% 66%,15% 54%,20% 46%,25% 51%,30% 62%,35% 67%,40% 62%,45% 50%,50% 37%,55% 28%,60% 36%,65% 50%,70% 60%,75% 65%,80% 60%,85% 50%,90% 43%,95% 52%,100% 64%,100% 100%);transform:translate3d(var(--mountain-near-x),var(--mountain-near-y),0) scale(1.045);filter:drop-shadow(0 -18px 30px rgba(8,3,20,.18))}
 .swipe-panel{position:relative!important;width:100%!important;transform:translate3d(var(--panel-x,0px),0,0)!important;will-change:transform;z-index:2}
 .swipe-neighbor{position:fixed!important;inset:auto 0 0 0;top:var(--swipe-page-top,0px);height:calc(100dvh - var(--swipe-page-top,0px));overflow-y:hidden;background:transparent;z-index:3}
 .swipe-animating{transition:transform .23s cubic-bezier(.2,.75,.25,1)!important}
 @media(max-width:600px){.mountain-far{height:68vh}.mountain-mid{height:58vh}.mountain-near{height:47vh}}
 @media(prefers-reduced-motion:reduce){.mountain-layer,.swipe-animating{transition:none!important}}
+
+/* Stronger depth cues v78 */
+.mountain-far{filter:blur(.45px) saturate(.82);opacity:.24}
+.mountain-mid{filter:blur(.12px) saturate(.94);opacity:.56}
+.mountain-near{filter:drop-shadow(0 -22px 34px rgba(8,3,20,.24)) saturate(1.08);opacity:.98}
