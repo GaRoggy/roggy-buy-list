@@ -636,3 +636,36 @@ input:focus,select:focus,textarea:focus{border-color:color-mix(in srgb,var(--acc
 .project-device-link{color:var(--accent);font-size:20px;text-decoration:none;padding:6px}
 .project-device-checkable .project-check{flex:0 0 25px}
 .project-check:disabled{opacity:.45}
+
+
+/* UX/UI pass v72 — 30 targeted improvements */
+/* 01 */ :root{--tap:44px}
+/* 02 */ body{min-height:100dvh;overscroll-behavior-y:none}
+/* 03 */ header{position:sticky;top:0;z-index:40;padding-top:max(12px,env(safe-area-inset-top))}
+/* 04 */ .header-title{min-width:0}.header-title h1,.header-title p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 05 */ .header-actions{flex-shrink:0}
+/* 06 */ button,a,.page-tab,.drawer-page-tab{min-height:var(--tap)}
+/* 07 */ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid color-mix(in srgb,var(--accent2) 72%,white);outline-offset:3px}
+/* 08 */ .command-search{position:relative;border:1px solid color-mix(in srgb,var(--accent2) 28%,transparent)!important}
+/* 09 */ .command-search kbd{opacity:.7;border:1px solid color-mix(in srgb,var(--accent2) 24%,transparent);border-radius:8px;padding:3px 7px;background:rgba(255,255,255,.04)}
+/* 10 */ .today-hero{border:1px solid rgba(255,255,255,.18);box-shadow:0 14px 34px color-mix(in srgb,var(--accent) 18%,transparent)}
+/* 11 */ .home-focus-strip{gap:8px}
+/* 12 */ .home-focus-strip button{border:1px solid color-mix(in srgb,var(--accent2) 20%,transparent)!important}
+/* 13 */ .home-focus-strip button:active{transform:scale(.975)}
+/* 14 */ .home-focus-strip small{text-transform:uppercase;letter-spacing:.08em;font-size:9px}
+/* 15 */ .command-card{min-height:94px;text-align:left}
+/* 16 */ .command-card-disabled{filter:saturate(.45);opacity:.52!important}
+/* 17 */ .command-card-disabled>span{filter:grayscale(.35)}
+/* 18 */ .email-section{margin-bottom:calc(22px + env(safe-area-inset-bottom))}
+/* 19 */ .important-email{border-radius:14px;transition:background .16s ease,transform .16s ease}
+/* 20 */ .important-email:active{transform:scale(.99);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+/* 21 */ .project-grid{gap:12px}
+/* 22 */ .project-card{overflow:hidden}.project-card::after{content:"";position:absolute;inset:auto 0 0 0;height:2px;background:linear-gradient(90deg,var(--accent2),var(--accent),transparent);opacity:.55}
+/* 23 */ .project-status{text-transform:uppercase;letter-spacing:.075em;font-size:10px;font-weight:900}
+/* 24 */ .project-detail-main{padding-bottom:calc(32px + env(safe-area-inset-bottom))}
+/* 25 */ .project-back{position:sticky;top:calc(86px + env(safe-area-inset-top));z-index:20;backdrop-filter:blur(14px);box-shadow:0 8px 24px rgba(0,0,0,.18)}
+/* 26 */ .project-detail-section{scroll-margin-top:150px}
+/* 27 */ .project-check{transition:transform .14s ease,background .14s ease,border-color .14s ease;box-shadow:inset 0 1px rgba(255,255,255,.08)}
+/* 28 */ .project-check:active{transform:scale(.88)}.project-check.checked{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 10%,transparent),inset 0 1px rgba(255,255,255,.1)}
+/* 29 */ .project-check-row+.project-check-row{border-top:1px solid color-mix(in srgb,var(--accent2) 9%,transparent)}
+/* 30 */ @media(max-width:500px){header{gap:10px}.header-title h1{font-size:26px}.header-title p{font-size:13px}.auth-btn{padding-inline:12px}.system-main,.project-detail-main{padding-left:12px!important;padding-right:12px!important}.project-detail-hero{padding:20px!important}.project-detail-hero h2{font-size:32px}.project-device{padding:14px 12px}.project-check{width:28px;height:28px;min-width:28px}.project-back{top:calc(78px + env(safe-area-inset-top))}}
