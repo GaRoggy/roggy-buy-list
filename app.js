@@ -300,7 +300,8 @@ document.querySelectorAll(".digest-status-tab").forEach(b=>b.onclick=()=>{digest
 $("closeDigestDetail").onclick=()=>$("digestDetailDialog").close();
 
 function setPage(page){
- currentPage=page;document.querySelectorAll(".page-tab").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
+ currentPage=page;
+ window.scrollTo({top:0,behavior:"instant"});document.querySelectorAll(".page-tab").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
  const special=["home","drivers","reminders","todos","budget","digestibles","projects","project-detail","health","vehicle","ai"],isSpecial=special.includes(page);
  $("listsPage").hidden=isSpecial;
  special.forEach(p=>{const el=$(p==="project-detail"?"projectDetailPage":p+"Page");if(el)el.hidden=page!==p});
@@ -446,7 +447,7 @@ document.querySelectorAll(".command-card[data-jump]").forEach(b=>b.onclick=()=>s
 function openGlobalSearch(){$("globalSearchDialog").showModal();$("globalSearchInput").value="";renderGlobalSearch("");setTimeout(()=>$("globalSearchInput").focus(),50)}
 $("globalSearchBtn").onclick=openGlobalSearch;$("closeGlobalSearch").onclick=()=>$("globalSearchDialog").close();
 function renderGlobalSearch(q){q=q.toLowerCase().trim();let rows=[];(data.buy||[]).filter(x=>!x.deleted).forEach(x=>rows.push({type:"Buy",title:x.item,page:"buy"}));(data.groceries||[]).filter(x=>!x.deleted).forEach(x=>rows.push({type:"Grocery",title:x.item,page:"groceries"}));projects.forEach(x=>rows.push({type:"Project",title:x.title,page:"projects"}));(reminders||[]).forEach(x=>rows.push({type:"Reminder",title:x.title,page:"reminders"}));(digestibles||[]).forEach(x=>rows.push({type:x.media_type,title:x.title,page:"digestibles"}));if(q)rows=rows.filter(x=>(x.type+" "+x.title).toLowerCase().includes(q));else rows=rows.slice(0,8);$("globalSearchResults").innerHTML=rows.slice(0,30).map((x,i)=>'<button data-search-index="'+i+'"><span>'+esc(x.type)+'</span><b>'+esc(x.title)+'</b></button>').join("")||'<div class="quiet-state">No matches.</div>';document.querySelectorAll("[data-search-index]").forEach((b)=>b.onclick=()=>{$("globalSearchDialog").close();setPage(rows[+b.dataset.searchIndex].page)})}
-$("globalSearchInput").oninput=e=>renderGlobalSearch("");
+$("globalSearchInput").oninput=e=>renderGlobalSearch(e.target.value);
 
 /* Appearance settings v31 */
 const THEME_KEY="roggy-theme",UI_SIZE_KEY="roggy-ui-size",COLOR_MODE_KEY="roggy-color-mode";
@@ -466,3 +467,13 @@ $("settingsShelfBtn").onclick=()=>{$("moreToggle").checked=false;$("settingsTogg
 
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");
 updateAuth().then(async session=>{if(isOwnerSession(session)){await loadLists();if(typeof loadHomeTasks==="function")await loadHomeTasks();setPage("home")}else setPage("home")});
+
+/* UX pass v72 */
+document.addEventListener("keydown",e=>{
+ if(e.key==="Escape"){
+   if($("moreToggle"))$("moreToggle").checked=false;
+   if($("settingsToggle"))$("settingsToggle").checked=false;
+   document.querySelectorAll("dialog[open]").forEach(d=>d.close());
+ }
+ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="k"){e.preventDefault();openGlobalSearch()}
+});
