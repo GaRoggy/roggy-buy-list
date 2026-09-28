@@ -303,7 +303,7 @@ function setPage(page){
  currentPage=page;document.querySelectorAll(".page-tab").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
  const special=["home","drivers","reminders","todos","budget","digestibles","projects","project-detail","health","vehicle","ai"],isSpecial=special.includes(page);
  $("listsPage").hidden=isSpecial;
- special.forEach(p=>{const el=$(p+"Page");if(el)el.hidden=page!==p});
+ special.forEach(p=>{const el=$(p==="project-detail"?"projectDetailPage":p+"Page");if(el)el.hidden=page!==p});
  $("backupBtn").style.display=isSpecial?"none":"";$("addBtn").style.display="";
  if(page==="home"){ $("pageTitle").textContent="Roggy";$("pageSubtitle").textContent="Your command center."; $("addBtn").style.display="none";renderHome(); }
  else if(page==="ai"){ $("pageTitle").textContent="Local AI";$("pageSubtitle").textContent="A private conversation with your PC.";$("addBtn").style.display="none"; }
@@ -425,8 +425,7 @@ function toggleProjectStepCheck(projectTitle,index){
 }
 async function openProject(i){
  const p=projects[i];if(!p)return;const built=BUILTIN_PROJECTS[p.title];
- $("pageTitle").textContent=p.title;$("pageSubtitle").textContent="Project";
- document.querySelectorAll("body>section[id$='Page']").forEach(x=>x.hidden=true);$("projectDetailPage").hidden=false;
+ setPage("project-detail");$("pageTitle").textContent=p.title;$("pageSubtitle").textContent="Project";
  let html='<section class="project-detail-hero"><span class="project-status">'+esc(p.status)+'</span><h2>'+esc(p.title)+'</h2><p>'+esc(p.description||"")+'</p></section>';
  if(built){
    html+='<section class="project-detail-section"><h3>Implementation</h3><div class="project-check-list">'+built.steps.map((x,index)=>{const checked=!!projectStepChecks[p.title+"::"+index];return '<div class="project-check-row">'+projectCheckButton(checked,'data-project-step="'+index+'"','Toggle '+x)+'<div class="project-check-copy">'+esc(x)+'</div></div>'}).join("")+'</div></section>';
