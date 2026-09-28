@@ -510,9 +510,9 @@ document.addEventListener("keydown",e=>{
 });
 
 
-/* Primary-page live swipe navigation + panoramic mountain parallax v77 */
+/* Primary-page live panorama navigation v80 */
 const PRIMARY_SWIPE_PAGES=["home","reminders","todos","buy"];
-let swipeStartX=0,swipeStartY=0,swipeLastX=0,swipeTracking=false,swipeAxis=null,swipeNeighbor=null,swipeNeighborPage=null;
+let swipeStartX=0,swipeStartY=0,swipeLastX=0,swipeTracking=false,swipeAxis=null,swipeNeighbor=null,swipeNeighborPage=null,swipePointerId=null;
 function swipeBlockedTarget(t){return !!t.closest("dialog,input,textarea,select,button,a,[contenteditable=true],.segmented,.page-tabs,.sub-tabs,.digest-status-tabs")}
 function primaryPageEl(page){
  if(page==="home")return $("homePage");if(page==="reminders")return $("remindersPage");if(page==="todos")return $("todosPage");if(page==="buy")return $("listsPage");return null;
@@ -522,16 +522,13 @@ function mountainPagePosition(page=currentPage){
 }
 let mountainScrollY=window.scrollY||0;
 function setMountainView(page=currentPage,dragPx=0){
- const progress=mountainPagePosition(page),w=window.innerWidth||1,scroll=mountainScrollY;
- const layers=[
-  ["r8",.10,.045,.010,10],["r7",.18,.075,.020,20],["r6",.28,.12,.035,34],["r5",.40,.18,.055,50],
-  ["r4",.54,.26,.080,72],["r3",.70,.36,.115,100],["r2",.86,.48,.160,140],["r1",1.02,.60,.225,190]
- ];
- layers.forEach(([name,pageRate,dragRate,scrollRate,cap])=>{
-   const x=(-w*pageRate*progress)+(dragPx*dragRate),y=-Math.min(scroll*scrollRate,cap);
-   document.documentElement.style.setProperty("--mountain-"+name+"-x",x.toFixed(1)+"px");
-   document.documentElement.style.setProperty("--mountain-"+name+"-y",y.toFixed(1)+"px");
- });
+ const progress=mountainPagePosition(page),viewportW=window.innerWidth||1,viewportH=window.innerHeight||1;
+ const panoramaW=Math.max(viewportW*4,1536),panoramaH=Math.max(viewportH*1.4,495);
+ const trackX=Math.max(0,panoramaW-viewportW),trackY=Math.max(0,panoramaH-viewportH);
+ const x=Math.max(-trackX,Math.min(0,-trackX*progress+dragPx));
+ const y=-Math.min(Math.max(0,mountainScrollY),trackY);
+ document.documentElement.style.setProperty("--panorama-x",x.toFixed(1)+"px");
+ document.documentElement.style.setProperty("--panorama-y",y.toFixed(1)+"px");
 }
 function clearSwipeStyles(){
  [primaryPageEl(currentPage),swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating");el.style.removeProperty("--panel-x")});
@@ -550,9 +547,9 @@ function prepareSwipeNeighbor(direction){
  return true;
 }
 function positionSwipePanels(dx){
- const headerBottom=document.querySelector(".page-tabs")?.getBoundingClientRect().bottom||document.querySelector("header")?.getBoundingClientRect().bottom||0;document.documentElement.style.setProperty("--swipe-page-top",Math.max(0,headerBottom)+"px");
+ const headerBottom=document.querySelector(".page-tabs")?.getBoundingClientRect().bottom||document.querySelector("header")?.getBoundingClientRect().bottom||0;
+ document.documentElement.style.setProperty("--swipe-page-top",Math.max(0,headerBottom)+"px");
  const w=window.innerWidth||1,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,current=primaryPageEl(currentPage);
- // Outer boundaries: pulling outward from Home previews the menu; pulling outward from Buy is a hard stop.
  if(idx===0&&direction===-1){
    document.documentElement.classList.add("is-swiping");if(current){current.classList.add("swipe-panel");current.style.setProperty("--panel-x",Math.min(dx,w*.12)+"px")}
    setMountainView(currentPage,Math.min(dx,w*.12));return;
@@ -575,8 +572,7 @@ function settleSwipe(commit,dx){
  if(commit&&swipeNeighbor){
    if(current)current.style.setProperty("--panel-x",(-direction*w)+"px");
    swipeNeighbor.style.setProperty("--panel-x","0px");
-   const target=swipeNeighborPage;
-   setMountainView(target,0);
+   const target=swipeNeighborPage;setMountainView(target,0);
    setTimeout(()=>{clearSwipeStyles();setPage(target);setMountainView(target,0)},230);
  }else{
    if(current)current.style.setProperty("--panel-x","0px");
@@ -584,31 +580,34 @@ function settleSwipe(commit,dx){
    setMountainView(currentPage,0);setTimeout(clearSwipeStyles,230);
  }
 }
-document.addEventListener("touchstart",e=>{
- if(e.touches.length!==1||swipeBlockedTarget(e.target)||!PRIMARY_SWIPE_PAGES.includes(currentPage))return;
- swipeStartX=swipeLastX=e.touches[0].clientX;swipeStartY=e.touches[0].clientY;swipeTracking=true;swipeAxis=null;
-},{passive:true});
-document.addEventListener("touchmove",e=>{
- if(!swipeTracking||e.touches.length!==1)return;
- const dx=e.touches[0].clientX-swipeStartX,dy=e.touches[0].clientY-swipeStartY;
- if(!swipeAxis&&Math.hypot(dx,dy)>10)swipeAxis=Math.abs(dx)>Math.abs(dy)*1.25?"x":"y";
- if(swipeAxis!=="x")return;swipeLastX=e.touches[0].clientX;positionSwipePanels(dx);
-},{passive:true});
-document.addEventListener("touchend",()=>{
- if(!swipeTracking)return;const dx=swipeLastX-swipeStartX,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,threshold=Math.min(90,(window.innerWidth||1)*.2);swipeTracking=false;
+function finishSwipe(){
+ if(!swipeTracking)return;
+ const dx=swipeLastX-swipeStartX,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,threshold=Math.min(90,(window.innerWidth||1)*.2);
+ swipeTracking=false;swipePointerId=null;
  if(swipeAxis==="x"&&idx===0&&direction===-1){
-   const open=Math.abs(dx)>=threshold;clearSwipeStyles();setMountainView(currentPage,0);if(open)$("moreToggle").checked=true;
+   const open=Math.abs(dx)>=threshold;clearSwipeStyles();setMountainView(currentPage,0);if(open)$("#moreToggle").checked=true;
  }else if(swipeAxis==="x"&&idx===PRIMARY_SWIPE_PAGES.length-1&&direction===1){
    clearSwipeStyles();setMountainView(currentPage,0);
  }else if(swipeAxis==="x")settleSwipe(Math.abs(dx)>=threshold,dx);
- else clearSwipeStyles();swipeAxis=null;
+ else{clearSwipeStyles();setMountainView(currentPage,0)}
+ swipeAxis=null;
+}
+document.addEventListener("pointerdown",e=>{
+ if((e.pointerType==="mouse"&&e.button!==0)||e.isPrimary===false||swipeBlockedTarget(e.target)||!PRIMARY_SWIPE_PAGES.includes(currentPage))return;
+ swipeStartX=swipeLastX=e.clientX;swipeStartY=e.clientY;swipeTracking=true;swipeAxis=null;swipePointerId=e.pointerId;
 },{passive:true});
-document.addEventListener("touchcancel",()=>{swipeTracking=false;swipeAxis=null;settleSwipe(false,0)},{passive:true});
+document.addEventListener("pointermove",e=>{
+ if(!swipeTracking||e.pointerId!==swipePointerId)return;
+ const dx=e.clientX-swipeStartX,dy=e.clientY-swipeStartY;
+ if(!swipeAxis&&Math.hypot(dx,dy)>10)swipeAxis=Math.abs(dx)>Math.abs(dy)*1.25?"x":"y";
+ if(swipeAxis!=="x")return;
+ e.preventDefault();swipeLastX=e.clientX;positionSwipePanels(dx);
+},{passive:false});
+document.addEventListener("pointerup",finishSwipe,{passive:true});
+document.addEventListener("pointercancel",()=>{if(swipeTracking){swipeTracking=false;swipeAxis=null;swipePointerId=null;settleSwipe(false,0)}},{passive:true});
 window.addEventListener("roggy-page",e=>setMountainView(e.detail.page,0));
 setMountainView(currentPage,0);
-
 window.addEventListener("resize",()=>setMountainView(currentPage,0));
-
 let mountainScrollRAF=0;
 window.addEventListener("scroll",()=>{
  mountainScrollY=window.scrollY||document.documentElement.scrollTop||0;
