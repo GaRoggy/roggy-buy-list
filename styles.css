@@ -734,7 +734,7 @@ input:focus,select:focus,textarea:focus{border-color:color-mix(in srgb,var(--acc
 /* Real panorama background v80 */
 :root{--panorama-x:0px;--panorama-y:0px}
 html,body{min-height:100%;background:transparent!important}
-body{overflow-x:hidden;isolation:isolate}
+body{overflow-x:hidden;isolation:isolate;touch-action:pan-y}
 body::before,body::after{display:none!important}
 .mountain-scene{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:-1;background:#140a29}
 .mountain-panorama{position:absolute;left:0;top:0;display:block;width:max(400vw,1536px);height:max(140vh,495px);max-width:none;object-fit:fill;transform:translate3d(var(--panorama-x,0px),var(--panorama-y,0px),0);transform-origin:top left;will-change:transform;user-select:none}
