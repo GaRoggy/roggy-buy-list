@@ -826,3 +826,45 @@ html[data-swipe-from="buy"] .swipe-edge-right{opacity:.12}
 #homePage,#remindersPage,#todosPage,#listsPage{overscroll-behavior-x:none}
 @media(max-width:500px){.page-tabs{gap:2px}.page-tab{min-height:42px}.swipe-hud{height:14px}.swipe-dots{gap:5px;padding:3px 8px}}
 @media(prefers-reduced-motion:reduce){.swipe-hud,.swipe-dots i,.page-tab,.swipe-edge{transition:none!important}}
+
+/* Swipe UX polish II v100 */
+.swipe-panel{opacity:var(--swipe-opacity,1);transition-property:transform,opacity!important}
+.is-swiping .swipe-panel{transition:none!important}
+.swipe-animating{opacity:1!important}
+.swipe-ready .swipe-progress-track b{box-shadow:0 0 8px rgba(255,255,255,.75)}
+.swipe-ready .swipe-dots{transform:scale(1.035)}
+.swipe-ready .swipe-hud{filter:brightness(1.08)}
+.swipe-dots{transition:transform .16s ease,background .22s ease,box-shadow .22s ease}
+.is-swiping .swipe-dots{background:color-mix(in srgb,#16072c 50%,transparent);box-shadow:0 4px 18px rgba(8,2,18,.12)}
+.swipe-ready .swipe-dots{box-shadow:0 4px 20px rgba(111,54,190,.2)}
+html[data-swipe-direction="next"] .swipe-progress-track b{transform-origin:left}
+html[data-swipe-direction="prev"] .swipe-progress-track b{transform-origin:right}
+html[data-swipe-direction="next"] .swipe-edge-right{opacity:.78;transform:translateX(3px) scale(1.04)}
+html[data-swipe-direction="prev"] .swipe-edge-left{opacity:.78;transform:translateX(-3px) scale(1.04)}
+html[data-swipe-direction="next"] .swipe-edge-left{opacity:.12}
+html[data-swipe-direction="prev"] .swipe-edge-right{opacity:.12}
+.swipe-ready[data-swipe-direction="next"] .swipe-edge-right,.swipe-ready[data-swipe-direction="prev"] .swipe-edge-left{filter:drop-shadow(0 0 5px rgba(218,199,255,.7))}
+.page-tabs{isolation:isolate}
+.page-tabs::after{content:"";position:absolute;left:4%;right:4%;bottom:1px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.08),transparent);pointer-events:none}
+.page-tab{will-change:transform}
+.is-swiping .page-tab:not(.active){opacity:.72}
+.is-swiping .page-tab.active{opacity:1}
+.is-settling .page-tab.active{animation:swipeTabSettle .42s cubic-bezier(.18,.76,.2,1)}
+@keyframes swipeTabSettle{0%{transform:translateY(-1px) scale(.98)}55%{transform:translateY(-1px) scale(1.025)}100%{transform:translateY(-1px) scale(1)}}
+.swipe-neighbor{border-left:1px solid rgba(255,255,255,.035)}
+html[data-swipe-direction="prev"] .swipe-neighbor{border-left:0;border-right:1px solid rgba(255,255,255,.035)}
+.is-swiping .mountain-panorama{filter:saturate(1.025) contrast(1.01)}
+.is-settling .mountain-panorama{filter:saturate(1.015)}
+.mountain-panorama{backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.swipe-progress-track{transform:translateZ(0)}
+.swipe-progress-track b{will-change:transform}
+.swipe-edge{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1}
+.swipe-ready .swipe-edge{color:rgba(255,255,255,.88)}
+.swipe-ready .swipe-progress-track{height:2px}
+.swipe-ready .swipe-progress-track b{background:linear-gradient(90deg,rgba(216,190,255,.7),#fff)}
+.swipe-hud{user-select:none;-webkit-user-select:none}
+.swipe-panel,.swipe-neighbor{-webkit-tap-highlight-color:transparent}
+.is-swiping body{cursor:grabbing}
+@media(hover:hover){.page-tab:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}}
+@media(max-width:500px){.swipe-edge{font-size:20px}.swipe-progress-track{left:22%;right:22%}.page-tab.active::after{left:29%;right:29%}}
+@media(prefers-reduced-motion:reduce){.is-settling .page-tab.active{animation:none!important}.swipe-dots{transition:none!important}}
