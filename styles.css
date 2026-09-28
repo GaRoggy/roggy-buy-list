@@ -898,3 +898,15 @@ html[data-swipe-direction="prev"] .swipe-neighbor{border-left:0;border-right:1px
  .swipe-hud{height:14px!important}
  .page-tabs{margin-bottom:14px!important}
 }
+
+/* Correct swipe HUD anchoring v103 */
+.page-tabs{position:relative!important}
+.page-tabs>.swipe-hud{
+ position:absolute!important;
+ left:0!important;
+ right:0!important;
+ top:100%!important;
+ height:14px!important;
+ margin:0!important;
+ transform:none!important;
+}
