@@ -573,19 +573,32 @@ function settleSwipe(commit,dx){
  const current=primaryPageEl(currentPage),w=window.innerWidth||1,direction=dx<0?1:-1;
  [current,swipeNeighbor].filter(Boolean).forEach(el=>el.classList.add("swipe-animating"));
  if(commit&&swipeNeighbor){
-   if(current)current.style.setProperty("--panel-x",(-direction*w)+"px");
-   swipeNeighbor.style.setProperty("--panel-x","0px");
-   const target=swipeNeighborPage;setMountainView(target,0);
-   setTimeout(()=>{clearSwipeStyles();setPage(target);setMountainView(target,0)},220);
+   const target=swipeNeighborPage;
+   // Force the dragged positions to paint before starting the long finishing glide.
+   requestAnimationFrame(()=>requestAnimationFrame(()=>{
+     if(current)current.style.setProperty("--panel-x",(-direction*w)+"px");
+     swipeNeighbor.style.setProperty("--panel-x","0px");
+     setMountainView(target,0);
+   }));
+   setTimeout(()=>{
+     // Make the neighbor the real current page before removing the temporary sliding shell.
+     currentPage=target;
+     clearSwipeStyles();
+     setPage(target);
+     setMountainView(target,0);
+   },560);
  }else{
-   if(current)current.style.setProperty("--panel-x","0px");
-   if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x",(direction*w)+"px");
-   setMountainView(currentPage,0);setTimeout(clearSwipeStyles,220);
+   requestAnimationFrame(()=>requestAnimationFrame(()=>{
+     if(current)current.style.setProperty("--panel-x","0px");
+     if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x",(direction*w)+"px");
+     setMountainView(currentPage,0);
+   }));
+   setTimeout(clearSwipeStyles,430);
  }
 }
 function finishSwipe(){
  if(!swipeTracking)return;
- const dx=swipeLastX-swipeStartX,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,threshold=Math.min(88,(window.innerWidth||1)*.19);
+ const dx=swipeLastX-swipeStartX,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,threshold=Math.min(170,(window.innerWidth||1)*.34);
  swipeTracking=false;swipePointerId=null;
  if(swipeAxis==="x"&&idx===0&&direction===-1){
    const open=Math.abs(dx)>=threshold;clearSwipeStyles();setMountainView(currentPage,0);if(open)$("moreToggle").checked=true;
