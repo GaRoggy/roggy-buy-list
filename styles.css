@@ -787,3 +787,11 @@ html:not(.is-swiping) .mountain-panorama{transition:transform .24s cubic-bezier(
 html:not(.is-swiping) .mountain-panorama{
  transition:transform .68s cubic-bezier(.18,.76,.20,1)!important;
 }
+
+/* Requested release glide v86 */
+.swipe-panel.swipe-animating,.swipe-neighbor.swipe-animating{
+ transition-duration:.42s!important;
+}
+html:not(.is-swiping) .mountain-panorama{
+ transition-duration:.42s!important;
+}
