@@ -521,8 +521,15 @@ function mountainPagePosition(page=currentPage){
  const idx=PRIMARY_SWIPE_PAGES.indexOf(page);return idx<0?0:idx/(PRIMARY_SWIPE_PAGES.length-1);
 }
 function setMountainView(page=currentPage,dragPx=0){
- document.documentElement.style.setProperty("--mountain-page",mountainPagePosition(page).toFixed(4));
- document.documentElement.style.setProperty("--swipe-px",String(dragPx.toFixed(1)));
+ const progress=mountainPagePosition(page),w=window.innerWidth||1;
+ // Finished pixel offsets avoid unsupported CSS variable multiplication.
+ // Drag follows the finger; persistent page offset reveals a new part of the 2.5-page panorama.
+ const far=(-w*.28*progress)+(dragPx*.16);
+ const mid=(-w*.48*progress)+(dragPx*.28);
+ const near=(-w*.72*progress)+(dragPx*.42);
+ document.documentElement.style.setProperty("--mountain-far-x",far.toFixed(1)+"px");
+ document.documentElement.style.setProperty("--mountain-mid-x",mid.toFixed(1)+"px");
+ document.documentElement.style.setProperty("--mountain-near-x",near.toFixed(1)+"px");
 }
 function clearSwipeStyles(){
  [primaryPageEl(currentPage),swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating");el.style.removeProperty("--panel-x")});
@@ -559,8 +566,7 @@ function settleSwipe(commit,dx){
    if(current)current.style.setProperty("--panel-x",(-direction*w)+"px");
    swipeNeighbor.style.setProperty("--panel-x","0px");
    const target=swipeNeighborPage;
-   document.documentElement.style.setProperty("--mountain-page",mountainPagePosition(target).toFixed(4));
-   document.documentElement.style.setProperty("--swipe-px","0");
+   setMountainView(target,0);
    setTimeout(()=>{clearSwipeStyles();setPage(target);setMountainView(target,0)},230);
  }else{
    if(current)current.style.setProperty("--panel-x","0px");
@@ -586,3 +592,5 @@ document.addEventListener("touchend",()=>{
 document.addEventListener("touchcancel",()=>{swipeTracking=false;swipeAxis=null;settleSwipe(false,0)},{passive:true});
 window.addEventListener("roggy-page",e=>setMountainView(e.detail.page,0));
 setMountainView(currentPage,0);
+
+window.addEventListener("resize",()=>setMountainView(currentPage,0));
