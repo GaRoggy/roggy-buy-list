@@ -600,7 +600,7 @@ function settleSwipe(commit,dx){
 }
 function finishSwipe(){
  if(!swipeTracking)return;
- const dx=swipeLastX-swipeStartX,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,threshold=Math.min(170,(window.innerWidth||1)*.34);
+ const dx=swipeLastX-swipeStartX,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,threshold=(window.innerWidth||1)*.25;
  swipeTracking=false;swipePointerId=null;
  if(swipeAxis==="x"&&idx===0&&direction===-1){
    const open=Math.abs(dx)>=threshold;clearSwipeStyles();setMountainView(currentPage,0);if(open)$("moreToggle").checked=true;
