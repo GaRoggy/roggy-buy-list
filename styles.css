@@ -716,3 +716,16 @@ input:focus,select:focus,textarea:focus{border-color:color-mix(in srgb,var(--acc
 #itemDialog .actions{position:sticky;bottom:-22px;margin:20px -22px -22px;padding:14px 22px calc(14px + env(safe-area-inset-bottom));background:color-mix(in srgb,var(--surface,#17131f) 94%,transparent);backdrop-filter:blur(16px);border-top:1px solid color-mix(in srgb,var(--accent2) 12%,transparent);z-index:3}
 #itemDialog .actions button{min-height:46px}
 @media(max-width:500px){#itemDialog{width:calc(100vw - 20px);max-height:88dvh;border-radius:24px}#itemDialog form{padding:18px}#itemDialog .grid2{grid-template-columns:1fr}.destination-choice{min-height:48px}#itemDialog .actions{bottom:-18px;margin:18px -18px -18px;padding-left:18px;padding-right:18px}}
+
+/* Global add launcher v75 */
+#addLauncherDialog{width:min(94vw,600px);max-height:88dvh;overflow:auto;border:1px solid color-mix(in srgb,var(--accent2) 24%,transparent)}
+.add-launcher{padding:22px}
+.add-launcher-copy{margin:12px 0 14px;color:var(--muted);font-size:13px}
+.add-launcher-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.add-launcher-grid>button{display:flex;align-items:center;gap:12px;text-align:left;padding:15px;border-radius:17px;border:1px solid color-mix(in srgb,var(--accent2) 15%,var(--line));background:color-mix(in srgb,var(--surface2) 94%,var(--accent) 6%);color:var(--ink)}
+.add-launcher-grid>button>span{width:38px;height:38px;min-width:38px;border-radius:12px;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent2);font-size:20px;font-weight:900}
+.add-launcher-grid>button div{display:grid;gap:3px}.add-launcher-grid>button b{font-size:14px}.add-launcher-grid>button small{color:var(--muted);font-size:10px;line-height:1.25}
+.add-launcher-grid>button:active{transform:scale(.975)}.add-launcher-grid>button:hover{border-color:color-mix(in srgb,var(--accent2) 34%,var(--line));background:color-mix(in srgb,var(--surface2) 88%,var(--accent) 12%)}
+.add-launcher-cancel{width:100%;margin-top:14px}
+#digestAddDialog{width:min(94vw,540px);max-height:88dvh;overflow:auto}
+@media(max-width:500px){.add-launcher{padding:18px}.add-launcher-grid{grid-template-columns:1fr}.add-launcher-grid>button{min-height:68px;padding:12px 14px}}
