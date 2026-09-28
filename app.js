@@ -606,11 +606,26 @@ function settleSwipe(commit,dx){
      setMountainView(target,0);
    }));
    clearTimeout(swipeSettleTimer);swipeSettleTimer=setTimeout(()=>{
-     [current,swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating");el.style.removeProperty("--panel-x")});
-     if(current&&current!==primaryPageEl(target))current.hidden=true;
-     swipeNeighbor=null;swipeNeighborPage=null;
-     setPage(target);
-     setMountainView(target,0);
+     const landed=swipeNeighbor;
+     // The temporary incoming panel is fixed during the glide. Before removing that
+     // shell, pin the real page to the exact same viewport position for one paint.
+     // This prevents its normal document-flow top from producing a downward landing hop.
+     if(landed){
+       const r=landed.getBoundingClientRect();
+       document.documentElement.style.setProperty("--swipe-land-top",r.top+"px");
+       landed.classList.add("swipe-land-lock");
+     }
+     if(current&&current!==landed)current.hidden=true;
+     if(landed){landed.classList.remove("swipe-neighbor","swipe-animating");landed.style.removeProperty("--panel-x");landed.style.removeProperty("--swipe-opacity")}
+     swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;
+     document.documentElement.classList.remove("is-settling","is-swiping","swipe-ready");
+     // Update state without setPage()'s scrollTo(0,0), which was causing a second layout jump.
+     document.querySelectorAll(".page-tab").forEach(b=>b.classList.toggle("active",b.dataset.page===target));
+     requestAnimationFrame(()=>requestAnimationFrame(()=>{
+       if(landed){landed.classList.remove("swipe-panel","swipe-land-lock");landed.style.removeProperty("--panel-x")}
+       document.documentElement.style.removeProperty("--swipe-land-top");
+       updateSwipeHUD(target,0,0);setMountainView(target,0);
+     }));
    },420);
  }else{
    updateSwipeHUD(currentPage,0,0);
