@@ -795,3 +795,34 @@ html:not(.is-swiping) .mountain-panorama{
 html:not(.is-swiping) .mountain-panorama{
  transition-duration:.42s!important;
 }
+
+/* Swipe UX polish v90 */
+:root{--swipe-progress:0;--swipe-dir:0}
+.page-tabs{position:relative;z-index:12;padding-bottom:5px}
+.page-tab{position:relative;transition:color .22s ease,opacity .22s ease,transform .22s ease,background .22s ease!important}
+.page-tab.active{transform:translateY(-1px);text-shadow:0 1px 10px color-mix(in srgb,var(--accent2) 35%,transparent)}
+.page-tab.active::after{content:"";position:absolute;left:24%;right:24%;bottom:-3px;height:2px;border-radius:999px;background:linear-gradient(90deg,transparent,var(--accent2),transparent);box-shadow:0 0 10px color-mix(in srgb,var(--accent2) 55%,transparent)}
+.swipe-hud{height:16px;position:relative;z-index:11;display:flex;align-items:center;justify-content:center;pointer-events:none;margin-top:-2px;opacity:.72;transition:opacity .22s ease}
+.is-swiping .swipe-hud,.is-settling .swipe-hud{opacity:1}
+.swipe-dots{display:flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;background:color-mix(in srgb,#130824 32%,transparent);backdrop-filter:blur(5px)}
+.swipe-dots i{display:block;width:4px;height:4px;border-radius:999px;background:rgba(255,255,255,.34);transition:width .26s ease,transform .26s ease,background .26s ease,opacity .26s ease}
+.swipe-dots i.active{width:15px;background:rgba(255,255,255,.9);box-shadow:0 0 8px rgba(199,169,255,.45)}
+.swipe-edge{position:absolute;top:-2px;font-size:22px;font-weight:300;color:rgba(255,255,255,.55);opacity:.25;transition:opacity .18s ease,transform .18s ease}
+.swipe-edge-left{left:9px}.swipe-edge-right{right:9px}
+.is-swiping .swipe-edge{opacity:.55}.is-swiping .swipe-edge-left{transform:translateX(-2px)}.is-swiping .swipe-edge-right{transform:translateX(2px)}
+.swipe-progress-track{position:absolute;left:18%;right:18%;bottom:0;height:1px;overflow:hidden;border-radius:99px;background:rgba(255,255,255,.07);opacity:0;transition:opacity .15s}
+.is-swiping .swipe-progress-track{opacity:1}
+.swipe-progress-track b{display:block;width:100%;height:100%;transform:scaleX(var(--swipe-progress));transform-origin:left;background:rgba(255,255,255,.62);transition:none}
+.swipe-panel{backface-visibility:hidden;-webkit-backface-visibility:hidden;contain:paint;transform-style:flat}
+.is-swiping .swipe-panel{filter:saturate(calc(.97 + var(--swipe-progress)*.03))}
+.swipe-neighbor{box-shadow:-14px 0 32px rgba(9,3,20,calc(.08 + var(--swipe-progress)*.08))}
+html[data-swipe-from="home"] .swipe-edge-left{opacity:.16}
+html[data-swipe-from="buy"] .swipe-edge-right{opacity:.12}
+.is-settling .swipe-progress-track{opacity:0}
+.is-settling .swipe-hud{transition:opacity .42s ease}
+.is-settling .swipe-dots i{transition-duration:.42s}
+.mountain-scene::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(20,8,41,.05),transparent 12%,transparent 88%,rgba(20,8,41,.05));pointer-events:none}
+.is-swiping .mountain-scene::after{background:linear-gradient(90deg,rgba(20,8,41,.08),transparent 15%,transparent 85%,rgba(20,8,41,.08))}
+#homePage,#remindersPage,#todosPage,#listsPage{overscroll-behavior-x:none}
+@media(max-width:500px){.page-tabs{gap:2px}.page-tab{min-height:42px}.swipe-hud{height:14px}.swipe-dots{gap:5px;padding:3px 8px}}
+@media(prefers-reduced-motion:reduce){.swipe-hud,.swipe-dots i,.page-tab,.swipe-edge{transition:none!important}}
