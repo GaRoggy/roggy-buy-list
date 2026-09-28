@@ -770,3 +770,12 @@ html:not(.is-swiping) .mountain-panorama{transition:transform .24s cubic-bezier(
 .is-swiping .swipe-panel{transition:none!important}
 .mountain-panorama{transition:transform .22s cubic-bezier(.22,.72,.24,1)!important}
 .is-swiping .mountain-panorama{transition:none!important}
+
+/* PowerPoint-style page glide v84 */
+.swipe-animating{
+ transition:transform .56s cubic-bezier(.16,.82,.22,1)!important;
+}
+.swipe-animating.swipe-neighbor{transition:transform .56s cubic-bezier(.16,.82,.22,1)!important}
+.is-swiping .swipe-panel,.is-swiping .swipe-neighbor{transition:none!important}
+.mountain-panorama{transition:transform .56s cubic-bezier(.16,.82,.22,1)!important}
+.is-swiping .mountain-panorama{transition:none!important}
