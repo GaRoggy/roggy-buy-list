@@ -518,7 +518,7 @@ function ensureSwipeHUD(){
  if(document.querySelector(".swipe-hud"))return;
  const hud=document.createElement("div");hud.className="swipe-hud";hud.setAttribute("aria-hidden","true");
  hud.innerHTML='<span class="swipe-edge swipe-edge-left">‹</span><div class="swipe-dots">'+PRIMARY_SWIPE_PAGES.map((p,n)=>'<i data-swipe-dot="'+p+'" style="--dot-index:'+n+'"></i>').join("")+'</div><span class="swipe-edge swipe-edge-right">›</span><div class="swipe-progress-track"><b></b></div>';
- document.querySelector(".page-tabs")?.insertAdjacentElement("afterend",hud);updateSwipeHUD(currentPage);
+ const tabs=document.querySelector(".page-tabs");if(tabs)tabs.appendChild(hud);updateSwipeHUD(currentPage);
 }
 function updateSwipeHUD(page=currentPage,progress=0,direction=0){
  const idx=PRIMARY_SWIPE_PAGES.indexOf(page);
