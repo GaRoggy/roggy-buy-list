@@ -567,7 +567,7 @@ function prepareSwipeNeighbor(direction){
  return true;
 }
 function positionSwipePanels(dx){
- const headerBottom=document.querySelector(".page-tabs")?.getBoundingClientRect().bottom||document.querySelector("header")?.getBoundingClientRect().bottom||0;
+ const tabs=document.querySelector(".page-tabs"),headerBottom=(tabs?.getBoundingClientRect().bottom||document.querySelector("header")?.getBoundingClientRect().bottom||0)+(parseFloat(getComputedStyle(tabs||document.documentElement).marginBottom)||0);
  document.documentElement.style.setProperty("--swipe-page-top",Math.max(0,headerBottom)+"px");
  const w=window.innerWidth||1,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,current=primaryPageEl(currentPage),progress=Math.min(1,Math.abs(dx)/(w*.25)); swipeVisualCurrent=current;updateSwipeHUD(currentPage,progress,direction);
  if(idx===0&&direction===-1){
