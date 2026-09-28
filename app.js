@@ -512,7 +512,7 @@ document.addEventListener("keydown",e=>{
 
 /* Primary-page live panorama navigation v80 */
 const PRIMARY_SWIPE_PAGES=["home","reminders","todos","buy"];
-let swipeStartX=0,swipeStartY=0,swipeLastX=0,swipeTracking=false,swipeAxis=null,swipeNeighbor=null,swipeNeighborPage=null,swipePointerId=null;
+let swipeStartX=0,swipeStartY=0,swipeLastX=0,swipeTracking=false,swipeAxis=null,swipeNeighbor=null,swipeNeighborPage=null,swipePointerId=null,swipeStartTime=0,swipeLastTime=0,swipeVelocityX=0;
 let swipeVisualCurrent=null,swipeSettleTimer=null;
 function ensureSwipeHUD(){
  if(document.querySelector(".swipe-hud"))return;
@@ -526,6 +526,8 @@ function updateSwipeHUD(page=currentPage,progress=0,direction=0){
  document.documentElement.style.setProperty("--swipe-progress",Math.max(0,Math.min(1,progress)).toFixed(3));
  document.documentElement.style.setProperty("--swipe-dir",direction);
  document.documentElement.dataset.swipeFrom=page;
+ document.documentElement.dataset.swipeDirection=direction>0?"next":direction<0?"prev":"idle";
+ document.documentElement.classList.toggle("swipe-ready",progress>=1);
 }
 function swipeBlockedTarget(t){return !!t.closest("dialog,input,textarea,select,a,[contenteditable=true],.fab,.side-drawer")}
 function primaryPageEl(page){
@@ -550,7 +552,7 @@ function setMountainView(page=currentPage,dragPx=0){
 function clearSwipeStyles(){
  [swipeVisualCurrent,primaryPageEl(currentPage),swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating");el.style.removeProperty("--panel-x");el.style.removeProperty("--swipe-opacity");});
  if(swipeNeighbor&&swipeNeighborPage!==currentPage)swipeNeighbor.hidden=true;
- swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-swiping","is-settling");
+ swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-swiping","is-settling","swipe-ready");document.documentElement.dataset.swipeDirection="idle";
  updateSwipeHUD(currentPage,0,0);
 }
 function prepareSwipeNeighbor(direction){
@@ -580,8 +582,8 @@ function positionSwipePanels(dx){
    swipeNeighbor=null;swipeNeighborPage=null;if(!prepareSwipeNeighbor(direction))return;
  }
  document.documentElement.classList.add("is-swiping");
- if(current){current.classList.add("swipe-panel");current.style.setProperty("--panel-x",dx+"px")}
- if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x",(dx+direction*w)+"px");
+ if(current){current.classList.add("swipe-panel");current.style.setProperty("--panel-x",dx+"px");current.style.setProperty("--swipe-opacity",(1-Math.min(.08,Math.abs(dx)/w*.08)).toFixed(3))}
+ if(swipeNeighbor){swipeNeighbor.style.setProperty("--panel-x",(dx+direction*w)+"px");swipeNeighbor.style.setProperty("--swipe-opacity",(.94+Math.min(.06,Math.abs(dx)/w*.06)).toFixed(3))}
  setMountainView(currentPage,dx);
 }
 function settleSwipe(commit,dx){
@@ -622,13 +624,13 @@ function settleSwipe(commit,dx){
 }
 function finishSwipe(){
  if(!swipeTracking)return;
- const dx=swipeLastX-swipeStartX,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,threshold=(window.innerWidth||1)*.25;
+ const dx=swipeLastX-swipeStartX,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,threshold=(window.innerWidth||1)*.25,fastIntent=Math.abs(swipeVelocityX)>.72&&Math.abs(dx)>(window.innerWidth||1)*.14;
  swipeTracking=false;swipePointerId=null;
  if(swipeAxis==="x"&&idx===0&&direction===-1){
    const open=Math.abs(dx)>=threshold;clearSwipeStyles();setMountainView(currentPage,0);if(open)$("moreToggle").checked=true;
  }else if(swipeAxis==="x"&&idx===PRIMARY_SWIPE_PAGES.length-1&&direction===1){
    clearSwipeStyles();setMountainView(currentPage,0);
- }else if(swipeAxis==="x")settleSwipe(Math.abs(dx)>=threshold,dx);
+ }else if(swipeAxis==="x")settleSwipe(Math.abs(dx)>=threshold||fastIntent,dx);
  else{clearSwipeStyles();setMountainView(currentPage,0)}
  swipeAxis=null;
 }
@@ -640,14 +642,14 @@ function beginPrimarySwipe(x,y,target,pointerId=null){
    document.querySelectorAll("#homePage,#remindersPage,#todosPage,#listsPage").forEach(el=>el.hidden=el!==primaryPageEl(currentPage));
    swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-settling");
  }
- clearSwipeStyles();swipeStartX=swipeLastX=x;swipeStartY=y;swipeTracking=true;swipeAxis=null;swipePointerId=pointerId;return true;
+ clearSwipeStyles();swipeStartX=swipeLastX=x;swipeStartY=y;swipeStartTime=swipeLastTime=performance.now();swipeVelocityX=0;swipeTracking=true;swipeAxis=null;swipePointerId=pointerId;return true;
 }
 function movePrimarySwipe(x,y){
  if(!swipeTracking)return false;
  const dx=x-swipeStartX,dy=y-swipeStartY;
  if(!swipeAxis&&Math.hypot(dx,dy)>8)swipeAxis=Math.abs(dx)>Math.abs(dy)*1.12?"x":"y";
  if(swipeAxis!=="x")return false;
- swipeLastX=x;positionSwipePanels(dx);return true;
+ const now=performance.now(),dt=Math.max(1,now-swipeLastTime);swipeVelocityX=(swipeVelocityX*.58)+(((x-swipeLastX)/dt)*.42);swipeLastTime=now;swipeLastX=x;positionSwipePanels(dx);return true;
 }
 // Native touch events are more reliable on iOS when a swipe begins over tab/button surfaces.
 document.addEventListener("touchstart",e=>{
