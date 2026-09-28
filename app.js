@@ -513,20 +513,23 @@ document.addEventListener("keydown",e=>{
 /* Primary-page live panorama navigation v80 */
 const PRIMARY_SWIPE_PAGES=["home","reminders","todos","buy"];
 let swipeStartX=0,swipeStartY=0,swipeLastX=0,swipeTracking=false,swipeAxis=null,swipeNeighbor=null,swipeNeighborPage=null,swipePointerId=null;
-function swipeBlockedTarget(t){return !!t.closest("dialog,input,textarea,select,button,a,[contenteditable=true],.segmented,.page-tabs,.sub-tabs,.digest-status-tabs")}
+function swipeBlockedTarget(t){return !!t.closest("dialog,input,textarea,select,a,[contenteditable=true],.fab,.side-drawer")}
 function primaryPageEl(page){
  if(page==="home")return $("homePage");if(page==="reminders")return $("remindersPage");if(page==="todos")return $("todosPage");if(page==="buy")return $("listsPage");return null;
 }
 function mountainPagePosition(page=currentPage){
- const idx=PRIMARY_SWIPE_PAGES.indexOf(page);return idx<0?0:idx/(PRIMARY_SWIPE_PAGES.length-1);
+ const idx=PRIMARY_SWIPE_PAGES.indexOf(page);return idx<0?0:idx;
 }
 let mountainScrollY=window.scrollY||0;
 function setMountainView(page=currentPage,dragPx=0){
- const progress=mountainPagePosition(page),viewportW=window.innerWidth||1,viewportH=window.innerHeight||1;
- const panoramaW=Math.max(viewportW*4,1536),panoramaH=Math.max(viewportH*1.4,495);
- const trackX=Math.max(0,panoramaW-viewportW),trackY=Math.max(0,panoramaH-viewportH);
- const x=Math.max(-trackX,Math.min(0,-trackX*progress+dragPx));
- const y=-Math.min(Math.max(0,mountainScrollY),trackY);
+ const idx=mountainPagePosition(page),viewportW=window.innerWidth||1,viewportH=window.innerHeight||1;
+ // Use a modest slice of the panorama per page. Drag interpolation exactly matches
+ // the eventual page position, so releasing a swipe never makes the image jump.
+ const pageStep=viewportW*.46;
+ const dragProgress=Math.max(-1.15,Math.min(1.15,dragPx/viewportW));
+ const x=-(idx*pageStep)+(dragProgress*pageStep);
+ // Vertical movement is intentionally slower than content scrolling.
+ const y=-Math.min(Math.max(0,mountainScrollY)*.24,viewportH*.34);
  document.documentElement.style.setProperty("--panorama-x",x.toFixed(1)+"px");
  document.documentElement.style.setProperty("--panorama-y",y.toFixed(1)+"px");
 }
@@ -585,7 +588,7 @@ function finishSwipe(){
  const dx=swipeLastX-swipeStartX,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,threshold=Math.min(90,(window.innerWidth||1)*.2);
  swipeTracking=false;swipePointerId=null;
  if(swipeAxis==="x"&&idx===0&&direction===-1){
-   const open=Math.abs(dx)>=threshold;clearSwipeStyles();setMountainView(currentPage,0);if(open)$("#moreToggle").checked=true;
+   const open=Math.abs(dx)>=threshold;clearSwipeStyles();setMountainView(currentPage,0);if(open)$("moreToggle").checked=true;
  }else if(swipeAxis==="x"&&idx===PRIMARY_SWIPE_PAGES.length-1&&direction===1){
    clearSwipeStyles();setMountainView(currentPage,0);
  }else if(swipeAxis==="x")settleSwipe(Math.abs(dx)>=threshold,dx);
