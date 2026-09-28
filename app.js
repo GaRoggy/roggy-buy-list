@@ -508,3 +508,38 @@ document.addEventListener("keydown",e=>{
  }
  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="k"){e.preventDefault();openGlobalSearch()}
 });
+
+
+/* Primary-page swipe navigation + mountain parallax v76 */
+const PRIMARY_SWIPE_PAGES=["home","reminders","todos","buy"];
+let swipeStartX=0,swipeStartY=0,swipeLastX=0,swipeTracking=false,swipeAxis=null;
+function swipeBlockedTarget(t){
+ return !!t.closest("dialog,input,textarea,select,button,a,[contenteditable=true],.segmented,.page-tabs,.sub-tabs,.digest-status-tabs");
+}
+function setMountainParallax(px){
+ const bounded=Math.max(-1,Math.min(1,px/(window.innerWidth||1)));
+ document.documentElement.style.setProperty("--swipe-x",bounded.toFixed(3));
+}
+document.addEventListener("touchstart",e=>{
+ if(e.touches.length!==1||swipeBlockedTarget(e.target)||!PRIMARY_SWIPE_PAGES.includes(currentPage))return;
+ swipeStartX=swipeLastX=e.touches[0].clientX;swipeStartY=e.touches[0].clientY;swipeTracking=true;swipeAxis=null;
+},{passive:true});
+document.addEventListener("touchmove",e=>{
+ if(!swipeTracking||e.touches.length!==1)return;
+ const dx=e.touches[0].clientX-swipeStartX,dy=e.touches[0].clientY-swipeStartY;
+ if(!swipeAxis&&Math.hypot(dx,dy)>10)swipeAxis=Math.abs(dx)>Math.abs(dy)*1.25?"x":"y";
+ if(swipeAxis!=="x")return;
+ swipeLastX=e.touches[0].clientX;setMountainParallax(dx);
+},{passive:true});
+document.addEventListener("touchend",()=>{
+ if(!swipeTracking)return;
+ const dx=swipeLastX-swipeStartX,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage);
+ swipeTracking=false;swipeAxis=null;
+ if(Math.abs(dx)>=Math.min(90,window.innerWidth*.18)){
+   const next=dx<0?idx+1:idx-1;
+   if(next>=0&&next<PRIMARY_SWIPE_PAGES.length)setPage(PRIMARY_SWIPE_PAGES[next]);
+ }
+ document.documentElement.classList.add("parallax-settle");setMountainParallax(0);
+ setTimeout(()=>document.documentElement.classList.remove("parallax-settle"),260);
+},{passive:true});
+document.addEventListener("touchcancel",()=>{swipeTracking=false;swipeAxis=null;setMountainParallax(0)},{passive:true});
