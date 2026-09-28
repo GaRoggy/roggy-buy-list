@@ -238,6 +238,14 @@
   <nav class="digest-status-tabs"><button class="digest-status-tab active" data-digest-status="queue">To Read</button><button class="digest-status-tab" data-digest-status="completed">I’ve Read</button></nav><main class="digest-main"><section id="digestStatus" class="status"></section><section id="digestItems"></section></main>
 </section>
 
+<dialog id="digestAddDialog"><form method="dialog" id="digestAddForm">
+  <div class="dialog-head"><div><span class="dialog-kicker">DIGESTIBLES</span><h2>Add title</h2></div><button id="digestAddClose" type="button" class="plain dialog-close">✕</button></div>
+  <div class="grid2"><label>Type<select id="digestAddType"><option value="book">Book</option><option value="movie">Movie</option><option value="anime">Anime</option></select></label><label>List<select id="digestAddStatus"><option value="queue">To consume</option><option value="completed">Completed</option></select></label></div>
+  <label>Title<input id="digestAddTitle" required maxlength="240" placeholder="Title"></label>
+  <label>Author / Director / Creator<input id="digestAddCreator" maxlength="180" placeholder="Optional"></label>
+  <label>Description<textarea id="digestAddDescription" rows="3" maxlength="1500" placeholder="Optional"></textarea></label>
+  <div class="actions"><button id="digestAddCancel" type="button" class="secondary">Cancel</button><button type="submit" value="default" class="primary">Add</button></div>
+</form></dialog>
 <dialog id="digestDetailDialog"><div class="detail-dialog"><div class="dialog-head"><h2 id="digestDetailTitle">Details</h2><button id="closeDigestDetail" class="plain">✕</button></div><div id="digestDetail"></div></div></dialog>
 
 <section id="budgetPage" hidden>
@@ -276,7 +284,20 @@
   <div class="actions"><button value="cancel" class="secondary">Cancel</button><button value="default" class="primary">Unlock</button></div>
 </form></dialog>
 
-<button id="addBtn" class="fab">＋</button>
+<button id="addBtn" class="fab" aria-label="Add something">＋</button>
+<dialog id="addLauncherDialog"><div class="add-launcher">
+  <div class="dialog-head"><div><span class="dialog-kicker">QUICK ADD</span><h2>Add something</h2></div><button id="addLauncherClose" type="button" class="plain dialog-close" aria-label="Close">✕</button></div>
+  <p class="add-launcher-copy">Where should it go?</p>
+  <div class="add-launcher-grid">
+    <button type="button" data-add-target="buy"><span>＋</span><div><b>Buy List</b><small>Something to purchase</small></div></button>
+    <button type="button" data-add-target="groceries"><span>▣</span><div><b>Groceries</b><small>Food or household consumables</small></div></button>
+    <button type="button" data-add-target="todos"><span>✓</span><div><b>To-Do</b><small>A task to get done</small></div></button>
+    <button type="button" data-add-target="digestibles"><span>◉</span><div><b>Digestibles</b><small>Book, movie, or anime</small></div></button>
+    <button type="button" data-add-target="drivers"><span>◇</span><div><b>Bad Driver</b><small>Log an observation</small></div></button>
+    <button type="button" data-add-target="projects"><span>◈</span><div><b>Project</b><small>Start a new project</small></div></button>
+  </div>
+  <button id="addLauncherCancel" type="button" class="secondary add-launcher-cancel">Cancel</button>
+</div></dialog>
 <dialog id="globalSearchDialog"><div class="detail-dialog"><div class="dialog-head"><h2>Search Everything</h2><button id="closeGlobalSearch" class="plain">✕</button></div><input id="globalSearchInput" class="global-search-input" placeholder="Search lists, projects, reminders, digestibles…"><div id="globalSearchResults" class="search-results"></div></div></dialog>
 <dialog id="projectDialog"><form method="dialog" id="projectForm"><div class="dialog-head"><h2>New Project</h2><button value="cancel" class="plain">✕</button></div><label>Project<input id="projectTitle" required placeholder="Apartment, Ant Farm, Trip…"></label><label>What is the goal?<textarea id="projectDescription" rows="3"></textarea></label><div class="grid2"><label>Status<select id="projectStatus"><option>Idea</option><option selected>Active</option><option>On Hold</option><option>Completed</option></select></label><label>Priority<select id="projectPriority"><option>Low</option><option selected>Medium</option><option>High</option></select></label></div><div class="actions"><button value="cancel" class="secondary">Cancel</button><button value="default" class="primary">Create</button></div></form></dialog>
 
