@@ -591,3 +591,37 @@ input:focus,select:focus,textarea:focus{border-color:color-mix(in srgb,var(--acc
 *{scrollbar-color:color-mix(in srgb,var(--accent2) 58%,transparent) transparent}
 
 .empty,.budget-empty,.research-empty{border:1px dashed color-mix(in srgb,var(--accent2) 34%,transparent);background:color-mix(in srgb,var(--accent) 7%,var(--glass));color:#d7cbea}
+
+/* UI refresh v70 — 30 appearance improvements */
+/* 01 */ body{letter-spacing:-.006em}
+/* 02 */ header{border-bottom:1px solid rgba(255,255,255,.16);box-shadow:0 10px 28px color-mix(in srgb,var(--accent) 18%,transparent)}
+/* 03 */ .header-title h1{font-weight:900;letter-spacing:-.035em}
+/* 04 */ .header-title p{opacity:.86;letter-spacing:.01em}
+/* 05 */ .header-menu{background:rgba(255,255,255,.10)!important;border:1px solid rgba(255,255,255,.28)!important;box-shadow:inset 0 1px rgba(255,255,255,.12)}
+/* 06 */ .auth-btn{box-shadow:inset 0 1px rgba(255,255,255,.14)}
+/* 07 */ .page-tabs{background:color-mix(in srgb,var(--bg,#160d23) 80%,transparent);backdrop-filter:blur(18px);padding-bottom:7px}
+/* 08 */ .page-tab{border:1px solid transparent!important}
+/* 09 */ .page-tab.active{border-color:rgba(255,255,255,.18)!important}
+/* 10 */ .command-search{min-height:54px;border-radius:22px!important;box-shadow:inset 0 1px rgba(255,255,255,.04),0 8px 24px rgba(0,0,0,.06)}
+/* 11 */ .today-hero{position:relative;overflow:hidden}
+/* 12 */ .today-hero::after{content:"";position:absolute;width:170px;height:170px;right:-65px;top:-95px;border-radius:50%;background:rgba(255,255,255,.10);filter:blur(2px);pointer-events:none}
+/* 13 */ .compact-command .eyebrow{text-shadow:0 1px 8px rgba(0,0,0,.12)}
+/* 14 */ .home-focus-strip button{position:relative;overflow:hidden;box-shadow:inset 0 1px rgba(255,255,255,.05)}
+/* 15 */ .home-focus-strip button::after{content:"";position:absolute;left:0;bottom:0;width:100%;height:2px;background:linear-gradient(90deg,var(--accent),transparent);opacity:.55}
+/* 16 */ .home-focus-strip b{font-variant-numeric:tabular-nums;letter-spacing:-.04em}
+/* 17 */ .home-primary-grid>.home-section,.home-primary-grid>.home-timeline{border-radius:24px!important}
+/* 18 */ .home-primary-grid .section-head{padding-bottom:8px;border-bottom:1px solid color-mix(in srgb,var(--accent) 10%,transparent)}
+/* 19 */ .home-high-todo{transition:background .15s ease,transform .15s ease}
+/* 20 */ .home-high-todo:active{background:color-mix(in srgb,var(--accent) 12%,var(--surface2));transform:scale(.99)}
+/* 21 */ .high-todo-dot{box-shadow:0 0 0 4px rgba(239,68,68,.10),0 0 12px rgba(239,68,68,.24)}
+/* 22 */ .timeline-row{border-bottom-color:color-mix(in srgb,var(--accent) 9%,transparent)!important}
+/* 23 */ .timeline-row:last-child{border-bottom:0!important}
+/* 24 */ .command-grid{gap:12px!important}
+/* 25 */ .command-card{border-radius:22px!important;box-shadow:inset 0 1px rgba(255,255,255,.04),0 7px 20px rgba(0,0,0,.035)}
+/* 26 */ .command-card>span{width:38px;height:38px;display:grid;place-items:center;border-radius:13px;background:color-mix(in srgb,var(--accent) 13%,transparent);font-size:20px}
+/* 27 */ .command-card b{letter-spacing:-.02em}
+/* 28 */ .home-section.email-section{border-radius:24px!important;overflow:hidden}
+/* 29 */ .mail-filter-badge{border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);box-shadow:inset 0 1px rgba(255,255,255,.05)}
+/* 30 */ .card,.todo-card,.reminder-card,.digest-card,.project-card,.system-card{transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease}
+@media(hover:hover){.card:hover,.todo-card:hover,.reminder-card:hover,.digest-card:hover,.project-card:hover,.system-card:hover{border-color:color-mix(in srgb,var(--accent) 28%,var(--line));box-shadow:0 12px 28px color-mix(in srgb,var(--accent) 9%,transparent)}}
+@media(max-width:500px){.home-main{padding-left:12px!important;padding-right:12px!important}.home-primary-grid{gap:9px!important}.command-grid{gap:9px!important}.today-hero{border-radius:22px!important}.home-focus-strip button{min-height:82px}}
