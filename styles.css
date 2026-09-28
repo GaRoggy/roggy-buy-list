@@ -669,3 +669,36 @@ input:focus,select:focus,textarea:focus{border-color:color-mix(in srgb,var(--acc
 /* 28 */ .project-check:active{transform:scale(.88)}.project-check.checked{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 10%,transparent),inset 0 1px rgba(255,255,255,.1)}
 /* 29 */ .project-check-row+.project-check-row{border-top:1px solid color-mix(in srgb,var(--accent2) 9%,transparent)}
 /* 30 */ @media(max-width:500px){header{gap:10px}.header-title h1{font-size:26px}.header-title p{font-size:13px}.auth-btn{padding-inline:12px}.system-main,.project-detail-main{padding-left:12px!important;padding-right:12px!important}.project-detail-hero{padding:20px!important}.project-detail-hero h2{font-size:32px}.project-device{padding:14px 12px}.project-check{width:28px;height:28px;min-width:28px}.project-back{top:calc(78px + env(safe-area-inset-top))}}
+
+
+/* UX/UI pass v73 — 30 low-risk presentation/content improvements */
+/* 01 */ html{scroll-behavior:smooth}
+/* 02 */ body{background-attachment:fixed}
+/* 03 */ main{animation:page-in .18s ease-out}
+/* 04 */ @keyframes page-in{from{opacity:.72;transform:translateY(4px)}to{opacity:1;transform:none}}
+/* 05 */ @media(prefers-reduced-motion:reduce){main{animation:none}html{scroll-behavior:auto}}
+/* 06 */ .eyebrow{font-weight:900;letter-spacing:.12em}
+/* 07 */ .section-head{gap:12px}
+/* 08 */ .section-head h3{margin-top:3px}
+/* 09 */ .text-action{border-radius:999px;padding:8px 12px}
+/* 10 */ .text-action:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+/* 11 */ .home-primary-grid{align-items:start}
+/* 12 */ .home-section,.home-timeline{overflow:hidden}
+/* 13 */ .home-high-todo-list:empty::after{content:"Nothing urgent right now.";display:block;color:var(--muted);padding:10px 2px}
+/* 14 */ .timeline-row time,.meta{font-variant-numeric:tabular-nums}
+/* 15 */ .mail-filter-badge{text-transform:uppercase;letter-spacing:.07em;font-size:9px;font-weight:900}
+/* 16 */ .system-intro{max-width:720px}
+/* 17 */ .system-intro h2{letter-spacing:-.035em}
+/* 18 */ .system-intro p{max-width:62ch;line-height:1.55}
+/* 19 */ .project-card h3{font-size:clamp(20px,3vw,25px);letter-spacing:-.025em}
+/* 20 */ .project-card p{line-height:1.5}
+/* 21 */ .project-foot{padding-top:4px}
+/* 22 */ .project-detail-hero{overflow:hidden;position:relative}
+/* 23 */ .project-detail-hero::after{content:"";position:absolute;width:150px;height:150px;border-radius:50%;right:-70px;top:-80px;background:color-mix(in srgb,var(--accent2) 13%,transparent);pointer-events:none}
+/* 24 */ .project-detail-section h3{font-size:18px;letter-spacing:-.02em}
+/* 25 */ .project-check-copy{padding-top:2px}
+/* 26 */ .project-device b{line-height:1.3}
+/* 27 */ .project-device p{max-width:72ch}
+/* 28 */ .project-device-link{border-radius:10px;display:grid;place-items:center;min-width:38px}
+/* 29 */ .project-device-link:hover{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+/* 30 */ @media(max-width:500px){.command-grid{grid-template-columns:1fr 1fr}.command-card{min-height:102px}.command-card small{line-height:1.3}.project-detail-section{padding:16px!important}.project-check-row{padding:12px 0}.project-device-copy p{font-size:12px!important}}
