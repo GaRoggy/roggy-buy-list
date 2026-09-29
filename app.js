@@ -131,7 +131,7 @@ function deviceActivityText(event){const device=smartHomeState.devices.find(item
 function recentSmartHomeEvents(){return (smartHomeState.events||[]).filter(event=>event.type?.startsWith("device.")||event.type==="command.request").slice().sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp)).slice(0,5)}
 function focusDevice(deviceId){setPage("devices");setTimeout(()=>{const card=document.querySelector(`[data-device-card="${CSS.escape(deviceId)}"]`);if(card){card.scrollIntoView({behavior:"smooth",block:"center"});card.classList.add("device-highlight");setTimeout(()=>card.classList.remove("device-highlight"),1600)}},50)}
 function bindHomeDeviceLinks(){document.querySelectorAll("[data-device-jump]").forEach(button=>button.onclick=()=>focusDevice(button.dataset.deviceJump));document.querySelectorAll("[data-room-jump]").forEach(button=>button.onclick=()=>{setPage("devices");setTimeout(()=>document.getElementById(`smart-room-${CSS.escape(button.dataset.roomJump)}`)?.scrollIntoView({behavior:"smooth",block:"start"}),50)})}
-async function sendRoomPower(roomId,value){const room=smartHomeRooms().find(item=>item.room_id===roomId);const lights=roomDevices(room).filter(device=>device.capabilities?.includes("power")&&deviceUsable(device));if(!lights.length)return;const status=$("deviceStatus");if(status)status.textContent="Updating room lights…";try{await Promise.all(lights.map(device=>smartHomeFetch(`/devices/${encodeURIComponent(device.device_id)}/actions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"power",value})})));await loadSmartHome({silent:true});if(status)status.textContent="Room lights updated."}catch(error){if(status)status.textContent="Room light update failed: "+smartErrorMessage(error)}}
+async function sendRoomPower(roomId,value){const room=smartHomeRooms().find(item=>item.room_id===roomId);const lights=roomDevices(room).filter(device=>device.capabilities?.includes("power")&&deviceUsable(device));if(!lights.length)return;const status=$("deviceStatus");if(status)status.textContent="Updating room lights…";try{await Promise.all(lights.map(device=>smartHomeFetch(`/devices/${encodeURIComponent(device.device_id)}/actions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"power",value})})));const refreshed=await loadSmartHome({silent:true});if(status)status.textContent=refreshed?"Room lights updated.":"Room lights command sent; showing last known state."}catch(error){if(status)status.textContent="Room light update failed: "+smartErrorMessage(error)}}
 function renderHomeDeviceStatus(){
  const root=$("homeDeviceStatus");if(!root)return;
  if(smartHomeUnavailable){root.innerHTML=`<div class="quiet-state"><b>Smart Home</b><br>${esc(smartFailureKind(smartHomeFailure)==="authentication"?"Authentication failed.":"Bridge or smart-home service unavailable.")}</div>`;return}
@@ -148,8 +148,9 @@ function renderHomeDeviceStatus(){
 function renderDevicesPage(){
  const summary=$("deviceRoomSummary"),rooms=$("deviceRooms");if(!summary||!rooms)return;
  renderDeviceDiagnostics();
- if(smartHomeUnavailable){summary.innerHTML="";rooms.innerHTML=`<div class="system-card"><b>Smart-home data unavailable</b><p>${esc(smartErrorMessage({code:smartHomeFailure||"network_error"}))}. The bridge will keep retrying while this page is open.</p></div>`;return}
- if(!smartHomeLoaded){summary.innerHTML="";rooms.innerHTML='<div class="system-card"><b>Loading device status…</b></div>';return}
+ const hasSnapshot=smartHomeLoaded||smartHomeState.devices.length>0||smartHomeState.rooms.length>0;
+ if(smartHomeUnavailable&&!hasSnapshot){summary.innerHTML="";rooms.innerHTML=`<div class="system-card"><b>Smart-home data unavailable</b><p>${esc(smartErrorMessage({code:smartHomeFailure||"network_error"}))}. The bridge will keep retrying while this page is open.</p></div>`;return}
+ if(!hasSnapshot){summary.innerHTML="";rooms.innerHTML='<div class="system-card"><b>Loading device status…</b></div>';return}
  if(!smartHomeState.devices.length){summary.innerHTML="";rooms.innerHTML='<div class="system-card"><b>No devices configured</b><p>Add a device to Layne’s registry and it will appear here automatically.</p></div>';return}
  const grouped=smartHomeRooms();
  summary.innerHTML=grouped.map(room=>`<button type="button" class="device-room-summary-card" data-room-jump="${esc(room.room_id)}"><span>${esc(room.friendly_name||room.room_id)}</span><b>${room.online_devices??roomDevices(room).filter(device=>deviceOnline(device)).length}/${room.device_count??roomDevices(room).length}</b><small>online · ${esc(roomHealthLine(room))}</small></button>`).join("");
@@ -164,7 +165,7 @@ function bindDeviceControls(){
 async function sendDeviceAction(deviceId,body){
  if(!smartHomeControlAllowed){const status=$("deviceStatus");if(status)status.textContent="Sign in to control devices.";return}
  const status=$("deviceStatus");if(status)status.textContent="Updating device…";
- try{await smartHomeFetch(`/devices/${encodeURIComponent(deviceId)}/actions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});await loadSmartHome({silent:true});if(status)status.textContent="Device state updated."}catch(error){if(status)status.textContent="Device update failed: "+smartErrorMessage(error)}
+ try{await smartHomeFetch(`/devices/${encodeURIComponent(deviceId)}/actions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const refreshed=await loadSmartHome({silent:true});if(status)status.textContent=refreshed?"Device state updated.":"Device command sent; showing last known state."}catch(error){if(status)status.textContent="Device update failed: "+smartErrorMessage(error)}
 }
 function connectSmartHomeStream(){
  if(smartHomeStreamPromise||!smartHomeAccessToken||!SMART_HOME_API)return;
@@ -178,7 +179,7 @@ function connectSmartHomeStream(){
 }
 async function loadSmartHome({silent=false}={}){
  if(smartHomeLoading)return smartHomeLoading;
- smartHomeLoading=(async()=>{try{smartHomeFailure=null;const diagnostics=await smartHomeFetch("/diagnostics");smartHomeState.diagnostics=diagnostics;renderDeviceDiagnostics();const [devices,rooms]=await Promise.all([smartHomeFetch("/devices"),smartHomeFetch("/rooms")]);let history={events:[]};try{history=await smartHomeFetch("/events/history?limit=40")}catch{}smartHomeState={devices:Array.isArray(devices.devices)?devices.devices:[],rooms:Array.isArray(rooms.rooms)?rooms.rooms:[],events:Array.isArray(history.events)?history.events:[],diagnostics};smartHomeLoaded=true;smartHomeUnavailable=false;if($("deviceStatus"))$("deviceStatus").textContent="";renderHomeDeviceStatus();renderDevicesPage();connectSmartHomeStream()}catch(error){smartHomeFailure=smartFailureKind(error);smartHomeLoaded=false;smartHomeUnavailable=true;if(!silent&&$("deviceStatus"))$("deviceStatus").textContent="Smart-home unavailable: "+smartErrorMessage(error);renderHomeDeviceStatus();renderDevicesPage();connectSmartHomeStream()}finally{smartHomeLoading=null}})();
+ smartHomeLoading=(async()=>{try{smartHomeFailure=null;const diagnostics=await smartHomeFetch("/diagnostics");smartHomeState.diagnostics=diagnostics;renderDeviceDiagnostics();const [devices,rooms]=await Promise.all([smartHomeFetch("/devices"),smartHomeFetch("/rooms")]);let history={events:[]};try{history=await smartHomeFetch("/events/history?limit=40")}catch{}smartHomeState={devices:Array.isArray(devices.devices)?devices.devices:[],rooms:Array.isArray(rooms.rooms)?rooms.rooms:[],events:Array.isArray(history.events)?history.events:[],diagnostics};smartHomeLoaded=true;smartHomeUnavailable=false;if($("deviceStatus")&&(!$("deviceStatus").textContent||$("deviceStatus").textContent.startsWith("Smart-home unavailable:")))$("deviceStatus").textContent="";renderHomeDeviceStatus();renderDevicesPage();connectSmartHomeStream();return true}catch(error){smartHomeFailure=smartFailureKind(error);const hasSnapshot=smartHomeLoaded||smartHomeState.devices.length>0||smartHomeState.rooms.length>0;if(hasSnapshot){smartHomeLoaded=true;smartHomeUnavailable=false;if(!silent&&$("deviceStatus"))$("deviceStatus").textContent="Refresh unavailable; showing last known device state."}else{smartHomeLoaded=false;smartHomeUnavailable=true;if(!silent&&$("deviceStatus"))$("deviceStatus").textContent="Smart-home unavailable: "+smartErrorMessage(error)}renderHomeDeviceStatus();renderDevicesPage();connectSmartHomeStream();return false}finally{smartHomeLoading=null}})();
  return smartHomeLoading;
 }
 setInterval(()=>{if(!document.hidden&&(currentPage==="home"||currentPage==="devices")&&!smartHomeStreamPromise)loadSmartHome({silent:true}).catch(()=>{})},30000);
@@ -210,7 +211,7 @@ async function insertItem(x){
 }
 
 function renderLists(){
-  if(currentPage==="drivers")return;
+  if(!["buy","groceries"].includes(currentPage))return;
   const arr=data[currentPage]||[],deleted=arr.filter(x=>x.deleted);const deletedTab=document.querySelector('#listsPage .sub-tab[data-view="deleted"]');if(deletedTab)deletedTab.childNodes[0].nodeValue=currentPage==="buy"?"Bought ":"Recently Deleted ";
   $("deletedCount").textContent=deleted.length?`(${deleted.length})`:"";
   $("pageTitle").textContent=currentPage==="buy"?"Buy List":"Groceries";
@@ -532,7 +533,20 @@ function setPrivacyGate(session){
 }
 function reminderStart(x){return x.all_day&&x.start_date?new Date(x.start_date+"T00:00:00"):new Date(x.start_at)}
 function reminderEnd(x){return x.all_day&&x.end_date?new Date(x.end_date+"T00:00:00"):new Date(x.end_at||x.start_at)}
-function applyAuthSession(session){session=isOwnerSession(session)?session:null;if(!session&&smartHomeStreamAbort)smartHomeStreamAbort.abort();smartHomeControlAllowed=!!session;smartHomeAccessToken=session?.access_token||"";smartHomeLoaded=false;smartHomeUnavailable=false;smartHomeFailure=null;if(!session){smartHomeState={devices:[],rooms:[],events:[],diagnostics:null};layneChatMessages=[];renderLayneChat()}setPrivacyGate(session);reminderSessionVersion++;reminders=[];remindersLoaded=false;monitorEmails=[];monitorEmailMessage=session?"Loading monitored email…":"Sign in to view monitored email.";renderImportantEmails();window.dispatchEvent(new CustomEvent("roggy-auth",{detail:{signedIn:!!session}}));if(currentPage==="home")renderHome();if(currentPage==="devices")renderDevicesPage();$("authBtn").textContent=session?"Sign out":"Sign in";$("authBtn").title=session?.user?.email||"Sign in with GitHub"}
+function applyAuthSession(session){
+ session=isOwnerSession(session)?session:null;
+ const hadSession=smartHomeControlAllowed,hasSession=!!session,authIdentityChanged=hadSession!==hasSession;
+ if(!session&&smartHomeStreamAbort)smartHomeStreamAbort.abort();
+ if(!session&&smartHomeStreamRetry){clearTimeout(smartHomeStreamRetry);smartHomeStreamRetry=null}
+ smartHomeControlAllowed=hasSession;smartHomeAccessToken=session?.access_token||"";
+ if(!session){smartHomeLoaded=false;smartHomeUnavailable=false;smartHomeFailure=null;smartHomeState={devices:[],rooms:[],events:[],diagnostics:null};layneChatMessages=[];renderLayneChat()}
+ setPrivacyGate(session);
+ if(authIdentityChanged){reminderSessionVersion++;reminders=[];remindersLoaded=false;monitorEmails=[];monitorEmailMessage=session?"Loading monitored email…":"Sign in to view monitored email.";renderImportantEmails()}
+ window.dispatchEvent(new CustomEvent("roggy-auth",{detail:{signedIn:hasSession}}));
+ if(currentPage==="home"&&(authIdentityChanged||!smartHomeLoaded))renderHome();
+ if(currentPage==="devices"&&(authIdentityChanged||!smartHomeLoaded)){renderDevicesPage();if(session)loadSmartHome({silent:true}).catch(()=>{})}
+ $("authBtn").textContent=session?"Sign out":"Sign in";$("authBtn").title=session?.user?.email||"Sign in with GitHub"
+}
 async function finishOAuthRedirect(){const p=new URLSearchParams(location.search),code=p.get("code"),err=p.get("error_description")||p.get("error");if(err){$("status").textContent="Sign-in error: "+err;history.replaceState({},document.title,location.pathname);return}if(!code)return;const {data,error}=await sb.auth.exchangeCodeForSession(code);history.replaceState({},document.title,location.pathname);if(error){$("status").textContent="Sign-in error: "+error.message;applyAuthSession(null);return}applyAuthSession(data.session);$("status").textContent=""}
 async function updateAuth(){const {data:{session},error}=await sb.auth.getSession();if(error)showErr(error);if(session&&!isOwnerSession(session)){await sb.auth.signOut({scope:"local"});applyAuthSession(null);return null}applyAuthSession(session);return session}
 $("authBtn").onclick=async()=>{const {data:{session}}=await sb.auth.getSession();if(session){const {error}=await sb.auth.signOut({scope:"local"});if(error)showErr(error);else applyAuthSession(null);return}const {data,error}=await sb.auth.signInWithOAuth({provider:"github",options:{redirectTo:"https://garoggy.github.io/roggy-buy-list/",skipBrowserRedirect:true}});if(error){showErr(error);return}if(data?.url)window.location.assign(data.url);else $("status").textContent="Sign-in error: Supabase did not return an authorization URL."};
