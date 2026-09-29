@@ -666,7 +666,7 @@ async function loadProjectsFromSupabase(){
  saveProjects();return projects;
 }
 function ensureBuiltinProjects(){for(const [title,d] of Object.entries(BUILTIN_PROJECTS)){if(!projects.some(p=>p.title===title))projects.push({title,description:d.description,status:"Active",priority:"High",builtin:true,created:new Date().toISOString()})}saveProjects()}
-async function renderProjects(){await loadProjectsFromSupabase();$("projectList").innerHTML=projects.map((p,i)=>'<button type="button" class="project-card project-open" data-project-open="'+i+'"><div><span class="project-status">'+esc(p.status)+'</span><h3>'+esc(p.title)+'</h3><p>'+esc(p.description||"No description yet.")+'</p></div><div class="project-foot"><span>'+esc(p.priority||"High")+' priority</span><span>Open →</span></div></button>').join("");document.querySelectorAll("[data-project-open]").forEach(b=>b.onclick=()=>openProject(+b.dataset.projectOpen))}
+async function renderProjects(){await loadProjectsFromSupabase();$("projectList").innerHTML=projects.map((p,i)=>'<button type="button" class="project-card project-open" data-project-open="'+i+'"><div><span class="project-status">'+esc(p.status)+'</span><h3>'+esc(p.title)+'</h3></div><div class="project-foot"><span>'+esc(p.priority||"High")+' priority</span><span>Open →</span></div></button>').join("");document.querySelectorAll("[data-project-open]").forEach(b=>b.onclick=()=>openProject(+b.dataset.projectOpen))}
 async function fetchProjectItems(title){
  const {data:{session}}=await sb.auth.getSession();
  if(!isOwnerSession(session))return [];
