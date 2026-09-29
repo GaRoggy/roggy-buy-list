@@ -700,7 +700,7 @@ async function openProject(i){
  const p=projects[i];if(!p)return;const built=BUILTIN_PROJECTS[p.title];
  setPage("project-detail");$("pageTitle").textContent=p.title;$("pageSubtitle").textContent="Project";
  const dbItems=await fetchProjectItems(p.title);
- let html='';
+ let html='<section class="project-detail-hero"><span class="project-status">'+esc(p.status)+'</span><h2>'+esc(p.title)+'</h2><p>'+esc(p.description||"")+'</p></section>';
  if(built){
    const byTitle=new Map(dbItems.map(x=>[x.title.toLowerCase(),x]));
    html+='<section class="project-detail-section"><h3>Implementation</h3><div class="project-check-list">'+built.steps.map((x,index)=>{const row=byTitle.get(x.toLowerCase());return '<div class="project-check-row">'+projectCheckButton(!!row?.checked,row?'data-project-item="'+esc(row.id)+'" data-project-item-title="'+esc(p.title)+'"':'data-project-step-create="'+index+'"','Toggle '+x)+'<div class="project-check-copy">'+esc(x)+'</div></div>'}).join("")+'</div></section>';
