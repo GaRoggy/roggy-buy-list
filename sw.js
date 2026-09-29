@@ -1,5 +1,5 @@
-const CACHE='roggy-lists-v59';
-const ASSETS=['./','index.html','styles.css?v=106','todos.css?v=61','app.js?v=93','monitor-ui.js?v=52','todos.js?v=65','manifest.json','icon.svg?v=2','assets/mountain-panorama.jpg','ai-config.js?v=42','ai-ui.js?v=41','ai/browser/provider.js','ai/shared/protocol.js'];
+const CACHE='roggy-lists-v60';
+const ASSETS=['./','index.html','styles.css?v=106','todos.css?v=61','app.js?v=94','monitor-ui.js?v=52','todos.js?v=65','manifest.json','icon.svg?v=2','assets/mountain-panorama.jpg','ai-config.js?v=42','ai-ui.js?v=41','ai/browser/provider.js','ai/shared/protocol.js'];
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)))});
 self.addEventListener('activate',e=>e.waitUntil(Promise.all([
   caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('roggy-lists-')&&k!==CACHE).map(k=>caches.delete(k)))),
