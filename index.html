@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#6d28d9">
 <title>Roggy Lists</title>
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="styles.css?v=41">
+<link rel="stylesheet" href="styles.css?v=43">
 <link rel="apple-touch-icon" href="icon.svg">
 </head>
 <body>
@@ -27,6 +27,7 @@
 <label class="drawer-backdrop" for="moreToggle" aria-label="Close menu"></label>
 <aside class="side-drawer" aria-label="More sections">
   <div class="drawer-head"><b>More</b><label for="moreToggle" class="drawer-close">✕</label></div>
+  <button class="page-tab drawer-page-tab" data-page="ai">Local AI</button>
   <button class="page-tab drawer-page-tab" data-page="groceries" onclick="document.getElementById('moreToggle').checked=false">Groceries</button>
   <button class="page-tab drawer-page-tab" data-page="projects" onclick="document.getElementById('moreToggle').checked=false">Projects</button>
   <button class="page-tab drawer-page-tab" data-page="health" onclick="document.getElementById('moreToggle').checked=false">Health</button>
@@ -108,6 +109,23 @@
 <section id="projectsPage" hidden><main class="system-main"><div class="system-intro"><span class="eyebrow">PROJECTS</span><h2>Everything with a finish line.</h2><p>Tasks, notes, links, purchases, milestones and reminders can live together here.</p></div><div id="projectList" class="project-grid"></div><button id="newProjectBtn" class="wide-action">＋ New Project</button></main></section>
 <section id="healthPage" hidden><main class="system-main"><div class="system-intro"><span class="eyebrow">GARMIN CONNECT</span><h2>Health</h2><p>Your wellness dashboard is ready for Garmin data.</p></div><div class="metric-grid"><div><span>Sleep</span><b>—</b><small>Connect data</small></div><div><span>Body Battery</span><b>—</b><small>Connect data</small></div><div><span>Resting HR</span><b>—</b><small>Connect data</small></div><div><span>Stress</span><b>—</b><small>Connect data</small></div></div><div class="system-card"><b>Health trends</b><p>Sleep, HRV, stress, activity and workouts will live here with day / week / month views and correlations.</p></div></main></section>
 <section id="vehiclePage" hidden><main class="system-main"><div class="vehicle-hero"><div><span class="eyebrow">MY VEHICLE</span><h2>2021 Toyota RAV4</h2><p>Maintenance, mileage, documents and accessories.</p></div><span class="vehicle-icon">◇</span></div><div class="metric-grid"><div><span>Mileage</span><b>—</b><small>Tap to add</small></div><div><span>Oil</span><b>—</b><small>No record yet</small></div><div><span>Tires</span><b>—</b><small>No record yet</small></div><div><span>Next due</span><b>—</b><small>All clear</small></div></div><div class="system-card"><b>Maintenance history</b><p>Add mileage and service records here. Upcoming mileage- and date-based maintenance will surface on Home.</p></div></main></section>
+
+<section id="aiPage" hidden>
+  <main class="ai-main">
+    <section class="ai-panel">
+      <div class="ai-heading"><div><span class="eyebrow">YOUR PC · YOUR MODELS</span><h2>Local AI</h2></div><span id="aiConnection" class="ai-connection" role="status" data-state="offline">Not connected</span></div>
+      <p class="ai-privacy">Chat privately with your PC through Tailscale. Conversation stays in this tab and clears when you sign out or reload.</p>
+      <div class="ai-tools"><label for="aiModel">Ollama model<select id="aiModel" disabled><option value="">Connect to discover models</option></select></label><button id="aiRefresh" type="button">Reconnect / refresh</button><button id="aiClear" type="button">Clear conversation</button></div>
+      <p id="aiError" class="ai-error" role="alert"></p>
+      <div id="aiEmpty" class="ai-empty"><span aria-hidden="true">✦</span><h3>What’s on your mind?</h3><p>Choose a model, then send a message.<br>Only the text you enter here is sent to your PC.</p></div>
+      <div id="aiHistory" class="ai-history" role="log" aria-label="AI conversation" aria-live="polite" aria-relevant="additions text"></div>
+      <form id="aiForm" class="ai-composer">
+        <label for="aiPrompt">Message</label><textarea id="aiPrompt" rows="3" maxlength="12000" placeholder="Ask your local AI…" autocomplete="off" required aria-describedby="aiKeyboard"></textarea>
+        <div class="ai-compose-actions"><small id="aiKeyboard">Enter for a new line · Ctrl/⌘ + Enter to send</small><span id="aiGenerating" role="status" hidden>Generating…</span><button id="aiStop" type="button" hidden>Stop</button><button id="aiSend" class="ai-send" type="submit" disabled>Send ↗</button></div>
+      </form>
+    </section>
+  </main>
+</section>
 
 <section id="listsPage">
   <nav class="sub-tabs"><button class="sub-tab active" data-view="active">Active</button><button class="sub-tab" data-view="deleted">Recently Deleted <span id="deletedCount"></span></button></nav>
@@ -231,6 +249,19 @@
 </form></dialog>
 
 <button id="addBtn" class="fab">＋</button>
+<button id="layneChatFab" class="layne-chat-fab" type="button" aria-label="Talk to Layne" title="Talk to Layne">✦</button>
+<dialog id="layneChatDialog" class="layne-chat-dialog">
+  <div class="layne-chat-shell">
+    <div class="dialog-head"><div><span class="eyebrow">LAYNE</span><h2>Talk to Layne</h2></div><button id="layneChatClose" class="plain" type="button" aria-label="Close chat">✕</button></div>
+    <div id="layneChatHistory" class="layne-chat-history" role="log" aria-live="polite" aria-label="Layne conversation"></div>
+    <p id="layneChatError" class="layne-chat-error" role="alert"></p>
+    <form id="layneChatForm" class="layne-chat-form">
+      <label for="layneChatPrompt">Message</label>
+      <textarea id="layneChatPrompt" rows="3" maxlength="2000" placeholder="Ask Layne anything…" autocomplete="off" required></textarea>
+      <div class="layne-chat-actions"><span id="layneChatStatus" role="status"></span><small>Enter to send · Shift+Enter for a new line</small><button id="layneChatSend" class="primary" type="submit">Send</button></div>
+    </form>
+  </div>
+</dialog>
 <dialog id="brainDumpDialog"><form method="dialog" id="brainDumpForm"><div class="dialog-head"><h2>Brain Dump</h2><button value="cancel" class="plain">✕</button></div><p class="setup-copy">Get it out of your head. Organize it later.</p><textarea id="brainDumpText" rows="5" required placeholder="What's on your mind?"></textarea><div class="actions"><button value="cancel" class="secondary">Cancel</button><button value="default" class="primary">Save to Inbox</button></div></form></dialog>
 <dialog id="globalSearchDialog"><div class="detail-dialog"><div class="dialog-head"><h2>Search Everything</h2><button id="closeGlobalSearch" class="plain">✕</button></div><input id="globalSearchInput" class="global-search-input" placeholder="Search lists, projects, thoughts, digestibles…"><div id="globalSearchResults" class="search-results"></div></div></dialog>
 <dialog id="projectDialog"><form method="dialog" id="projectForm"><div class="dialog-head"><h2>New Project</h2><button value="cancel" class="plain">✕</button></div><label>Project<input id="projectTitle" required placeholder="Apartment, Ant Farm, Trip…"></label><label>What is the goal?<textarea id="projectDescription" rows="3"></textarea></label><div class="grid2"><label>Status<select id="projectStatus"><option>Idea</option><option selected>Active</option><option>On Hold</option><option>Completed</option></select></label><label>Priority<select id="projectPriority"><option>Low</option><option selected>Medium</option><option>High</option></select></label></div><div class="actions"><button value="cancel" class="secondary">Cancel</button><button value="default" class="primary">Create</button></div></form></dialog>
@@ -266,6 +297,8 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
-<script src="app.js?v=41"></script>
-<script src="monitor-ui.js?v=41"></script>
+<script src="app.js?v=43"></script>
+<script src="monitor-ui.js?v=43"></script>
+<script src="ai-config.js?v=42"></script>
+<script type="module" src="ai-ui.js?v=41"></script>
 </body></html>
