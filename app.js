@@ -684,17 +684,20 @@ async function getProjectDbId(title){
 function projectCheckButton(checked,attrs,label){
  return '<button type="button" class="project-check '+(checked?'checked':'')+'" '+attrs+' aria-label="'+esc(label)+'" aria-pressed="'+(checked?'true':'false')+'">'+(checked?'✓':'')+'</button>';
 }
-async function toggleProjectItemCheck(id,next,title){
+async function toggleProjectItemCheck(button,id,next,title){
+ const y=window.scrollY;
+ button.blur();
+ button.classList.toggle("checked",next);button.setAttribute("aria-pressed",String(next));button.textContent=next?"✓":"";
  const {error}=await sb.from("project_items").update({checked:next,updated_at:new Date().toISOString()}).eq("id",id);
- if(error){showErr(error);return}
- const i=projects.findIndex(p=>p.title===title);if(i>=0)openProject(i);
+ if(error){button.classList.toggle("checked",!next);button.setAttribute("aria-pressed",String(!next));button.textContent=!next?"✓":"";showErr(error)}
+ requestAnimationFrame(()=>window.scrollTo({top:y,left:0,behavior:"instant"}));
 }
-async function createAndCheckProjectItem(projectTitle,itemTitle,itemType,notes,url){
+async function createAndCheckProjectItem(projectTitle,itemTitle,itemType,notes,url,restoreY=window.scrollY){
  const projectId=await getProjectDbId(projectTitle);if(!projectId){showErr(new Error("Project is not synced yet."));return}
  const {data:{session}}=await sb.auth.getSession();if(!isOwnerSession(session))return;
  const {error}=await sb.from("project_items").insert({project_id:projectId,user_id:session.user.id,title:itemTitle,item_type:itemType,status:"planned",notes:notes||null,product_url:url||null,checked:true});
  if(error){showErr(error);return}
- const i=projects.findIndex(p=>p.title===projectTitle);if(i>=0)openProject(i);
+ const i=projects.findIndex(p=>p.title===projectTitle);if(i>=0){await openProject(i);requestAnimationFrame(()=>window.scrollTo({top:restoreY,left:0,behavior:"instant"}))}
 }
 async function openProject(i){
  const p=projects[i];if(!p)return;const built=BUILTIN_PROJECTS[p.title];
@@ -711,9 +714,9 @@ async function openProject(i){
    html+='<section class="project-detail-section"><h3>Items</h3><div class="project-device-list">'+(dbItems.length?dbItems.map(d=>'<div class="project-device project-device-checkable">'+projectCheckButton(!!d.checked,'data-project-item="'+esc(d.id)+'" data-project-item-title="'+esc(p.title)+'"','Toggle '+d.title)+'<div class="project-device-copy"><b>'+esc(d.title)+'</b><p>'+esc(d.notes||"")+'</p></div>'+(d.product_url?'<a class="project-device-link" href="'+esc(d.product_url)+'" target="_blank" rel="noopener" aria-label="Open '+esc(d.title)+' link">↗</a>':'')+'</div>').join(""):'<div class="quiet-state">No project items yet.</div>')+'</div></section>';
  }
  $("projectDetailContent").innerHTML=html;
- document.querySelectorAll("[data-project-item]").forEach(b=>b.onclick=()=>toggleProjectItemCheck(b.dataset.projectItem,b.getAttribute("aria-pressed")!=="true",b.dataset.projectItemTitle));
- document.querySelectorAll("[data-project-step-create]").forEach(b=>b.onclick=()=>{const step=built.steps[+b.dataset.projectStepCreate];createAndCheckProjectItem(p.title,step,"task","Required implementation step","")});
- document.querySelectorAll("[data-project-device-create]").forEach(b=>b.onclick=()=>{const d=built.devices[+b.dataset.projectDeviceCreate];createAndCheckProjectItem(p.title,d.name,"device",d.note,d.url)});
+ document.querySelectorAll("[data-project-item]").forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();toggleProjectItemCheck(b,b.dataset.projectItem,b.getAttribute("aria-pressed")!=="true",b.dataset.projectItemTitle)});
+ document.querySelectorAll("[data-project-step-create]").forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();const y=window.scrollY;b.blur();const step=built.steps[+b.dataset.projectStepCreate];createAndCheckProjectItem(p.title,step,"task","Required implementation step","",y)});
+ document.querySelectorAll("[data-project-device-create]").forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();const y=window.scrollY;b.blur();const d=built.devices[+b.dataset.projectDeviceCreate];createAndCheckProjectItem(p.title,d.name,"device",d.note,d.url,y)});
 }
 $("projectBackBtn").onclick=()=>setPage("projects");
 $("newProjectBtn").onclick=()=>$("projectDialog").showModal();
