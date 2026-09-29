@@ -981,3 +981,17 @@ html[data-swipe-direction="prev"] .swipe-neighbor{border-left:0;border-right:1px
 html[data-ui-size="small"]{--fab-size:46px;--fab-right:14px;--fab-offset:14px}
 html[data-ui-size="large"]{--fab-size:78px;--fab-right:26px;--fab-offset:26px}
 @media(max-width:500px){.device-diagnostics-grid{grid-template-columns:1fr 1fr}.layne-chat-fab{right:var(--fab-right)!important;bottom:calc(var(--fab-offset) + env(safe-area-inset-bottom) + var(--fab-size) + var(--fab-gap))!important}}
+
+
+/* Drawer layering + project detail cleanup v105 */
+/* The navigation drawer is always the top application layer. Nothing from page content
+   (sticky header, project back button, FABs, tabs) may paint over it. */
+.drawer-backdrop{z-index:9998!important}
+.side-drawer{z-index:9999!important}
+.drawer-toggle:checked~.side-drawer{isolation:isolate}
+header{z-index:40}
+.project-back{position:relative!important;top:auto!important;z-index:1!important;margin:0 0 12px!important}
+.fab{z-index:30}
+
+/* Project detail pages use the header title only; don't repeat the description in a hero card. */
+.project-detail-hero{display:none!important}
