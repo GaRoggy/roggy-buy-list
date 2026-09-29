@@ -981,3 +981,6 @@ html[data-swipe-direction="prev"] .swipe-neighbor{border-left:0;border-right:1px
 html[data-ui-size="small"]{--fab-size:46px;--fab-right:14px;--fab-offset:14px}
 html[data-ui-size="large"]{--fab-size:78px;--fab-right:26px;--fab-offset:26px}
 @media(max-width:500px){.device-diagnostics-grid{grid-template-columns:1fr 1fr}.layne-chat-fab{right:var(--fab-right)!important;bottom:calc(var(--fab-offset) + env(safe-area-inset-bottom) + var(--fab-size) + var(--fab-gap))!important}}
+
+/* Action confirmation cards are rendered from a server-bound pending action id. */
+.layne-confirmation-card{display:grid;gap:6px;margin-top:9px;padding:11px;border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:14px;background:color-mix(in srgb,var(--accent-pale) 54%,var(--surface))}.layne-confirmation-card p{margin:0;color:var(--muted);font-size:10px}.layne-confirmation-card strong{font-size:13px}.layne-confirmation-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:3px}.layne-confirmation-actions button{padding:7px 11px;font-size:11px}

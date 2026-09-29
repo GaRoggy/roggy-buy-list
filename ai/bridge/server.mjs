@@ -36,12 +36,17 @@ const json = (res, status, data) => { res.writeHead(status, { 'Content-Type': 'a
 
 const SMART_HOME_PREFIX = '/smart-home';
 const SMART_HOME_PATH = /^\/(?:devices(?:\/[A-Za-z0-9._~%+\-]+(?:\/actions)?)?|rooms(?:\/[A-Za-z0-9._~%+\-]+)?|events\/(?:history|stream))$/;
-function smartHomeRequest(reqUrl) {
+const CONFIRMATION_PATH = /^\/confirmations\/[A-Za-z0-9._~%+\-]+$/;
+function smartHomeRequest(reqUrl, requestMethod = null) {
   const parsed = new URL(reqUrl, 'http://bridge.local');
   if (!parsed.pathname.startsWith(`${SMART_HOME_PREFIX}/`) && parsed.pathname !== SMART_HOME_PREFIX) return null;
   const path = parsed.pathname.slice(SMART_HOME_PREFIX.length) || '/diagnostics';
   if (path === '/diagnostics') return { kind: 'diagnostics', method: 'GET' };
   if (path === '/commands') return { kind: 'proxy', method: 'POST', path: '/api/commands', search: parsed.search };
+  if (CONFIRMATION_PATH.test(path)) {
+    if (!['GET', 'POST'].includes(requestMethod)) throw new AIError('METHOD_NOT_ALLOWED', 405);
+    return { kind: 'proxy', method: requestMethod, path: `/api${path}`, search: parsed.search };
+  }
   if (!SMART_HOME_PATH.test(path)) throw new AIError('SMART_HOME_ROUTE_NOT_FOUND', 404);
   const isAction = path.endsWith('/actions');
   const isStream = path === '/events/stream';
@@ -164,7 +169,7 @@ export function createBridge(cfg, { fetcher = fetch, ai = createAI(cfg, fetcher)
       inflight++; counted = true;
       await authorize(req.headers.authorization, cfg, signal, fetcher);
       signal.throwIfAborted();
-      const smartHome = smartHomeRequest(req.url);
+      const smartHome = smartHomeRequest(req.url, req.method);
       if (smartHome) {
         if (smartHome.method !== req.method) throw new AIError('METHOD_NOT_ALLOWED', 405);
         if (smartHome.kind === 'diagnostics') {
