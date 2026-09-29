@@ -32,7 +32,7 @@ let reminders=[],reminderView="today",remindersLoaded=false,reminderSessionVersi
 let monitorEmails=[],monitorEmailMessage="Sign in to view monitored email.";
 let digestibles=[],digestView="books",digestStatusView="queue";
 const SMART_HOME_API=(window.ROGGY_SMART_HOME_API||window.ROGGY_AI_CONFIG?.smartHomeUrl||"").replace(/\/$/,"");
-let smartHomeState={devices:[],rooms:[],events:[],diagnostics:null},smartHomeLoaded=false,smartHomeUnavailable=false,smartHomeFailure=null,smartHomeLoading=null,smartHomeStreamPromise=null,smartHomeStreamAbort=null,smartHomeStreamRetry=null,smartHomeLastEventId="",smartHomeControlAllowed=false,smartHomeAccessToken="";
+let smartHomeState={devices:[],rooms:[],events:[],diagnostics:null},smartHomeLoaded=false,smartHomeUnavailable=false,smartHomeFailure=null,smartHomeLoading=null,smartHomeStreamPromise=null,smartHomeStreamAbort=null,smartHomeStreamRetry=null,smartHomeLastEventId="",smartHomeControlAllowed=false,smartHomeAccessToken="",smartHomePendingActions=new Map();
 let layneChatMessages=[],layneChatBusy=false,layneChatError="";
 
 
@@ -129,7 +129,7 @@ function smartHomeRooms(){
  return [...byId.values()].map(room=>({...room,devices:room.devices.length?room.devices:roomDevices(room)})).sort((a,b)=>roomAttentionScore(b)-roomAttentionScore(a));
 }
 function roomPresenceLabel(room){const devices=roomDevices(room),sensors=devices.filter(device=>device.capabilities?.includes("presence")),valid=sensors.filter(device=>deviceUsable(device)&&String(device.state||"").toLowerCase()!=="unknown");if(!sensors.length)return "Presence unavailable";if(!valid.length)return sensors.some(device=>deviceOnline(device))?"Presence stale":"Offline";return valid.some(device=>["occupied","present","detected","motion"].includes(String(device.state||"").toLowerCase()))?"Occupied":"Clear"}
-function roomLightLabel(room){const lights=roomDevices(room).filter(device=>device.capabilities?.includes("power")),active=lights.filter(device=>deviceUsable(device)&&String(device.state||"").toLowerCase()==="on"),brightness=active.map(deviceBrightness).filter(value=>value!=null);if(!lights.length)return "Lights: —";if(!active.length)return "Lights: Off";if(active.length===1&&brightness.length===1)return `Lights: On · ${brightness[0]}%`;return `Lights: ${active.length} on`}
+function roomLightLabel(room){const lights=roomDevices(room).filter(device=>device.capabilities?.includes("power")),active=lights.filter(device=>deviceUsable(device)&&devicePowerState(device)==="on"),brightness=active.map(deviceBrightness).filter(value=>value!=null);if(!lights.length)return "Lights: —";if(!active.length)return "Lights: Off";if(active.length===1&&brightness.length===1)return `Lights: On · ${brightness[0]}%`;return `Lights: ${active.length} on`}
 function roomMicrophoneLabel(room){const microphones=roomDevices(room).filter(device=>device.capabilities?.some(capability=>["audio_input","microphone_status"].includes(capability)));if(!microphones.length)return "";const active=microphones.filter(device=>deviceUsable(device));return active.length?`Microphone: ${smartStateLabel(active[0].state)}`:`Microphone: ${microphones.some(device=>deviceOnline(device))?"Stale":"Offline"}`}
 function roomAttentionScore(room){const devices=roomDevices(room),offline=devices.filter(device=>!deviceOnline(device)).length,stale=devices.filter(device=>deviceOnline(device)&&!deviceFresh(device)).length,occupied=roomPresenceLabel(room)==="Occupied",active=devices.some(device=>deviceUsable(device)&&!(["off","clear","unknown"].includes(String(device.state||"").toLowerCase())));return offline*100+stale*50+(occupied?10:0)+(active?5:0)}
 function roomHealthLine(room){const devices=roomDevices(room),offline=devices.filter(device=>!deviceOnline(device)).length,stale=devices.filter(device=>deviceOnline(device)&&!deviceFresh(device)).length;if(offline)return `${offline} device${offline===1?"":"s"} offline`;if(stale)return `${stale} state${stale===1?"":"s"} stale`;return "All systems normal"}
@@ -138,6 +138,26 @@ function recentSmartHomeEvents(){return (smartHomeState.events||[]).filter(event
 function focusDevice(deviceId){setPage("devices");setTimeout(()=>{const card=document.querySelector(`[data-device-card="${CSS.escape(deviceId)}"]`);if(card){card.scrollIntoView({behavior:"smooth",block:"center"});card.classList.add("device-highlight");setTimeout(()=>card.classList.remove("device-highlight"),1600)}},50)}
 function bindHomeDeviceLinks(){document.querySelectorAll("[data-device-jump]").forEach(button=>button.onclick=()=>focusDevice(button.dataset.deviceJump));document.querySelectorAll("[data-room-jump]").forEach(button=>button.onclick=()=>{setPage("devices");setTimeout(()=>document.getElementById(`smart-room-${CSS.escape(button.dataset.roomJump)}`)?.scrollIntoView({behavior:"smooth",block:"start"}),50)})}
 function snapshotDevice(device){return device?{...device,attributes:{...(device.attributes||{})}}:null}
+function beginDeviceAction(deviceId,body){
+ const previous=applyDeviceActionState(deviceId,body);if(!previous)return {previous:null,version:0};
+ const version=(smartHomePendingActions.get(deviceId)?.version||0)+1;
+ smartHomePendingActions.set(deviceId,{version,body,optimistic:snapshotDevice(smartHomeState.devices.find(device=>device.device_id===deviceId)),awaitingConfirmation:false,expiresAt:Date.now()+10000});
+ return {previous,version};
+}
+function pendingDeviceState(device){
+ const pending=smartHomePendingActions.get(device.device_id);if(!pending)return device;
+ if(pending.expiresAt<Date.now()){smartHomePendingActions.delete(device.device_id);return device}
+ return {...device,state:pending.optimistic?.state,attributes:{...(device.attributes||{}),...(pending.optimistic?.attributes||{})},freshness:"fresh",last_state_changed_at:pending.optimistic?.last_state_changed_at||device.last_state_changed_at};
+}
+function actionStillCurrent(deviceId,version){return version>0&&smartHomePendingActions.get(deviceId)?.version===version}
+async function refreshAfterDeviceAction(deviceId,version){
+ let refreshed=await loadSmartHome({silent:true});
+ if(actionStillCurrent(deviceId,version)){
+  smartHomePendingActions.delete(deviceId);
+  refreshed=await loadSmartHome({silent:true});
+ }
+ return refreshed;
+}
 function applyDeviceActionState(deviceId,body){
  const device=smartHomeState.devices.find(item=>item.device_id===deviceId);if(!device)return null;
  const previous=snapshotDevice(device),action=String(body?.action||"").toLowerCase();
@@ -159,12 +179,13 @@ function restoreDeviceSnapshot(deviceId,previous){
 }
 async function sendRoomPower(roomId,value){
  const room=smartHomeRooms().find(item=>item.room_id===roomId),lights=roomDevices(room).filter(device=>device.capabilities?.includes("power")&&deviceUsable(device));if(!lights.length)return;
- const status=$("deviceStatus"),snapshots=lights.map(device=>[device.device_id,applyDeviceActionState(device.device_id,{action:"power",value})]);if(status)status.textContent="Updating room lights…";
- try{await Promise.all(lights.map(device=>smartHomeFetch(`/devices/${encodeURIComponent(device.device_id)}/actions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"power",value})})));const refreshed=await loadSmartHome({silent:true});if(status)status.textContent=refreshed?"Room lights updated.":"Room lights command sent; showing requested state until devices confirm."}
- catch(error){snapshots.forEach(([deviceId,previous])=>restoreDeviceSnapshot(deviceId,previous));if(status)status.textContent="Room light update failed: "+smartErrorMessage(error)}
+ const status=$("deviceStatus"),actions=lights.map(device=>({device,action:beginDeviceAction(device.device_id,{action:"power",value})}));if(status)status.textContent="Updating room lights…";
+ try{await Promise.all(actions.map(({device})=>smartHomeFetch(`/devices/${encodeURIComponent(device.device_id)}/actions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"power",value})})));let refreshed=true;for(const {device,action} of actions)if(actionStillCurrent(device.device_id,action.version))refreshed=await refreshAfterDeviceAction(device.device_id,action.version)&&refreshed;if(status)status.textContent=refreshed?"Room lights updated.":"Room lights command sent; showing requested state until devices confirm."}
+ catch(error){actions.forEach(({device,action})=>{if(actionStillCurrent(device.device_id,action.version)){smartHomePendingActions.delete(device.device_id);restoreDeviceSnapshot(device.device_id,action.previous)}});if(status)status.textContent="Room light update failed: "+smartErrorMessage(error)}
 }
 function renderHomeDeviceStatus(){
  const root=$("homeDeviceStatus");if(!root)return;
+ smartHomeState.devices=smartHomeState.devices.map(pendingDeviceState);
  if(smartHomeUnavailable){root.innerHTML=`<div class="quiet-state"><b>Smart Home</b><br>${esc(smartFailureKind(smartHomeFailure)==="authentication"?"Authentication failed.":"Bridge or smart-home service unavailable.")}</div>`;return}
  if(!smartHomeLoaded){root.innerHTML='<div class="quiet-state">Loading device status…</div>';return}
  if(!smartHomeState.devices.length){root.innerHTML='<div class="quiet-state">No devices configured.</div>';return}
@@ -178,6 +199,7 @@ function renderHomeDeviceStatus(){
 }
 function renderDevicesPage(){
  const summary=$("deviceRoomSummary"),rooms=$("deviceRooms");if(!summary||!rooms)return;
+ smartHomeState.devices=smartHomeState.devices.map(pendingDeviceState);
  renderDeviceDiagnostics();
  const hasSnapshot=smartHomeLoaded||smartHomeState.devices.length>0||smartHomeState.rooms.length>0;
  if(smartHomeUnavailable&&!hasSnapshot){summary.innerHTML="";rooms.innerHTML=`<div class="system-card"><b>Smart-home data unavailable</b><p>${esc(smartErrorMessage({code:smartHomeFailure||"network_error"}))}. The bridge will keep retrying while this page is open.</p></div>`;return}
@@ -195,9 +217,9 @@ function bindDeviceControls(){
 }
 async function sendDeviceAction(deviceId,body){
  if(!smartHomeControlAllowed){const status=$("deviceStatus");if(status)status.textContent="Sign in to control devices.";return}
- const status=$("deviceStatus"),previous=applyDeviceActionState(deviceId,body);if(status)status.textContent="Updating device…";
- try{await smartHomeFetch(`/devices/${encodeURIComponent(deviceId)}/actions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const refreshed=await loadSmartHome({silent:true});if(status)status.textContent=refreshed?"Device state updated.":"Device command sent; showing requested state until the device confirms."}
- catch(error){restoreDeviceSnapshot(deviceId,previous);if(status)status.textContent="Device update failed: "+smartErrorMessage(error)}
+ const status=$("deviceStatus"),action=beginDeviceAction(deviceId,body);if(status)status.textContent="Updating device…";
+ try{await smartHomeFetch(`/devices/${encodeURIComponent(deviceId)}/actions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});if(!actionStillCurrent(deviceId,action.version))return;const refreshed=await refreshAfterDeviceAction(deviceId,action.version);if(status)status.textContent=refreshed?"Device state updated.":"Device command sent; showing requested state until the device confirms."}
+ catch(error){if(actionStillCurrent(deviceId,action.version)){smartHomePendingActions.delete(deviceId);restoreDeviceSnapshot(deviceId,action.previous);if(status)status.textContent="Device update failed: "+smartErrorMessage(error)}}
 }
 function connectSmartHomeStream(){
  if(smartHomeStreamPromise||!smartHomeAccessToken||!SMART_HOME_API)return;
