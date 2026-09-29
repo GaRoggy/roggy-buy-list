@@ -139,9 +139,11 @@ function focusDevice(deviceId){setPage("devices");setTimeout(()=>{const card=doc
 function bindHomeDeviceLinks(){document.querySelectorAll("[data-device-jump]").forEach(button=>button.onclick=()=>focusDevice(button.dataset.deviceJump));document.querySelectorAll("[data-room-jump]").forEach(button=>button.onclick=()=>{setPage("devices");setTimeout(()=>document.getElementById(`smart-room-${CSS.escape(button.dataset.roomJump)}`)?.scrollIntoView({behavior:"smooth",block:"start"}),50)})}
 function snapshotDevice(device){return device?{...device,attributes:{...(device.attributes||{})}}:null}
 function beginDeviceAction(deviceId,body){
- const previous=applyDeviceActionState(deviceId,body);if(!previous)return {previous:null,version:0};
+ const device=smartHomeState.devices.find(item=>item.device_id===deviceId),previous=snapshotDevice(device);if(!previous)return {previous:null,version:0};
  const version=++smartHomeActionSequence;
+ applyDeviceActionState(deviceId,body);
  smartHomePendingActions.set(deviceId,{version,body,optimistic:snapshotDevice(smartHomeState.devices.find(device=>device.device_id===deviceId)),awaitingConfirmation:false,expiresAt:Date.now()+10000});
+ renderHomeDeviceStatus();renderDevicesPage();
  return {previous,version};
 }
 function pendingDeviceState(device){
