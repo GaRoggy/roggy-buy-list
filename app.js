@@ -55,8 +55,8 @@ async function smartHomeFetch(path,options={}){
  return payload||{};
 }
 function smartFailureKind(error){if(!SMART_HOME_API||error?.code==="bridge_not_configured")return "bridge";if([401,403].includes(error?.status)||["UNAUTHORIZED","FORBIDDEN","authentication_required","authentication_failed"].includes(error?.payload?.error?.code))return "authentication";if(error?.status>=500)return "service";return "network"}
-function diagnosticTone(status){return status==="online"?"online":status==="degraded"?"stale":"offline"}
-function diagnosticLabel(status){return status==="online"?"Online":status==="degraded"?"Degraded":status==="unknown"?"Unknown":"Offline"}
+function diagnosticTone(status){return ["online","authenticated"].includes(status)?"online":status==="degraded"?"stale":"offline"}
+function diagnosticLabel(status){return ["online","authenticated"].includes(status)?"Online":status==="degraded"?"Degraded":status==="unknown"?"Unknown":"Offline"}
 function renderDeviceDiagnostics(){
  const root=$("deviceDiagnostics");if(!root)return;
  const diagnostics=smartHomeState.diagnostics||{},failure=smartHomeFailure;
