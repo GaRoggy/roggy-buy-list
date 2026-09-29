@@ -995,3 +995,10 @@ header{z-index:40}
 
 /* Project detail pages use the header title only; don't repeat the description in a hero card. */
 .project-detail-hero{display:none!important}
+
+/* Hard overlay contract v106: drawer and backdrop always cover every page layer. */
+body>.drawer-backdrop{position:fixed!important;inset:0!important;z-index:2147483646!important}
+body>.side-drawer{position:fixed!important;z-index:2147483647!important}
+.drawer-toggle:checked~.drawer-backdrop,.drawer-toggle:checked~.side-drawer{visibility:visible}
+header,.project-back,.fab,.page-tabs,.sub-tabs{z-index:40!important}
+.project-back{position:relative!important;top:auto!important}
