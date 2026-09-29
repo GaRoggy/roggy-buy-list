@@ -141,6 +141,7 @@ function snapshotDevice(device){return device?{...device,attributes:{...(device.
 function beginDeviceAction(deviceId,body){
  const device=smartHomeState.devices.find(item=>item.device_id===deviceId),previous=snapshotDevice(device);if(!previous)return {previous:null,version:0};
  const version=++smartHomeActionSequence;
+ smartHomePendingActions.delete(deviceId);
  applyDeviceActionState(deviceId,body);
  smartHomePendingActions.set(deviceId,{version,body,optimistic:snapshotDevice(smartHomeState.devices.find(device=>device.device_id===deviceId)),awaitingConfirmation:false,expiresAt:Date.now()+10000});
  renderHomeDeviceStatus();renderDevicesPage();
