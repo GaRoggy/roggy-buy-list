@@ -3,9 +3,8 @@ const SUPABASE_KEY="sb_publishable_4WYS4v4U7PSgXesYNNJUfA_69lJaBX1";
 const KEY="roggy-lists-v1";
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{flowType:"pkce",detectSessionInUrl:true,persistSession:true,autoRefreshToken:true}});
 const $=id=>document.getElementById(id);
-const BRAIN_KEY="roggy-brain-v1",PROJECT_KEY="roggy-projects-v1";
-let brainDump=JSON.parse(localStorage.getItem(BRAIN_KEY)||"[]"),projects=JSON.parse(localStorage.getItem(PROJECT_KEY)||"[]");
-function saveBrain(){localStorage.setItem(BRAIN_KEY,JSON.stringify(brainDump))}
+const PROJECT_KEY="roggy-projects-v1";
+let projects=JSON.parse(localStorage.getItem(PROJECT_KEY)||"[]");
 function saveProjects(){localStorage.setItem(PROJECT_KEY,JSON.stringify(projects))}
 
 const seed={buy:[
@@ -180,12 +179,12 @@ async function loadLists(){
   const {data:rows,error}=await sb.from("list_items").select("*").order("created_at",{ascending:true});
   if(error){data=loadLocal();showErr(error);renderLists();return}
   data={buy:[],groceries:[]};
-  for(const r of rows)data[r.list_type].push({id:r.id,item:r.item,category:r.category||"",priority:r.priority||"Need",quantity:r.quantity||"",status:r.status,notes:r.notes||"",option1:r.option1||"",price1:r.price1,link1:r.link1||"",option2:r.option2||"",price2:r.price2,link2:r.link2||"",option3:r.option3||"",price3:r.price3,link3:r.link3||"",deleted:!!r.deleted_at,created:r.created_at});
+  for(const r of rows)data[r.list_type].push({id:r.id,item:r.item,category:r.category||"",priority:r.priority||"Need",quantity:r.quantity||"",status:r.status,notes:r.notes||"",option1:r.option1||"",price1:r.price1,link1:r.link1||"",option2:r.option2||"",price2:r.price2,link2:r.link2||"",option3:r.option3||"",price3:r.price3,link3:r.link3||"",deleted:!!r.deleted_at,deletedAt:r.deleted_at||null,created:r.created_at});
   localStorage.setItem(KEY,JSON.stringify(data));renderLists();
 }
 async function saveItem(x){
   localStorage.setItem(KEY,JSON.stringify(data));
-  const {error}=await sb.from("list_items").update({item:x.item,category:x.category||null,priority:x.priority||null,quantity:x.quantity||null,status:x.status,notes:x.notes||null,deleted_at:x.deleted?new Date().toISOString():null}).eq("id",x.id);
+  const {error}=await sb.from("list_items").update({item:x.item,category:x.category||null,priority:x.priority||null,quantity:x.quantity||null,status:x.status,notes:x.notes||null,deleted_at:x.deleted?(x.deletedAt||new Date().toISOString()):null}).eq("id",x.id);
   if(error)throw error;
 }
 async function insertItem(x){
@@ -195,18 +194,19 @@ async function insertItem(x){
 
 function renderLists(){
   if(currentPage==="drivers")return;
-  const arr=data[currentPage]||[],deleted=arr.filter(x=>x.deleted);
+  const arr=data[currentPage]||[],deleted=arr.filter(x=>x.deleted);const deletedTab=document.querySelector('#listsPage .sub-tab[data-view="deleted"]');if(deletedTab)deletedTab.childNodes[0].nodeValue=currentPage==="buy"?"Bought ":"Recently Deleted ";
   $("deletedCount").textContent=deleted.length?`(${deleted.length})`:"";
   $("pageTitle").textContent=currentPage==="buy"?"Buy List":"Groceries";
   $("pageSubtitle").textContent=currentPage==="buy"?"Needs first. Luxuries later.":"Food and immediate grocery items.";
   document.querySelector(".toolbar").style.display=currentView==="deleted"?"none":"";
+   document.body.classList.toggle("deleted-view",currentView==="deleted");
   $("summary").style.display=currentView==="deleted"?"none":"";
   $("addBtn").style.display=currentView==="deleted"?"none":"";
   $("priorityFilters").style.display=currentPage==="groceries"?"none":"";
   const active=arr.filter(x=>!x.deleted),bought=active.filter(x=>x.status==="Bought").length,ready=active.filter(x=>x.status==="Ready to Buy").length;
   $("summary").innerHTML=`<div><b>${active.length-bought}</b><span>active</span></div><div><b>${ready}</b><span>ready</span></div><div><b>${bought}</b><span>bought</span></div>`;
   const q=$("search").value.toLowerCase(),rank={Need:0,Want:1,Eventually:2};
-  let shown=arr.filter(x=>currentView==="deleted"?x.deleted:!x.deleted)
+  let shown=arr.filter(x=>currentView==="deleted"?x.deleted:!x.deleted);if(currentView==="deleted"&&currentPage==="buy")shown.sort((a,b)=>new Date(b.deletedAt||b.created||0)-new Date(a.deletedAt||a.created||0))
     .filter(x=>currentPage==="groceries"||currentFilter==="all"||x.priority===currentFilter)
     .filter(x=>!q||[x.item,x.category,x.notes].join(" ").toLowerCase().includes(q));
   shown.sort($("sort").value==="name"?(a,b)=>a.item.localeCompare(b.item):(a,b)=>(rank[a.priority]??9)-(rank[b.priority]??9));
@@ -215,15 +215,15 @@ function renderLists(){
   shown.forEach(x=>{
     const c=document.createElement("article");c.className="card "+(x.status==="Bought"?"bought":"");
     if(currentView==="deleted"){
-      c.innerHTML=`<div class="deleted-row"><div><div class="item-name">${esc(x.item)}</div><div class="meta"><span>${esc(x.category||"Other")}</span></div></div><button class="restorebtn">↩ Restore</button></div>`;
-      c.querySelector(".restorebtn").onclick=()=>{x.deleted=false;x.status="Looking";saveItem(x).catch(showErr);renderLists()};$("list").appendChild(c);return;
+      c.innerHTML=`<div class="deleted-row"><div><div class="item-name">${esc(x.item)}</div><div class="meta"><span>${esc(x.category||"Other")}</span>${currentPage==="buy"&&x.deletedAt?`<span>Bought ${new Date(x.deletedAt).toLocaleDateString([],{month:"short",day:"numeric",year:"numeric"})}</span>`:""}</div></div><button class="restorebtn" aria-label="Restore item" title="Restore item"><span class="restore-icon" aria-hidden="true">↶</span></button></div>`;
+      c.querySelector(".restorebtn").onclick=()=>{x.deleted=false;x.deletedAt=null;x.status="Looking";saveItem(x).catch(showErr);renderLists()};$("list").appendChild(c);return;
     }
-    c.innerHTML=`<div class="card-summary"><button class="removebtn icon-action remove-left">✕</button><div class="summary-main"><div class="item-name">${esc(x.item)}${x.quantity&&x.quantity!=="1"?` <small>×${esc(x.quantity)}</small>`:""}</div><div class="meta"><span>${esc(x.category||"Other")}</span><span>${esc(x.status)}</span></div></div><div class="card-controls">${currentPage==="buy"?`<button class="prioritybtn icon-action" data-dir="up">↑</button><span class="badge ${esc(x.priority)}">${esc(x.priority)}</span><button class="prioritybtn icon-action" data-dir="down">↓</button>`:""}<span class="chevron">⌄</span></div></div><div class="card-details collapsed"><div class="quick"><button class="statusbtn ${x.status==="Looking"?"selected":""}" data-s="Looking">Looking</button><button class="statusbtn ${x.status==="Ready to Buy"?"selected":""}" data-s="Ready to Buy">Ready</button><button class="statusbtn ${x.status==="Bought"?"selected":""}" data-s="Bought">✓ Bought</button></div>${x.notes?`<div class="detail-notes">${esc(x.notes)}</div>`:""}${currentPage==="buy"?renderResearch(x):""}<div class="bottom-actions"><button class="editbtn">Edit details</button></div></div>`;
+    c.innerHTML=`<div class="card-summary"><button class="removebtn icon-action remove-left">✕</button><div class="summary-main"><div class="item-name">${esc(x.item)}${x.quantity&&x.quantity!=="1"?` <small>×${esc(x.quantity)}</small>`:""}</div><div class="meta"><span>${esc(x.category||"Other")}</span><span>${esc(x.status)}</span></div></div><div class="card-controls">${currentPage==="buy"?`<button class="prioritybtn icon-action" data-dir="up">↑</button><span class="badge ${esc(x.priority)}">${esc(x.priority)}</span><button class="prioritybtn icon-action" data-dir="down">↓</button>`:""}<span class="chevron">⌄</span></div></div><div class="card-details collapsed"><div class="quick"><button class="statusbtn ${x.status==="Looking"?"selected":""}" data-s="Looking">Looking</button><button class="statusbtn ${x.status==="Ready to Buy"?"selected":""}" data-s="Ready to Buy">Ready</button><button class="statusbtn ${x.status==="Bought"?"selected":""}" data-s="Bought">✓ Bought</button></div>${x.notes?`<div class="detail-notes">${esc(x.notes)}</div>`:""}${currentPage==="buy"?renderResearch(x):""}<div class="bottom-actions"><button class="editbtn">Edit details</button><button class="deletebtn danger-action" type="button">Delete</button></div></div>`;
     c.querySelector(".card-summary").onclick=e=>{if(e.target.closest("button"))return;c.querySelector(".card-details").classList.toggle("collapsed");c.classList.toggle("expanded")};
-    c.querySelector(".removebtn").onclick=()=>{x.deleted=true;saveItem(x).catch(showErr);renderLists()};
+    c.querySelector(".removebtn").onclick=()=>{if(currentPage==="buy")x.status="Bought";x.deleted=true;x.deletedAt=new Date().toISOString();saveItem(x).catch(showErr);renderLists()};
     c.querySelectorAll(".statusbtn").forEach(b=>b.onclick=()=>{x.status=b.dataset.s;saveItem(x).catch(showErr);renderLists()});
     c.querySelectorAll(".prioritybtn").forEach(b=>b.onclick=()=>changePriority(x,b.dataset.dir));
-    c.querySelector(".editbtn").onclick=()=>openEdit(x);$("list").appendChild(c);
+    c.querySelector(".editbtn").onclick=()=>openEdit(x);c.querySelector(".deletebtn").onclick=async()=>{if(!confirm(`Delete "${x.item}" permanently? This will not move it to ${currentPage==="buy"?"Bought":"Recently Deleted"}.`))return;const {error}=await sb.from("list_items").delete().eq("id",x.id);if(error){showErr(error);return}data[currentPage]=data[currentPage].filter(i=>i.id!==x.id);localStorage.setItem(KEY,JSON.stringify(data));renderLists()};$("list").appendChild(c);
   });
 }
 function safeLink(url){try{const u=new URL(url);return ["http:","https:"].includes(u.protocol)?u.href:""}catch{return ""}}
@@ -237,14 +237,22 @@ function renderResearch(x){
   return out+'</div>';
 }
 function changePriority(x,dir){const levels=["Eventually","Want","Need"],i=levels.indexOf(x.priority),n=Math.max(0,Math.min(2,i+(dir==="up"?1:-1)));x.priority=levels[n];saveItem(x).catch(showErr);renderLists()}
-function openEdit(x){$("dialogTitle").textContent="Edit item";$("itemId").value=x.id;$("item").value=x.item;$("category").value=x.category||"";$("priority").value=x.priority||"Need";$("quantity").value=x.quantity||"";$("itemStatus").value=x.status||"Looking";$("notes").value=x.notes||"";$("itemDialog").showModal()}
-function openAddItem(){$("dialogTitle").textContent=currentPage==="buy"?"Add purchase":"Add grocery";$("itemId").value="";$("itemForm").reset();$("priority").value="Need";$("itemDialog").showModal()}
+function setItemDestination(dest){
+ dest=dest==="groceries"?"groceries":"buy";$("itemDestination").value=dest;
+ document.querySelectorAll(".destination-choice").forEach(b=>{const active=b.dataset.destination===dest;b.classList.toggle("active",active);b.setAttribute("aria-pressed",active?"true":"false")});
+ $("dialogTitle").textContent=dest==="buy"?"Add purchase":"Add grocery";
+}
+function closeItemDialog(){$("itemDialog").close()}
+function openEdit(x){$("dialogTitle").textContent="Edit item";$("itemId").value=x.id;$("item").value=x.item;$("category").value=x.category||"";$("priority").value=x.priority||"Need";$("quantity").value=x.quantity||"";$("itemStatus").value=x.status||"Looking";$("notes").value=x.notes||"";$("itemDestinationWrap").hidden=true;$("itemDestination").value=currentPage;$("itemDialog").showModal()}
+function openAddItem(){$("itemId").value="";$("itemForm").reset();$("priority").value="Need";$("itemDestinationWrap").hidden=false;setItemDestination(currentPage==="buy"?"buy":"groceries");$("itemDialog").showModal();setTimeout(()=>$("item").focus(),50)}
+document.querySelectorAll(".destination-choice").forEach(b=>b.onclick=()=>setItemDestination(b.dataset.destination));
+$("itemDialogClose").onclick=closeItemDialog;$("itemDialogCancel").onclick=closeItemDialog;
 
 $("itemForm").addEventListener("submit",e=>{
-  if(e.submitter?.value==="cancel")return;e.preventDefault();const id=$("itemId").value;let x=id?data[currentPage].find(v=>v.id===id):null;
-  if(!x){x={id:crypto.randomUUID(),deleted:false,created:new Date().toISOString().slice(0,10)};data[currentPage].push(x)}
+  e.preventDefault();const id=$("itemId").value,target=id?currentPage:$("itemDestination").value;let x=id?data[target].find(v=>v.id===id):null;
+  if(!x){x={id:crypto.randomUUID(),deleted:false,created:new Date().toISOString().slice(0,10)};data[target].push(x)}
   Object.assign(x,{item:$("item").value.trim(),category:$("category").value.trim(),priority:$("priority").value,quantity:$("quantity").value.trim(),status:$("itemStatus").value,notes:$("notes").value.trim()});
-  (id?saveItem(x):insertItem(x)).catch(showErr);$("itemDialog").close();renderLists();
+  const previousPage=currentPage;currentPage=target;(id?saveItem(x):insertItem(x)).catch(showErr);$("itemDialog").close();currentPage=previousPage;renderLists();
 });
 
 async function loadDrivers(){
@@ -436,22 +444,35 @@ function openDigestDetail(x){
 document.querySelectorAll(".digest-tab").forEach(b=>b.onclick=()=>{digestView=b.dataset.digestView;digestStatusView="queue";document.querySelectorAll(".digest-tab").forEach(z=>z.classList.toggle("active",z===b));document.querySelectorAll(".digest-status-tab").forEach(z=>z.classList.toggle("active",z.dataset.digestStatus==="queue"));renderDigestibles()});
 document.querySelectorAll(".digest-status-tab").forEach(b=>b.onclick=()=>{digestStatusView=b.dataset.digestStatus;document.querySelectorAll(".digest-status-tab").forEach(z=>z.classList.toggle("active",z===b));renderDigestibles()});
 $("closeDigestDetail").onclick=()=>$("digestDetailDialog").close();
+$("digestAddClose").onclick=()=>$("digestAddDialog").close();$("digestAddCancel").onclick=()=>$("digestAddDialog").close();
+$("digestAddForm").addEventListener("submit",async e=>{
+ e.preventDefault();
+ const row={media_type:$("digestAddType").value,status:$("digestAddStatus").value,title:$("digestAddTitle").value.trim(),creator:$("digestAddCreator").value.trim()||null,description:$("digestAddDescription").value.trim()||null};
+ const {data:created,error}=await sb.from("digestibles").insert(row).select().single();
+ if(error){showErr(error,"digestStatus");return}
+ digestibles.push(created);digestView=created.media_type==="book"?"books":created.media_type==="movie"?"movies":"animes";digestStatusView=created.status;
+ document.querySelectorAll(".digest-tab").forEach(z=>z.classList.toggle("active",z.dataset.digestView===digestView));
+ document.querySelectorAll(".digest-status-tab").forEach(z=>z.classList.toggle("active",z.dataset.digestStatus===digestStatusView));
+ $("digestAddDialog").close();$("digestAddForm").reset();if(currentPage==="digestibles")renderDigestibles();
+});
 
 function setPage(page){
- currentPage=page;document.querySelectorAll(".page-tab").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
- const special=["home","devices","drivers","reminders","budget","digestibles","projects","health","vehicle","ai"],isSpecial=special.includes(page);
+ currentPage=page;
+ window.scrollTo({top:0,behavior:"instant"});document.querySelectorAll(".page-tab").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
+ const special=["home","devices","drivers","reminders","todos","budget","digestibles","projects","project-detail","health","vehicle","ai"],isSpecial=special.includes(page);
  $("listsPage").hidden=isSpecial;
- special.forEach(p=>{const el=$(p+"Page");if(el)el.hidden=page!==p});
+ special.forEach(p=>{const el=$(p==="project-detail"?"projectDetailPage":p+"Page");if(el)el.hidden=page!==p});
  $("backupBtn").style.display=isSpecial?"none":"";$("addBtn").style.display="";
- if(page==="home"){ $("pageTitle").textContent="Roggy";$("pageSubtitle").textContent="Your command center."; $("addBtn").style.display="none";renderHome(); }
- else if(page==="devices"){ $("pageTitle").textContent="Devices";$("pageSubtitle").textContent="Live smart-home control."; $("addBtn").style.display="none";renderDevicesPage();loadSmartHome().catch(()=>{}) }
+ if(page==="home"){ $("pageTitle").textContent="Roggy";$("pageSubtitle").textContent="Your command center.";renderHome(); }
+ else if(page==="devices"){ $("pageTitle").textContent="Devices";$("pageSubtitle").textContent="Live smart-home control.";$("addBtn").style.display="none";renderDevicesPage();loadSmartHome().catch(()=>{}) }
  else if(page==="ai"){ $("pageTitle").textContent="Local AI";$("pageSubtitle").textContent="A private conversation with your PC.";$("addBtn").style.display="none"; }
- else if(page==="projects"){ $("pageTitle").textContent="Projects";$("pageSubtitle").textContent="Everything with a finish line."; $("addBtn").style.display="none";renderProjects(); }
+ else if(page==="projects"){ $("pageTitle").textContent="Projects";$("pageSubtitle").textContent="Everything with a finish line.";renderProjects(); }
  else if(page==="health"){ $("pageTitle").textContent="Health";$("pageSubtitle").textContent="Garmin-powered wellness."; $("addBtn").style.display="none"; }
  else if(page==="vehicle"){ $("pageTitle").textContent="Vehicle";$("pageSubtitle").textContent="Maintenance and ownership."; $("addBtn").style.display="none"; }
  else if(page==="drivers"){ $("pageTitle").textContent="Bad Drivers";$("pageSubtitle").textContent="Track observations and compare demographics.";loadDrivers() }
- else if(page==="reminders"){ $("pageTitle").textContent="Reminders";$("pageSubtitle").textContent="What is coming up.";$("addBtn").style.display="none";loadReminders() }
- else if(page==="digestibles"){ $("pageTitle").textContent="Digestibles";$("pageSubtitle").textContent="Books, movies, and anime worth consuming.";$("addBtn").style.display="none";loadDigestibles() }
+ else if(page==="reminders"){ $("pageTitle").textContent="Reminders";$("pageSubtitle").textContent="What is coming up.";loadReminders() }
+ else if(page==="todos"){ $("pageTitle").textContent="Tasks";$("pageSubtitle").textContent="Things that need doing.";loadTodos() }
+ else if(page==="digestibles"){ $("pageTitle").textContent="Digestibles";$("pageSubtitle").textContent="Books, movies, and anime worth consuming.";loadDigestibles() }
  else if(page==="budget"){ $("pageTitle").textContent="Budget 🔒";$("pageSubtitle").textContent="Private financial dashboard.";$("addBtn").style.display="none";lockBudget() }
  else {currentView="active";document.querySelectorAll(".sub-tab").forEach(z=>z.classList.toggle("active",z.dataset.view==="active"));renderLists()}
  $("moreToggle").checked=false;
@@ -464,7 +485,19 @@ document.querySelectorAll(".filter").forEach(b=>b.onclick=()=>{currentFilter=b.d
 $("search").oninput=renderLists;$("sort").onchange=renderLists;
 $("driverSearch").oninput=renderDriverList;$("driverSort").onchange=renderDriverList;
 $("ratioDimension").onchange=()=>{renderRatioChart();renderAnalysis()};
-$("addBtn").onclick=()=>currentPage==="drivers"?$("driverDialog").showModal():openAddItem();
+function openAddLauncher(){$("addLauncherDialog").showModal()}
+function closeAddLauncher(){$("addLauncherDialog").close()}
+function launchAddTarget(target){
+ closeAddLauncher();
+ if(target==="buy"||target==="groceries"){const previous=currentPage;currentPage=target;openAddItem();currentPage=previous;setItemDestination(target);return}
+ if(target==="todos"){$("todoForm").reset();$("todoDialog").showModal();setTimeout(()=>$("todoTitle").focus(),50);return}
+ if(target==="digestibles"){$("digestAddForm").reset();$("digestAddType").value=digestView==="movies"?"movie":digestView==="animes"?"anime":"book";$("digestAddStatus").value=digestStatusView;$("digestAddDialog").showModal();setTimeout(()=>$("digestAddTitle").focus(),50);return}
+ if(target==="drivers"){$("driverForm").reset();$("driverDialog").showModal();return}
+ if(target==="projects"){$("projectForm").reset();$("projectDialog").showModal();return}
+}
+$("addBtn").onclick=openAddLauncher;
+$("addLauncherClose").onclick=closeAddLauncher;$("addLauncherCancel").onclick=closeAddLauncher;
+document.querySelectorAll("[data-add-target]").forEach(b=>b.onclick=()=>launchAddTarget(b.dataset.addTarget));
 
 $("backupBtn").onclick=()=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="roggy-lists-backup.json";a.click();URL.revokeObjectURL(a.href)};
 
@@ -482,39 +515,110 @@ function applyAuthSession(session){session=isOwnerSession(session)?session:null;
 async function finishOAuthRedirect(){const p=new URLSearchParams(location.search),code=p.get("code"),err=p.get("error_description")||p.get("error");if(err){$("status").textContent="Sign-in error: "+err;history.replaceState({},document.title,location.pathname);return}if(!code)return;const {data,error}=await sb.auth.exchangeCodeForSession(code);history.replaceState({},document.title,location.pathname);if(error){$("status").textContent="Sign-in error: "+error.message;applyAuthSession(null);return}applyAuthSession(data.session);$("status").textContent=""}
 async function updateAuth(){const {data:{session},error}=await sb.auth.getSession();if(error)showErr(error);if(session&&!isOwnerSession(session)){await sb.auth.signOut({scope:"local"});applyAuthSession(null);return null}applyAuthSession(session);return session}
 $("authBtn").onclick=async()=>{const {data:{session}}=await sb.auth.getSession();if(session){const {error}=await sb.auth.signOut({scope:"local"});if(error)showErr(error);else applyAuthSession(null);return}const {data,error}=await sb.auth.signInWithOAuth({provider:"github",options:{redirectTo:"https://garoggy.github.io/roggy-buy-list/",skipBrowserRedirect:true}});if(error){showErr(error);return}if(data?.url)window.location.assign(data.url);else $("status").textContent="Sign-in error: Supabase did not return an authorization URL."};
-sb.auth.onAuthStateChange((event,session)=>{if(session&&!isOwnerSession(session)){setTimeout(()=>sb.auth.signOut({scope:"local"}),0);applyAuthSession(null);return}applyAuthSession(session);if(!session)return;setTimeout(()=>{loadLists();if(currentPage==="drivers")loadDrivers();if(currentPage==="reminders")loadReminders();if(currentPage==="budget"&&budgetUnlocked)loadBudgetData();if(currentPage==="digestibles")loadDigestibles()},0)});
+sb.auth.onAuthStateChange((event,session)=>{if(session&&!isOwnerSession(session)){setTimeout(()=>sb.auth.signOut({scope:"local"}),0);applyAuthSession(null);return}applyAuthSession(session);if(!session)return;setTimeout(()=>{loadLists();if(currentPage==="drivers")loadDrivers();if(currentPage==="reminders")loadReminders();if(typeof loadHomeTasks==="function")loadHomeTasks();if(currentPage==="budget"&&budgetUnlocked)loadBudgetData();if(currentPage==="digestibles")loadDigestibles()},0)});
 
 
 
 /* Command center + personal OS v35 */
 function renderHome(){
  $("homeDate").textContent=new Date().toLocaleDateString([],{weekday:"long",month:"long",day:"numeric"});
- $("homeGreeting").textContent=new Date().getHours()<12?"Good morning.":new Date().getHours()<17?"Good afternoon.":"Good evening.";
  const now=new Date(),tomorrow=new Date(now);tomorrow.setHours(24,0,0,0);
- const todays=(reminders||[]).filter(x=>{const d=reminderStart(x),finish=reminderEnd(x);return d<tomorrow&&(finish>localDay(now)||d>=localDay(now))}).slice(0,4);
+ const allTodays=(reminders||[]).filter(x=>{const d=reminderStart(x),finish=reminderEnd(x);return d<tomorrow&&(finish>localDay(now)||d>=localDay(now))});
+ const todays=allTodays.slice(0,4);
+ const taskCount=(typeof todos!=="undefined"?todos:[]).filter(x=>x.status==="open").length;
+ ensureBuiltinProjects();const projectCount=projects.filter(x=>!["Done","Completed"].includes(x.status)).length;
+ if($("focusTaskCount"))$("focusTaskCount").textContent=String(taskCount);
+ if($("focusTodayCount"))$("focusTodayCount").textContent=String(allTodays.length);
+ if($("focusProjectCount"))$("focusProjectCount").textContent=String(projectCount);
  $("homeTimeline").innerHTML='<div class="section-head"><div><span class="eyebrow">TODAY</span><h3>Next up</h3></div><button class="text-action" data-home-jump="reminders">See all</button></div>'+(todays.length?todays.map(x=>'<button class="timeline-row" data-home-jump="reminders"><span>'+esc(x.all_day?"All day":new Date(x.start_at).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}))+'</span><b>'+esc(x.title)+'</b></button>').join(""):'<div class="quiet-state">Nothing demanding your attention right now.</div>');
  renderImportantEmails();
- renderBrainPreview();
  renderHomeDeviceStatus();
  if(!smartHomeLoaded)loadSmartHome({silent:true}).catch(()=>{});
  document.querySelectorAll("[data-home-jump]").forEach(b=>b.onclick=()=>setPage(b.dataset.homeJump));
+ document.querySelectorAll("[data-focus-jump]").forEach(b=>b.onclick=()=>setPage(b.dataset.focusJump));
  if(!remindersLoaded){remindersLoaded=true;loadReminders().then(()=>{if(currentPage==="home")renderHome()}).catch(()=>{})}
 }
 function renderImportantEmails(){
  if(!$("importantEmailList"))return;
  $("importantEmailList").innerHTML=monitorEmails.length?monitorEmails.map(x=>'<a class="important-email" href="https://mail.google.com/mail/u/0/#all/'+encodeURIComponent(x.source_message_id)+'" target="_blank" rel="noopener noreferrer"><span class="email-kind">'+esc(x.category)+'</span><div><b>'+esc(x.subject)+'</b><small>'+esc(x.sender)+' · '+esc(x.summary)+'</small><small>'+esc(x.reason||"")+'</small></div><time>'+esc(new Date(x.timestamp).toLocaleDateString())+'</time></a>').join(""):'<div class="quiet-state">'+esc(monitorEmailMessage)+'</div>';
 }
-function renderBrainPreview(){if(!$("brainDumpPreview"))return;$("brainDumpPreview").innerHTML=brainDump.length?brainDump.slice(0,4).map((x,i)=>'<div class="brain-row"><span>•</span><p>'+esc(x.text)+'</p><button data-brain-delete="'+i+'">×</button></div>').join(""):'<div class="quiet-state">Your head is clear. Dump thoughts here before they disappear.</div>';document.querySelectorAll("[data-brain-delete]").forEach(b=>b.onclick=()=>{brainDump.splice(+b.dataset.brainDelete,1);saveBrain();renderBrainPreview()})}
-function openBrainDump(){$("brainDumpDialog").showModal();setTimeout(()=>$("brainDumpText").focus(),50)}
-$("brainDumpBtn").onclick=openBrainDump;$("brainDumpAddInline").onclick=openBrainDump;
-$("brainDumpForm").addEventListener("submit",e=>{if(e.submitter?.value==="cancel")return;e.preventDefault();brainDump.unshift({text:$("brainDumpText").value.trim(),created:new Date().toISOString()});saveBrain();$("brainDumpForm").reset();$("brainDumpDialog").close();renderBrainPreview()});
-function renderProjects(){$("projectList").innerHTML=projects.length?projects.map((p,i)=>'<article class="project-card"><div><span class="project-status">'+esc(p.status)+'</span><h3>'+esc(p.title)+'</h3><p>'+esc(p.description||"No description yet.")+'</p></div><div class="project-foot"><span>'+esc(p.priority)+' priority</span><button data-project-delete="'+i+'">×</button></div></article>').join(""):'<div class="system-card empty-project"><b>No projects yet.</b><p>Create one for anything that needs multiple steps, research, purchases, notes or a finish line.</p></div>';document.querySelectorAll("[data-project-delete]").forEach(b=>b.onclick=()=>{projects.splice(+b.dataset.projectDelete,1);saveProjects();renderProjects()})}
+const BUILTIN_PROJECTS={
+"Smart Home":{
+ description:"Build a local-first apartment automation system that your AI can sense and control without relying on Alexa as the assistant.",
+ steps:["Install Home Assistant or the chosen local automation service on the PC","Connect the Zigbee/Thread coordinator and pair sensors","Set up ATOM Voice units for room voice input","Pair presence/motion and door/window sensors","Connect dimmable smart lighting and validate API/local control","Add the SONOFF CAM-S2 to the local network and enable RTSP/ONVIF","Mount microphones/cameras with generalized mounts where needed","Expose safe device and camera controls to the local AI agent","Test voice → AI → device/camera actions and fallback behavior"],
+ devices:[
+  {name:"M5Stack ATOM Voice / Echo ×3",note:"Wall-powered room microphone/speaker nodes.",url:"https://shop.m5stack.com/products/atom-echo-smart-speaker-dev-kit"},
+  {name:"Home Assistant Connect ZBT-1",note:"USB Zigbee coordinator for local sensors.",url:"https://www.home-assistant.io/connectzbt1"},
+  {name:"Aqara Door & Window Sensors",note:"Zigbee contact sensors for doors/windows.",url:"https://www.aqara.com/us/product/door-and-window-sensor/"},
+  {name:"Aqara Presence / Motion Sensor",note:"Presence sensing for room automations.",url:"https://www.aqara.com/us/product/sensor/"},
+  {name:"Govee dimmable smart lighting",note:"Lighting controlled through supported Govee APIs/models.",url:"https://developer.govee.com/"},
+  {name:"SONOFF CAM-S2 Indoor HD Camera",note:"1080p local AI vision camera with RTSP/ONVIF support.",url:"https://sonoff.tech/"},
+  {name:"Generalized mounts",note:"Reusable desk/wall/table mounts for microphones, cameras and other smart-home hardware.",url:""}
+ ]},
+"Smart Car":{
+ description:"Create a car telemetry system that records OBD-II and location data, then syncs trips and vehicle status back to your PC/app.",
+ steps:["Plug the vLinker FD into the RAV4 OBD-II port","Build/configure the in-car bridge for automatic Bluetooth OBD connection","Add GNSS if you want independent trip/location logging","Cache trip data locally when the PC/phone is unavailable","Use the phone or Wi-Fi bridge to sync completed trips home","Add vehicle telemetry endpoints to the local AI/app","Test ignition, reconnect, unplug/replug and full-trip recording","Install dashcam separately; keep integration optional"],
+ devices:[
+  {name:"Vgate vLinker FD OBD-II adapter",note:"Bluetooth OBD-II telemetry source.",url:"https://www.vgatemall.com/products/vlinker-fd-bluetooth-obd2-scanner"},
+  {name:"ESP32 development board",note:"Optional always-in-car bridge/data logger.",url:"https://www.espressif.com/en/products/devkits/esp32-devkitc/overview"},
+  {name:"GNSS module",note:"Optional independent trip/location logging.",url:"https://www.adafruit.com/category/58"},
+  {name:"Dashcam",note:"Separate recording system; integration is optional.",url:"https://www.garmin.com/en-US/c/automotive/dash-cams/"}
+ ]}
+};
+
+const PROJECT_STEP_KEY="roggy-project-step-checks-v1";
+let projectStepChecks=JSON.parse(localStorage.getItem(PROJECT_STEP_KEY)||"{}");
+function saveProjectStepChecks(){localStorage.setItem(PROJECT_STEP_KEY,JSON.stringify(projectStepChecks))}
+function ensureBuiltinProjects(){for(const [title,d] of Object.entries(BUILTIN_PROJECTS)){if(!projects.some(p=>p.title===title))projects.push({title,description:d.description,status:"Active",priority:"High",builtin:true,created:new Date().toISOString()})}saveProjects()}
+function renderProjects(){ensureBuiltinProjects();$("projectList").innerHTML=projects.map((p,i)=>'<button class="project-card project-open" data-project-open="'+i+'"><div><span class="project-status">'+esc(p.status)+'</span><h3>'+esc(p.title)+'</h3><p>'+esc(p.description||"No description yet.")+'</p></div><div class="project-foot"><span>'+esc(p.priority)+' priority</span><span>Open →</span></div></button>').join("");document.querySelectorAll("[data-project-open]").forEach(b=>b.onclick=()=>openProject(+b.dataset.projectOpen))}
+async function fetchProjectItems(title){
+ const {data:{session}}=await sb.auth.getSession();
+ if(!isOwnerSession(session))return [];
+ const {data:projectRows,error:projectError}=await sb.from("projects").select("id").eq("title",title).eq("user_id",session.user.id).limit(1);
+ if(projectError||!projectRows?.[0])return [];
+ const {data:itemRows,error:itemError}=await sb.from("project_items").select("*").eq("project_id",projectRows[0].id).eq("user_id",session.user.id).order("created_at",{ascending:true});
+ if(itemError)return [];
+ return itemRows||[];
+}
+function projectCheckButton(checked,attrs,label){
+ return '<button type="button" class="project-check '+(checked?'checked':'')+'" '+attrs+' aria-label="'+esc(label)+'" aria-pressed="'+(checked?'true':'false')+'">'+(checked?'✓':'')+'</button>';
+}
+async function toggleProjectItemCheck(id,next,title){
+ const {error}=await sb.from("project_items").update({checked:next,updated_at:new Date().toISOString()}).eq("id",id);
+ if(error){showErr(error);return}
+ const i=projects.findIndex(p=>p.title===title);
+ if(i>=0)openProject(i);
+}
+function toggleProjectStepCheck(projectTitle,index){
+ const key=projectTitle+"::"+index;
+ projectStepChecks[key]=!projectStepChecks[key];
+ saveProjectStepChecks();
+ const i=projects.findIndex(p=>p.title===projectTitle);
+ if(i>=0)openProject(i);
+}
+async function openProject(i){
+ const p=projects[i];if(!p)return;const built=BUILTIN_PROJECTS[p.title];
+ setPage("project-detail");$("pageTitle").textContent=p.title;$("pageSubtitle").textContent="Project";
+ let html='<section class="project-detail-hero"><span class="project-status">'+esc(p.status)+'</span><h2>'+esc(p.title)+'</h2><p>'+esc(p.description||"")+'</p></section>';
+ if(built){
+   html+='<section class="project-detail-section"><h3>Implementation</h3><div class="project-check-list">'+built.steps.map((x,index)=>{const checked=!!projectStepChecks[p.title+"::"+index];return '<div class="project-check-row">'+projectCheckButton(checked,'data-project-step="'+index+'"','Toggle '+x)+'<div class="project-check-copy">'+esc(x)+'</div></div>'}).join("")+'</div></section>';
+   let dbItems=await fetchProjectItems(p.title);
+   const byTitle=new Map(dbItems.map(x=>[x.title.toLowerCase(),x]));
+   const items=built.devices.map(d=>{const row=byTitle.get(d.name.toLowerCase());return row?{...d,...row,name:row.title,note:row.notes||d.note,url:row.product_url||d.url,checked:!!row.checked}:d});
+   dbItems.filter(row=>!items.some(x=>(x.id&&x.id===row.id)||x.name.toLowerCase()===row.title.toLowerCase())).forEach(row=>items.push({name:row.title,note:row.notes||"",url:row.product_url||"",id:row.id,checked:!!row.checked}));
+   html+='<section class="project-detail-section"><h3>Devices / hardware</h3><div class="project-device-list">'+items.map(d=>'<div class="project-device project-device-checkable">'+projectCheckButton(!!d.checked,d.id?'data-project-item="'+esc(d.id)+'" data-project-item-title="'+esc(p.title)+'"':'disabled','Toggle '+d.name)+'<div class="project-device-copy"><b>'+esc(d.name)+'</b><p>'+esc(d.note||"")+'</p></div>'+(d.url?'<a class="project-device-link" href="'+esc(d.url)+'" target="_blank" rel="noopener" aria-label="Open '+esc(d.name)+' link">↗</a>':'')+'</div>').join("")+'</div></section>';
+ } else html+='<section class="project-detail-section"><h3>Project notes</h3><p>'+esc(p.description||"No notes yet.")+'</p></section>';
+ $("projectDetailContent").innerHTML=html;
+ document.querySelectorAll("[data-project-step]").forEach(b=>b.onclick=()=>toggleProjectStepCheck(p.title,+b.dataset.projectStep));
+ document.querySelectorAll("[data-project-item]").forEach(b=>b.onclick=()=>toggleProjectItemCheck(b.dataset.projectItem,b.getAttribute("aria-pressed")!=="true",b.dataset.projectItemTitle));
+}
+$("projectBackBtn").onclick=()=>setPage("projects");
 $("newProjectBtn").onclick=()=>$("projectDialog").showModal();
 $("projectForm").addEventListener("submit",e=>{if(e.submitter?.value==="cancel")return;e.preventDefault();projects.unshift({title:$("projectTitle").value.trim(),description:$("projectDescription").value.trim(),status:$("projectStatus").value,priority:$("projectPriority").value,created:new Date().toISOString()});saveProjects();$("projectForm").reset();$("projectDialog").close();renderProjects()});
-document.querySelectorAll(".command-card").forEach(b=>b.onclick=()=>setPage(b.dataset.jump));
+document.querySelectorAll(".command-card[data-jump]").forEach(b=>b.onclick=()=>setPage(b.dataset.jump));document.querySelectorAll("[data-focus-jump]").forEach(b=>b.onclick=()=>setPage(b.dataset.focusJump));
 function openGlobalSearch(){$("globalSearchDialog").showModal();$("globalSearchInput").value="";renderGlobalSearch("");setTimeout(()=>$("globalSearchInput").focus(),50)}
 $("globalSearchBtn").onclick=openGlobalSearch;$("closeGlobalSearch").onclick=()=>$("globalSearchDialog").close();
-function renderGlobalSearch(q){q=q.toLowerCase().trim();let rows=[];(data.buy||[]).filter(x=>!x.deleted).forEach(x=>rows.push({type:"Buy",title:x.item,page:"buy"}));(data.groceries||[]).filter(x=>!x.deleted).forEach(x=>rows.push({type:"Grocery",title:x.item,page:"groceries"}));brainDump.forEach(x=>rows.push({type:"Brain Dump",title:x.text,page:"home"}));projects.forEach(x=>rows.push({type:"Project",title:x.title,page:"projects"}));(reminders||[]).forEach(x=>rows.push({type:"Reminder",title:x.title,page:"reminders"}));(digestibles||[]).forEach(x=>rows.push({type:x.media_type,title:x.title,page:"digestibles"}));if(q)rows=rows.filter(x=>(x.type+" "+x.title).toLowerCase().includes(q));else rows=rows.slice(0,8);$("globalSearchResults").innerHTML=rows.slice(0,30).map((x,i)=>'<button data-search-index="'+i+'"><span>'+esc(x.type)+'</span><b>'+esc(x.title)+'</b></button>').join("")||'<div class="quiet-state">No matches.</div>';document.querySelectorAll("[data-search-index]").forEach((b)=>b.onclick=()=>{$("globalSearchDialog").close();setPage(rows[+b.dataset.searchIndex].page)})}
+function renderGlobalSearch(q){q=q.toLowerCase().trim();let rows=[];(data.buy||[]).filter(x=>!x.deleted).forEach(x=>rows.push({type:"Buy",title:x.item,page:"buy"}));(data.groceries||[]).filter(x=>!x.deleted).forEach(x=>rows.push({type:"Grocery",title:x.item,page:"groceries"}));projects.forEach(x=>rows.push({type:"Project",title:x.title,page:"projects"}));(reminders||[]).forEach(x=>rows.push({type:"Reminder",title:x.title,page:"reminders"}));(digestibles||[]).forEach(x=>rows.push({type:x.media_type,title:x.title,page:"digestibles"}));if(q)rows=rows.filter(x=>(x.type+" "+x.title).toLowerCase().includes(q));else rows=rows.slice(0,8);$("globalSearchResults").innerHTML=rows.slice(0,30).map((x,i)=>'<button data-search-index="'+i+'"><span>'+esc(x.type)+'</span><b>'+esc(x.title)+'</b></button>').join("")||'<div class="quiet-state">No matches.</div>';document.querySelectorAll("[data-search-index]").forEach((b)=>b.onclick=()=>{$("globalSearchDialog").close();setPage(rows[+b.dataset.searchIndex].page)})}
 $("globalSearchInput").oninput=e=>renderGlobalSearch(e.target.value);
 
 /* Appearance settings v31 */
@@ -534,4 +638,203 @@ document.querySelectorAll(".mode-choice").forEach(b=>b.onclick=()=>{localStorage
 $("settingsShelfBtn").onclick=()=>{$("moreToggle").checked=false;$("settingsToggle").checked=true};
 
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");
-updateAuth().then(session=>{if(isOwnerSession(session))loadLists().then(()=>{setPage("home")});else setPage("home")});
+updateAuth().then(async session=>{if(isOwnerSession(session)){await loadLists();if(typeof loadHomeTasks==="function")await loadHomeTasks();setPage("home")}else setPage("home")});
+
+/* UX pass v72 */
+document.addEventListener("keydown",e=>{
+ if(e.key==="Escape"){
+   if($("moreToggle"))$("moreToggle").checked=false;
+   if($("settingsToggle"))$("settingsToggle").checked=false;
+   document.querySelectorAll("dialog[open]").forEach(d=>d.close());
+ }
+ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="k"){e.preventDefault();openGlobalSearch()}
+});
+
+
+/* Primary-page live panorama navigation v80 */
+const PRIMARY_SWIPE_PAGES=["home","reminders","todos","buy"];
+let swipeStartX=0,swipeStartY=0,swipeLastX=0,swipeTracking=false,swipeAxis=null,swipeNeighbor=null,swipeNeighborPage=null,swipePointerId=null,swipeStartTime=0,swipeLastTime=0,swipeVelocityX=0;
+let swipeVisualCurrent=null,swipeSettleTimer=null;
+function ensureSwipeHUD(){
+ if(document.querySelector(".swipe-hud"))return;
+ const hud=document.createElement("div");hud.className="swipe-hud";hud.setAttribute("aria-hidden","true");
+ hud.innerHTML='<span class="swipe-edge swipe-edge-left">‹</span><div class="swipe-dots">'+PRIMARY_SWIPE_PAGES.map((p,n)=>'<i data-swipe-dot="'+p+'" style="--dot-index:'+n+'"></i>').join("")+'</div><span class="swipe-edge swipe-edge-right">›</span><div class="swipe-progress-track"><b></b></div>';
+ const tabs=document.querySelector(".page-tabs");if(tabs)tabs.appendChild(hud);updateSwipeHUD(currentPage);
+}
+function updateSwipeHUD(page=currentPage,progress=0,direction=0){
+ const idx=PRIMARY_SWIPE_PAGES.indexOf(page);
+ document.querySelectorAll("[data-swipe-dot]").forEach((d,n)=>d.classList.toggle("active",n===idx));
+ document.documentElement.style.setProperty("--swipe-progress",Math.max(0,Math.min(1,progress)).toFixed(3));
+ document.documentElement.style.setProperty("--swipe-dir",direction);
+ document.documentElement.dataset.swipeFrom=page;
+ document.documentElement.dataset.swipeDirection=direction>0?"next":direction<0?"prev":"idle";
+ document.documentElement.classList.toggle("swipe-ready",progress>=1);
+}
+function swipeBlockedTarget(t){return !!t.closest("dialog,input,textarea,select,a,[contenteditable=true],.fab,.side-drawer")}
+function primaryPageEl(page){
+ if(page==="home")return $("homePage");if(page==="reminders")return $("remindersPage");if(page==="todos")return $("todosPage");if(page==="buy")return $("listsPage");return null;
+}
+function mountainPagePosition(page=currentPage){
+ const idx=PRIMARY_SWIPE_PAGES.indexOf(page);return idx<0?0:idx;
+}
+let mountainScrollY=window.scrollY||0;
+function setMountainView(page=currentPage,dragPx=0){
+ const idx=mountainPagePosition(page),viewportW=window.innerWidth||1,viewportH=window.innerHeight||1;
+ // Use a modest slice of the panorama per page. Drag interpolation exactly matches
+ // the eventual page position, so releasing a swipe never makes the image jump.
+ const pageStep=viewportW*.28;
+ const dragProgress=Math.max(-1.15,Math.min(1.15,dragPx/viewportW));
+ const x=-(idx*pageStep)+(dragProgress*pageStep);
+ // Vertical movement is intentionally slower than content scrolling.
+ const y=-Math.min(Math.max(0,mountainScrollY)*.24,viewportH*.34);
+ document.documentElement.style.setProperty("--panorama-x",x.toFixed(1)+"px");
+ document.documentElement.style.setProperty("--panorama-y",y.toFixed(1)+"px");
+}
+function clearSwipeStyles(){
+ [swipeVisualCurrent,primaryPageEl(currentPage),swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating");el.style.removeProperty("--panel-x");el.style.removeProperty("--swipe-opacity");});
+ if(swipeNeighbor&&swipeNeighborPage!==currentPage)swipeNeighbor.hidden=true;
+ swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-swiping","is-settling","swipe-ready");document.documentElement.dataset.swipeDirection="idle";
+ updateSwipeHUD(currentPage,0,0);
+}
+function prepareSwipeNeighbor(direction){
+ const idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),next=idx+direction;
+ if(next<0||next>=PRIMARY_SWIPE_PAGES.length)return false;
+ swipeNeighborPage=PRIMARY_SWIPE_PAGES[next];swipeNeighbor=primaryPageEl(swipeNeighborPage);
+ if(!swipeNeighbor)return false;
+ if(swipeNeighborPage==="reminders")loadReminders();
+ else if(swipeNeighborPage==="todos")loadTodos();
+ else if(swipeNeighborPage==="buy"){currentView="active";renderLists()}
+ swipeNeighbor.hidden=false;swipeNeighbor.classList.add("swipe-panel","swipe-neighbor");
+ return true;
+}
+function positionSwipePanels(dx){
+ const tabs=document.querySelector(".page-tabs"),headerBottom=(tabs?.getBoundingClientRect().bottom||document.querySelector("header")?.getBoundingClientRect().bottom||0)+(parseFloat(getComputedStyle(tabs||document.documentElement).marginBottom)||0);
+ document.documentElement.style.setProperty("--swipe-page-top",Math.max(0,headerBottom)+"px");
+ const w=window.innerWidth||1,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,current=primaryPageEl(currentPage),progress=Math.min(1,Math.abs(dx)/(w*.25)); swipeVisualCurrent=current;updateSwipeHUD(currentPage,progress,direction);
+ if(idx===0&&direction===-1){
+   document.documentElement.classList.add("is-swiping");if(current){current.classList.add("swipe-panel");current.style.setProperty("--panel-x",Math.min(dx,w*.12)+"px")}
+   setMountainView(currentPage,Math.min(dx,w*.12));return;
+ }
+ if(idx===PRIMARY_SWIPE_PAGES.length-1&&direction===1){
+   if(current){current.classList.remove("swipe-panel");current.style.removeProperty("--panel-x")}setMountainView(currentPage,0);return;
+ }
+ if(!swipeNeighbor||swipeNeighborPage!==PRIMARY_SWIPE_PAGES[idx+direction]){
+   if(swipeNeighbor&&swipeNeighborPage!==currentPage)swipeNeighbor.hidden=true;
+   swipeNeighbor=null;swipeNeighborPage=null;if(!prepareSwipeNeighbor(direction))return;
+ }
+ document.documentElement.classList.add("is-swiping");
+ if(current){current.classList.add("swipe-panel");current.style.setProperty("--panel-x",dx+"px");current.style.setProperty("--swipe-opacity",(1-Math.min(.08,Math.abs(dx)/w*.08)).toFixed(3))}
+ if(swipeNeighbor){swipeNeighbor.style.setProperty("--panel-x",(dx+direction*w)+"px");swipeNeighbor.style.setProperty("--swipe-opacity",(.94+Math.min(.06,Math.abs(dx)/w*.06)).toFixed(3))}
+ setMountainView(currentPage,dx);
+}
+function settleSwipe(commit,dx){
+ const current=primaryPageEl(currentPage),w=window.innerWidth||1,direction=dx<0?1:-1;
+ // Finger is up: leave drag mode BEFORE enabling transitions. Drag mode intentionally
+ // disables transitions, so keeping it here made every release teleport.
+ document.documentElement.classList.remove("is-swiping");document.documentElement.classList.add("is-settling");
+ swipeVisualCurrent=current;[current,swipeNeighbor].filter(Boolean).forEach(el=>el.classList.add("swipe-animating"));
+ if(commit&&swipeNeighbor){
+   const target=swipeNeighborPage;
+   // Logical navigation commits immediately on finger release so another swipe can
+   // target the next page without waiting for the visual glide to finish.
+   currentPage=target;updateSwipeHUD(target,1,direction);
+   document.querySelectorAll(".page-tab").forEach(b=>b.classList.toggle("active",b.dataset.page===target));
+   window.dispatchEvent(new CustomEvent("roggy-page",{detail:{page:target}}));
+   // Keep the old/new DOM panels intact while their 420ms visual transition finishes.
+   requestAnimationFrame(()=>requestAnimationFrame(()=>{
+     if(current)current.style.setProperty("--panel-x",(-direction*w)+"px");
+     swipeNeighbor.style.setProperty("--panel-x","0px");
+     setMountainView(target,0);
+   }));
+   clearTimeout(swipeSettleTimer);swipeSettleTimer=setTimeout(()=>{
+     const landed=swipeNeighbor;
+     // The temporary incoming panel is fixed during the glide. Before removing that
+     // shell, pin the real page to the exact same viewport position for one paint.
+     // This prevents its normal document-flow top from producing a downward landing hop.
+     if(landed){
+       const r=landed.getBoundingClientRect();
+       document.documentElement.style.setProperty("--swipe-land-top",r.top+"px");
+       landed.classList.add("swipe-land-lock");
+     }
+     if(current&&current!==landed)current.hidden=true;
+     if(landed){landed.classList.remove("swipe-neighbor","swipe-animating");landed.style.removeProperty("--panel-x");landed.style.removeProperty("--swipe-opacity")}
+     swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;
+     document.documentElement.classList.remove("is-settling","is-swiping","swipe-ready");
+     // Update state without setPage()'s scrollTo(0,0), which was causing a second layout jump.
+     document.querySelectorAll(".page-tab").forEach(b=>b.classList.toggle("active",b.dataset.page===target));
+     requestAnimationFrame(()=>requestAnimationFrame(()=>{
+       if(landed){landed.classList.remove("swipe-panel","swipe-land-lock");landed.style.removeProperty("--panel-x")}
+       document.documentElement.style.removeProperty("--swipe-land-top");
+       updateSwipeHUD(target,0,0);setMountainView(target,0);
+     }));
+   },420);
+ }else{
+   updateSwipeHUD(currentPage,0,0);
+   requestAnimationFrame(()=>requestAnimationFrame(()=>{
+     if(current)current.style.setProperty("--panel-x","0px");
+     if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x",(direction*w)+"px");
+     setMountainView(currentPage,0);
+   }));
+   clearTimeout(swipeSettleTimer);swipeSettleTimer=setTimeout(clearSwipeStyles,520);
+ }
+}
+function finishSwipe(){
+ if(!swipeTracking)return;
+ const dx=swipeLastX-swipeStartX,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,threshold=(window.innerWidth||1)*.25,fastIntent=Math.abs(swipeVelocityX)>.72&&Math.abs(dx)>(window.innerWidth||1)*.14;
+ swipeTracking=false;swipePointerId=null;
+ if(swipeAxis==="x"&&idx===0&&direction===-1){
+   const open=Math.abs(dx)>=threshold;clearSwipeStyles();setMountainView(currentPage,0);if(open)$("moreToggle").checked=true;
+ }else if(swipeAxis==="x"&&idx===PRIMARY_SWIPE_PAGES.length-1&&direction===1){
+   clearSwipeStyles();setMountainView(currentPage,0);
+ }else if(swipeAxis==="x")settleSwipe(Math.abs(dx)>=threshold||fastIntent,dx);
+ else{clearSwipeStyles();setMountainView(currentPage,0)}
+ swipeAxis=null;
+}
+function beginPrimarySwipe(x,y,target,pointerId=null){
+ if(swipeBlockedTarget(target)||!PRIMARY_SWIPE_PAGES.includes(currentPage))return false;
+ if(document.documentElement.classList.contains("is-settling")){
+   clearTimeout(swipeSettleTimer);
+   [swipeVisualCurrent,swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating");el.style.removeProperty("--panel-x")});
+   document.querySelectorAll("#homePage,#remindersPage,#todosPage,#listsPage").forEach(el=>el.hidden=el!==primaryPageEl(currentPage));
+   swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-settling");
+ }
+ clearSwipeStyles();swipeStartX=swipeLastX=x;swipeStartY=y;swipeStartTime=swipeLastTime=performance.now();swipeVelocityX=0;swipeTracking=true;swipeAxis=null;swipePointerId=pointerId;return true;
+}
+function movePrimarySwipe(x,y){
+ if(!swipeTracking)return false;
+ const dx=x-swipeStartX,dy=y-swipeStartY;
+ if(!swipeAxis&&Math.hypot(dx,dy)>8)swipeAxis=Math.abs(dx)>Math.abs(dy)*1.12?"x":"y";
+ if(swipeAxis!=="x")return false;
+ const now=performance.now(),dt=Math.max(1,now-swipeLastTime);swipeVelocityX=(swipeVelocityX*.58)+(((x-swipeLastX)/dt)*.42);swipeLastTime=now;swipeLastX=x;positionSwipePanels(dx);return true;
+}
+// Native touch events are more reliable on iOS when a swipe begins over tab/button surfaces.
+document.addEventListener("touchstart",e=>{
+ if(e.touches.length!==1)return;
+ const t=e.touches[0];beginPrimarySwipe(t.clientX,t.clientY,e.target,"touch");
+},{passive:true});
+document.addEventListener("touchmove",e=>{
+ if(!swipeTracking||swipePointerId!=="touch"||e.touches.length!==1)return;
+ const t=e.touches[0];if(movePrimarySwipe(t.clientX,t.clientY))e.preventDefault();
+},{passive:false});
+document.addEventListener("touchend",()=>{if(swipeTracking&&swipePointerId==="touch")finishSwipe()},{passive:true});
+document.addEventListener("touchcancel",()=>{if(swipeTracking&&swipePointerId==="touch"){swipeTracking=false;swipeAxis=null;swipePointerId=null;settleSwipe(false,0)}},{passive:true});
+// Pointer handling remains for desktop mouse/trackpad testing, but touch is handled above.
+document.addEventListener("pointerdown",e=>{
+ if(e.pointerType!=="mouse"||e.button!==0)return;
+ beginPrimarySwipe(e.clientX,e.clientY,e.target,e.pointerId);
+},{passive:true});
+document.addEventListener("pointermove",e=>{
+ if(!swipeTracking||e.pointerType!=="mouse"||e.pointerId!==swipePointerId)return;
+ if(movePrimarySwipe(e.clientX,e.clientY))e.preventDefault();
+},{passive:false});
+document.addEventListener("pointerup",e=>{if(swipeTracking&&e.pointerType==="mouse"&&e.pointerId===swipePointerId)finishSwipe()},{passive:true});
+document.addEventListener("pointercancel",e=>{if(swipeTracking&&e.pointerType==="mouse"&&e.pointerId===swipePointerId){swipeTracking=false;swipeAxis=null;swipePointerId=null;settleSwipe(false,0)}},{passive:true});
+window.addEventListener("roggy-page",e=>setMountainView(e.detail.page,0));
+ensureSwipeHUD();setMountainView(currentPage,0);
+window.addEventListener("resize",()=>setMountainView(currentPage,0));
+let mountainScrollRAF=0;
+window.addEventListener("scroll",()=>{
+ mountainScrollY=window.scrollY||document.documentElement.scrollTop||0;
+ if(mountainScrollRAF)return;
+ mountainScrollRAF=requestAnimationFrame(()=>{mountainScrollRAF=0;if(!swipeTracking)setMountainView(currentPage,0)});
+},{passive:true});

@@ -3,8 +3,8 @@
   "short_name": "Buy List",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#f3f4f6",
-  "theme_color": "#111827",
+  "background_color": "#3b0764",
+  "theme_color": "#6d28d9",
   "icons": [
     {
       "src": "icon.svg",

@@ -6,12 +6,15 @@
 <meta name="theme-color" content="#6d28d9">
 <title>Roggy Lists</title>
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="styles.css?v=43">
-<link rel="apple-touch-icon" href="icon.svg">
+<link rel="stylesheet" href="styles.css?v=103">
+<link rel="stylesheet" href="todos.css?v=61">
+<link rel="apple-touch-icon" href="icon.svg?v=2">
 </head>
 <body>
+<div class="mountain-scene" aria-hidden="true"><img class="mountain-panorama" src="assets/mountain-panorama.jpg" alt="" draggable="false"></div>
 <header>
-  <div><h1 id="pageTitle">Buy List</h1><p id="pageSubtitle">Needs first. Luxuries later.</p></div>
+  <label class="header-menu" for="moreToggle" aria-label="Open menu">☰</label>
+  <div class="header-title"><h1 id="pageTitle">Buy List</h1><p id="pageSubtitle">Needs first. Luxuries later.</p></div>
   <div class="header-actions"><button id="authBtn" class="auth-btn">Sign in</button><button id="backupBtn" class="icon-btn" aria-label="Backup">⇩</button></div>
 </header>
 
@@ -19,22 +22,25 @@
   <button class="page-tab active" data-page="home">Home</button>
   <button class="page-tab" data-page="reminders">Reminders</button>
   <button class="page-tab" data-page="devices">Devices</button>
+  <button class="page-tab" data-page="todos">Tasks</button>
   <button class="page-tab" data-page="buy">Buy</button>
-  <label class="more-tab" for="moreToggle">More <span>☰</span></label>
 </nav>
 
 <input id="moreToggle" class="drawer-toggle" type="checkbox" hidden>
 <label class="drawer-backdrop" for="moreToggle" aria-label="Close menu"></label>
 <aside class="side-drawer" aria-label="More sections">
-  <div class="drawer-head"><b>More</b><label for="moreToggle" class="drawer-close">✕</label></div>
+  <div class="drawer-head"><b>More</b><label for="moreToggle" class="drawer-close" aria-label="Close navigation" tabindex="0">✕</label></div>
   <button class="page-tab drawer-page-tab" data-page="ai">Local AI</button>
   <button class="page-tab drawer-page-tab" data-page="groceries" onclick="document.getElementById('moreToggle').checked=false">Groceries</button>
   <button class="page-tab drawer-page-tab" data-page="projects" onclick="document.getElementById('moreToggle').checked=false">Projects</button>
-  <button class="page-tab drawer-page-tab" data-page="health" onclick="document.getElementById('moreToggle').checked=false">Health</button>
-  <button class="page-tab drawer-page-tab" data-page="vehicle" onclick="document.getElementById('moreToggle').checked=false">Vehicle</button>
   <button class="page-tab drawer-page-tab" data-page="drivers" onclick="document.getElementById('moreToggle').checked=false">Bad Drivers</button>
   <button class="page-tab drawer-page-tab" data-page="budget" onclick="document.getElementById('moreToggle').checked=false">Budget 🔒</button>
   <button class="page-tab drawer-page-tab" data-page="digestibles" onclick="document.getElementById('moreToggle').checked=false">Digestibles</button>
+  <div class="under-construction-group">
+    <div class="under-construction-title">Under Construction</div>
+    <button class="drawer-page-tab under-construction-item" type="button" disabled>Health <span>Garmin</span></button>
+    <button class="drawer-page-tab under-construction-item" type="button" disabled>Vehicle <span>Coming soon</span></button>
+  </div>
   <div class="drawer-divider"></div>
   <button id="settingsShelfBtn" class="drawer-page-tab settings-open" type="button">Settings <span>⚙</span></button>
 </aside>
@@ -42,7 +48,7 @@
 <input id="settingsToggle" class="settings-toggle" type="checkbox" hidden>
 <label class="settings-backdrop" for="settingsToggle" aria-label="Close settings"></label>
 <aside class="settings-shelf" aria-label="Website settings">
-  <div class="settings-head"><div><b>Settings</b><span>Make it yours.</span></div><label for="settingsToggle" class="drawer-close">✕</label></div>
+  <div class="settings-head"><div><b>Settings</b><span>Make it yours.</span></div><label for="settingsToggle" class="drawer-close" aria-label="Close settings" tabindex="0">✕</label></div>
   <section class="setting-group">
     <h3>Color</h3>
     <div id="themeColors" class="theme-colors">
@@ -82,31 +88,26 @@
 <section id="homePage">
   <main class="home-main">
     <button id="globalSearchBtn" class="command-search">⌕ <span>Search everything…</span><kbd>Search</kbd></button>
-    <section class="today-hero"><div><span class="eyebrow">COMMAND CENTER</span><h2 id="homeGreeting">Today</h2><p id="homeDate"></p></div><button id="brainDumpBtn" class="brain-btn">＋ Brain Dump</button></section>
-    <section id="homeTimeline" class="home-timeline"></section>
+    <section class="today-hero compact-command"><div><span class="eyebrow">COMMAND CENTER</span><p id="homeDate"></p></div></section>
+    <section class="home-focus-strip"><button type="button" data-focus-jump="todos"><span>Tasks</span><b id="focusTaskCount">—</b><small>open</small></button><button type="button" data-focus-jump="reminders"><span>Today</span><b id="focusTodayCount">—</b><small>events</small></button><button type="button" data-focus-jump="projects"><span>Projects</span><b id="focusProjectCount">—</b><small>active</small></button></section>
+    <section class="home-primary-grid">
+      <section id="homeHighTodos" class="home-section high-todos-section" hidden><div class="section-head"><div><span class="eyebrow">HIGH PRIORITY</span><h3>Tasks</h3></div><button id="homeHighTodosAll" class="text-action" type="button">See all</button></div><div id="homeHighTodoList" class="home-high-todo-list"></div></section>
+      <section id="homeTimeline" class="home-timeline"></section>
+    </section>
     <section class="command-grid">
-      <button class="command-card" data-jump="projects"><span>◈</span><div><b>Projects</b><small>Ideas → active work</small></div></button>
-      <button class="command-card" data-jump="health"><span>♥</span><div><b>Health</b><small>Garmin wellness</small></div></button>
-      <button class="command-card" data-jump="vehicle"><span>◆</span><div><b>Vehicle</b><small>RAV4 maintenance</small></div></button>
-      <button class="command-card" data-jump="digestibles"><span>◉</span><div><b>Digestibles</b><small>Books · movies · anime</small></div></button>
-      <button class="command-card" data-jump="devices"><span>⌁</span><div><b>Devices</b><small>Living Room controls</small></div></button>
+      <button class="command-card" data-jump="projects"><span>◈</span><div><b>Projects</b><small>Plan · build · finish</small></div></button>
+      <button class="command-card command-card-disabled" type="button" disabled><span>♥</span><div><b>Health</b><small>Under construction</small></div></button>
+      <button class="command-card command-card-disabled" type="button" disabled><span>◆</span><div><b>Vehicle</b><small>Under construction</small></div></button>
+      <button class="command-card" data-jump="digestibles"><span>◉</span><div><b>Digestibles</b><small>Watch · read · rate</small></div></button>
     </section>
     <section class="home-section device-status-section"><div class="section-head"><div><span class="eyebrow">SMART HOME</span><h3>Devices</h3></div><button class="text-action" data-home-jump="devices">Open shelf</button></div><div id="homeDeviceStatus" class="home-device-status"></div></section>
-    <section class="home-section email-section"><div class="section-head"><div><span class="eyebrow">EMAIL</span><h3>Potentially Important</h3></div><span class="mail-filter-badge">No ads</span></div><div id="importantEmailList" class="important-email-list"></div></section>
-    <section class="home-section"><div class="section-head"><div><span class="eyebrow">INBOX</span><h3>Brain Dump</h3></div><button id="brainDumpAddInline" class="mini-add">＋</button></div><div id="brainDumpPreview" class="brain-preview"></div></section>
+    <section class="home-section email-section"><div class="section-head"><div><span class="eyebrow">EMAIL</span><h3>Worth Your Attention</h3></div><span class="mail-filter-badge">No ads</span></div><div id="importantEmailList" class="important-email-list"></div></section>
   </main>
 </section>
 
-<section id="devicesPage" hidden>
-  <main class="system-main device-main">
-    <div class="system-intro"><span class="eyebrow">SMART HOME</span><h2>Devices</h2><p>Live state and controls from Layne’s registered device integrations.</p></div>
-    <section id="deviceRoomSummary" class="device-room-summary"></section>
-    <section id="deviceStatus" class="status"></section>
-    <section id="deviceRooms" class="device-rooms"></section>
-  </main>
-</section>
-
-<section id="projectsPage" hidden><main class="system-main"><div class="system-intro"><span class="eyebrow">PROJECTS</span><h2>Everything with a finish line.</h2><p>Tasks, notes, links, purchases, milestones and reminders can live together here.</p></div><div id="projectList" class="project-grid"></div><button id="newProjectBtn" class="wide-action">＋ New Project</button></main></section>
+<section id="projectsPage" hidden><main class="system-main"><div class="system-intro"><span class="eyebrow">PROJECTS</span><h2>Everything with a finish line.</h2><p>Plans, hardware, links and next actions in one place.</p></div><div id="projectList" class="project-grid"></div><button id="newProjectBtn" class="wide-action">＋ New Project</button></main></section>
+<section id="projectDetailPage" hidden><main class="system-main project-detail-main"><button id="projectBackBtn" class="project-back">← Projects</button><div id="projectDetailContent"></div></main></section>
+<section id="devicesPage" hidden><main class="system-main device-main"><div class="system-intro"><span class="eyebrow">SMART HOME</span><h2>Devices</h2><p>Live state and controls from Layne’s registered device integrations.</p></div><section id="deviceRoomSummary" class="device-room-summary"></section><section id="deviceStatus" class="status"></section><section id="deviceRooms" class="device-rooms"></section></main></section>
 <section id="healthPage" hidden><main class="system-main"><div class="system-intro"><span class="eyebrow">GARMIN CONNECT</span><h2>Health</h2><p>Your wellness dashboard is ready for Garmin data.</p></div><div class="metric-grid"><div><span>Sleep</span><b>—</b><small>Connect data</small></div><div><span>Body Battery</span><b>—</b><small>Connect data</small></div><div><span>Resting HR</span><b>—</b><small>Connect data</small></div><div><span>Stress</span><b>—</b><small>Connect data</small></div></div><div class="system-card"><b>Health trends</b><p>Sleep, HRV, stress, activity and workouts will live here with day / week / month views and correlations.</p></div></main></section>
 <section id="vehiclePage" hidden><main class="system-main"><div class="vehicle-hero"><div><span class="eyebrow">MY VEHICLE</span><h2>2021 Toyota RAV4</h2><p>Maintenance, mileage, documents and accessories.</p></div><span class="vehicle-icon">◇</span></div><div class="metric-grid"><div><span>Mileage</span><b>—</b><small>Tap to add</small></div><div><span>Oil</span><b>—</b><small>No record yet</small></div><div><span>Tires</span><b>—</b><small>No record yet</small></div><div><span>Next due</span><b>—</b><small>All clear</small></div></div><div class="system-card"><b>Maintenance history</b><p>Add mileage and service records here. Upcoming mileage- and date-based maintenance will surface on Home.</p></div></main></section>
 
@@ -136,7 +137,7 @@
       <div class="searchrow"><input id="search" placeholder="Search items..." autocomplete="off"><select id="sort"><option value="priority">Priority</option><option value="name">A–Z</option></select></div>
     </section>
     <section id="status" class="status"></section>
-    <section id="list" class="list"></section>
+    <div id="restoreHeading" class="restore-heading"><span></span><span>Restore</span></div><section id="list" class="list"></section>
   </main>
 </section>
 
@@ -192,6 +193,37 @@
   </main>
 </section>
 
+
+<section id="todosPage" hidden>
+  <main class="todo-main">
+    <section class="todo-hero">
+      <div><span class="eyebrow">TASKS</span><h2>Get it out of your head.</h2><p>Quick tasks, follow-ups, errands, and anything that needs a finish line.</p></div>
+      <button id="newTodoBtn" class="wide-action todo-add-top">＋ Add Task</button>
+    </section>
+    <nav class="todo-filters" aria-label="Task filters">
+      <button class="todo-filter active" data-todo-filter="open">Open</button>
+      <button class="todo-filter" data-todo-filter="high">High priority</button>
+      <button class="todo-filter" data-todo-filter="done">Done</button>
+      <button class="todo-filter" data-todo-filter="all">All</button>
+    </nav>
+    <section id="todoStatus" class="status"></section>
+    <section id="todoList" class="todo-list"></section>
+  </main>
+</section>
+
+<dialog id="todoDialog"><form method="dialog" id="todoForm">
+  <div class="dialog-head"><h2>Add Task</h2><button value="cancel" class="plain">✕</button></div>
+  <label>Task<input id="todoTitle" required maxlength="180" placeholder="What needs to get done?"></label>
+  <div class="grid2">
+    <label>Priority<select id="todoPriority"><option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option></select></label>
+    <label>Category<input id="todoCategory" maxlength="80" placeholder="Email, Home, Smart Home…"></label>
+  </div>
+  <label>Due date<input id="todoDueDate" type="date"></label>
+  <label>Notes<textarea id="todoNotes" rows="3" maxlength="1200" placeholder="Optional details"></textarea></label>
+  <label>Email link<input id="todoEmailUrl" type="url" placeholder="Optional Gmail link"></label>
+  <div class="actions"><button value="cancel" class="secondary">Cancel</button><button value="default" class="primary">Add task</button></div>
+</form></dialog>
+
 <section id="remindersPage" hidden>
   <nav class="sub-tabs reminder-subtabs">
     <button class="reminder-tab active" data-reminder-view="today">Today</button>
@@ -210,6 +242,14 @@
   <nav class="digest-status-tabs"><button class="digest-status-tab active" data-digest-status="queue">To Read</button><button class="digest-status-tab" data-digest-status="completed">I’ve Read</button></nav><main class="digest-main"><section id="digestStatus" class="status"></section><section id="digestItems"></section></main>
 </section>
 
+<dialog id="digestAddDialog"><form method="dialog" id="digestAddForm">
+  <div class="dialog-head"><div><span class="dialog-kicker">DIGESTIBLES</span><h2>Add title</h2></div><button id="digestAddClose" type="button" class="plain dialog-close">✕</button></div>
+  <div class="grid2"><label>Type<select id="digestAddType"><option value="book">Book</option><option value="movie">Movie</option><option value="anime">Anime</option></select></label><label>List<select id="digestAddStatus"><option value="queue">To consume</option><option value="completed">Completed</option></select></label></div>
+  <label>Title<input id="digestAddTitle" required maxlength="240" placeholder="Title"></label>
+  <label>Author / Director / Creator<input id="digestAddCreator" maxlength="180" placeholder="Optional"></label>
+  <label>Description<textarea id="digestAddDescription" rows="3" maxlength="1500" placeholder="Optional"></textarea></label>
+  <div class="actions"><button id="digestAddCancel" type="button" class="secondary">Cancel</button><button type="submit" value="default" class="primary">Add</button></div>
+</form></dialog>
 <dialog id="digestDetailDialog"><div class="detail-dialog"><div class="dialog-head"><h2 id="digestDetailTitle">Details</h2><button id="closeDigestDetail" class="plain">✕</button></div><div id="digestDetail"></div></div></dialog>
 
 <section id="budgetPage" hidden>
@@ -248,7 +288,7 @@
   <div class="actions"><button value="cancel" class="secondary">Cancel</button><button value="default" class="primary">Unlock</button></div>
 </form></dialog>
 
-<button id="addBtn" class="fab">＋</button>
+<button id="addBtn" class="fab" aria-label="Add something">＋</button>
 <button id="layneChatFab" class="layne-chat-fab" type="button" aria-label="Talk to Layne" title="Talk to Layne">✦</button>
 <dialog id="layneChatDialog" class="layne-chat-dialog">
   <div class="layne-chat-shell">
@@ -262,18 +302,32 @@
     </form>
   </div>
 </dialog>
-<dialog id="brainDumpDialog"><form method="dialog" id="brainDumpForm"><div class="dialog-head"><h2>Brain Dump</h2><button value="cancel" class="plain">✕</button></div><p class="setup-copy">Get it out of your head. Organize it later.</p><textarea id="brainDumpText" rows="5" required placeholder="What's on your mind?"></textarea><div class="actions"><button value="cancel" class="secondary">Cancel</button><button value="default" class="primary">Save to Inbox</button></div></form></dialog>
-<dialog id="globalSearchDialog"><div class="detail-dialog"><div class="dialog-head"><h2>Search Everything</h2><button id="closeGlobalSearch" class="plain">✕</button></div><input id="globalSearchInput" class="global-search-input" placeholder="Search lists, projects, thoughts, digestibles…"><div id="globalSearchResults" class="search-results"></div></div></dialog>
+<dialog id="addLauncherDialog"><div class="add-launcher">
+  <div class="dialog-head"><div><span class="dialog-kicker">QUICK ADD</span><h2>Add something</h2></div><button id="addLauncherClose" type="button" class="plain dialog-close" aria-label="Close">✕</button></div>
+  <p class="add-launcher-copy">Where should it go?</p>
+  <div class="add-launcher-grid">
+    <button type="button" data-add-target="buy"><span>＋</span><div><b>Buy List</b><small>Something to purchase</small></div></button>
+    <button type="button" data-add-target="groceries"><span>▣</span><div><b>Groceries</b><small>Food or household consumables</small></div></button>
+    <button type="button" data-add-target="todos"><span>✓</span><div><b>To-Do</b><small>A task to get done</small></div></button>
+    <button type="button" data-add-target="digestibles"><span>◉</span><div><b>Digestibles</b><small>Book, movie, or anime</small></div></button>
+    <button type="button" data-add-target="drivers"><span>◇</span><div><b>Bad Driver</b><small>Log an observation</small></div></button>
+    <button type="button" data-add-target="projects"><span>◈</span><div><b>Project</b><small>Start a new project</small></div></button>
+  </div>
+  <button id="addLauncherCancel" type="button" class="secondary add-launcher-cancel">Cancel</button>
+</div></dialog>
+<dialog id="globalSearchDialog"><div class="detail-dialog"><div class="dialog-head"><h2>Search Everything</h2><button id="closeGlobalSearch" class="plain">✕</button></div><input id="globalSearchInput" class="global-search-input" placeholder="Search lists, projects, reminders, digestibles…"><div id="globalSearchResults" class="search-results"></div></div></dialog>
 <dialog id="projectDialog"><form method="dialog" id="projectForm"><div class="dialog-head"><h2>New Project</h2><button value="cancel" class="plain">✕</button></div><label>Project<input id="projectTitle" required placeholder="Apartment, Ant Farm, Trip…"></label><label>What is the goal?<textarea id="projectDescription" rows="3"></textarea></label><div class="grid2"><label>Status<select id="projectStatus"><option>Idea</option><option selected>Active</option><option>On Hold</option><option>Completed</option></select></label><label>Priority<select id="projectPriority"><option>Low</option><option selected>Medium</option><option>High</option></select></label></div><div class="actions"><button value="cancel" class="secondary">Cancel</button><button value="default" class="primary">Create</button></div></form></dialog>
 
 <dialog id="itemDialog"><form method="dialog" id="itemForm">
-  <div class="dialog-head"><h2 id="dialogTitle">Add item</h2><button value="cancel" class="plain">✕</button></div>
+  <div class="dialog-head"><div><span class="dialog-kicker">QUICK ADD</span><h2 id="dialogTitle">Add item</h2></div><button id="itemDialogClose" type="button" class="plain dialog-close" aria-label="Close">✕</button></div>
   <input type="hidden" id="itemId">
+  <div id="itemDestinationWrap" class="item-destination"><span>Add to</span><div class="destination-options" role="group" aria-label="Choose list"><button type="button" class="destination-choice" data-destination="buy">Buy List</button><button type="button" class="destination-choice" data-destination="groceries">Groceries</button></div></div>
+  <input type="hidden" id="itemDestination" value="buy">
   <label>Item<input id="item" required></label>
   <div class="grid2"><label>Category<input id="category" placeholder="Home, Kitchen, Produce..."></label><label>Priority<select id="priority"><option>Need</option><option>Want</option><option>Eventually</option></select></label></div>
   <div class="grid2"><label>Quantity<input id="quantity" placeholder="1"></label><label>Status<select id="itemStatus"><option>Looking</option><option>Ready to Buy</option><option>Bought</option></select></label></div>
   <label>Notes<textarea id="notes" rows="3"></textarea></label>
-  <div class="actions"><button value="cancel" class="secondary">Cancel</button><button id="saveBtn" value="default" class="primary">Save</button></div>
+  <div class="actions"><button id="itemDialogCancel" type="button" class="secondary">Cancel</button><button id="saveBtn" type="submit" value="default" class="primary">Save</button></div>
 </form></dialog>
 
 <dialog id="driverDialog"><form method="dialog" id="driverForm">
@@ -297,8 +351,9 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
-<script src="app.js?v=43"></script>
-<script src="monitor-ui.js?v=43"></script>
+<script src="app.js?v=81"></script>
+<script src="monitor-ui.js?v=52"></script>
+<script src="todos.js?v=64"></script>
 <script src="ai-config.js?v=42"></script>
 <script type="module" src="ai-ui.js?v=41"></script>
 </body></html>
