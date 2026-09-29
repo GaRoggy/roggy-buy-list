@@ -657,11 +657,16 @@ const BUILTIN_PROJECTS={
  ]}
 };
 
-const PROJECT_STEP_KEY="roggy-project-step-checks-v1";
-let projectStepChecks=JSON.parse(localStorage.getItem(PROJECT_STEP_KEY)||"{}");
-function saveProjectStepChecks(){localStorage.setItem(PROJECT_STEP_KEY,JSON.stringify(projectStepChecks))}
+async function loadProjectsFromSupabase(){
+ const {data:{session}}=await sb.auth.getSession();
+ if(!isOwnerSession(session)){ensureBuiltinProjects();return projects}
+ const {data:rows,error}=await sb.from("projects").select("*").eq("user_id",session.user.id).order("created_at",{ascending:false});
+ if(error){showErr(error);ensureBuiltinProjects();return projects}
+ projects=(rows||[]).map(row=>({id:row.id,title:row.title,description:row.description||"",status:row.status||"active",priority:"High",created:row.created_at,builtin:!!BUILTIN_PROJECTS[row.title]}));
+ saveProjects();return projects;
+}
 function ensureBuiltinProjects(){for(const [title,d] of Object.entries(BUILTIN_PROJECTS)){if(!projects.some(p=>p.title===title))projects.push({title,description:d.description,status:"Active",priority:"High",builtin:true,created:new Date().toISOString()})}saveProjects()}
-function renderProjects(){ensureBuiltinProjects();$("projectList").innerHTML=projects.map((p,i)=>'<button class="project-card project-open" data-project-open="'+i+'"><div><span class="project-status">'+esc(p.status)+'</span><h3>'+esc(p.title)+'</h3><p>'+esc(p.description||"No description yet.")+'</p></div><div class="project-foot"><span>'+esc(p.priority)+' priority</span><span>Open →</span></div></button>').join("");document.querySelectorAll("[data-project-open]").forEach(b=>b.onclick=()=>openProject(+b.dataset.projectOpen))}
+async function renderProjects(){await loadProjectsFromSupabase();$("projectList").innerHTML=projects.map((p,i)=>'<button type="button" class="project-card project-open" data-project-open="'+i+'"><div><span class="project-status">'+esc(p.status)+'</span><h3>'+esc(p.title)+'</h3><p>'+esc(p.description||"No description yet.")+'</p></div><div class="project-foot"><span>'+esc(p.priority||"High")+' priority</span><span>Open →</span></div></button>').join("");document.querySelectorAll("[data-project-open]").forEach(b=>b.onclick=()=>openProject(+b.dataset.projectOpen))}
 async function fetchProjectItems(title){
  const {data:{session}}=await sb.auth.getSession();
  if(!isOwnerSession(session))return [];
@@ -671,41 +676,48 @@ async function fetchProjectItems(title){
  if(itemError)return [];
  return itemRows||[];
 }
+async function getProjectDbId(title){
+ const p=projects.find(x=>x.title===title);if(p?.id)return p.id;
+ const {data:{session}}=await sb.auth.getSession();if(!isOwnerSession(session))return null;
+ const {data}=await sb.from("projects").select("id").eq("title",title).eq("user_id",session.user.id).limit(1);return data?.[0]?.id||null;
+}
 function projectCheckButton(checked,attrs,label){
  return '<button type="button" class="project-check '+(checked?'checked':'')+'" '+attrs+' aria-label="'+esc(label)+'" aria-pressed="'+(checked?'true':'false')+'">'+(checked?'✓':'')+'</button>';
 }
 async function toggleProjectItemCheck(id,next,title){
  const {error}=await sb.from("project_items").update({checked:next,updated_at:new Date().toISOString()}).eq("id",id);
  if(error){showErr(error);return}
- const i=projects.findIndex(p=>p.title===title);
- if(i>=0)openProject(i);
+ const i=projects.findIndex(p=>p.title===title);if(i>=0)openProject(i);
 }
-function toggleProjectStepCheck(projectTitle,index){
- const key=projectTitle+"::"+index;
- projectStepChecks[key]=!projectStepChecks[key];
- saveProjectStepChecks();
- const i=projects.findIndex(p=>p.title===projectTitle);
- if(i>=0)openProject(i);
+async function createAndCheckProjectItem(projectTitle,itemTitle,itemType,notes,url){
+ const projectId=await getProjectDbId(projectTitle);if(!projectId){showErr(new Error("Project is not synced yet."));return}
+ const {data:{session}}=await sb.auth.getSession();if(!isOwnerSession(session))return;
+ const {error}=await sb.from("project_items").insert({project_id:projectId,user_id:session.user.id,title:itemTitle,item_type:itemType,status:"planned",notes:notes||null,product_url:url||null,checked:true});
+ if(error){showErr(error);return}
+ const i=projects.findIndex(p=>p.title===projectTitle);if(i>=0)openProject(i);
 }
 async function openProject(i){
  const p=projects[i];if(!p)return;const built=BUILTIN_PROJECTS[p.title];
  setPage("project-detail");$("pageTitle").textContent=p.title;$("pageSubtitle").textContent="Project";
+ const dbItems=await fetchProjectItems(p.title);
  let html='<section class="project-detail-hero"><span class="project-status">'+esc(p.status)+'</span><h2>'+esc(p.title)+'</h2><p>'+esc(p.description||"")+'</p></section>';
  if(built){
-   html+='<section class="project-detail-section"><h3>Implementation</h3><div class="project-check-list">'+built.steps.map((x,index)=>{const checked=!!projectStepChecks[p.title+"::"+index];return '<div class="project-check-row">'+projectCheckButton(checked,'data-project-step="'+index+'"','Toggle '+x)+'<div class="project-check-copy">'+esc(x)+'</div></div>'}).join("")+'</div></section>';
-   let dbItems=await fetchProjectItems(p.title);
    const byTitle=new Map(dbItems.map(x=>[x.title.toLowerCase(),x]));
-   const items=built.devices.map(d=>{const row=byTitle.get(d.name.toLowerCase());return row?{...d,...row,name:row.title,note:row.notes||d.note,url:row.product_url||d.url,checked:!!row.checked}:d});
-   dbItems.filter(row=>!items.some(x=>(x.id&&x.id===row.id)||x.name.toLowerCase()===row.title.toLowerCase())).forEach(row=>items.push({name:row.title,note:row.notes||"",url:row.product_url||"",id:row.id,checked:!!row.checked}));
-   html+='<section class="project-detail-section"><h3>Devices / hardware</h3><div class="project-device-list">'+items.map(d=>'<div class="project-device project-device-checkable">'+projectCheckButton(!!d.checked,d.id?'data-project-item="'+esc(d.id)+'" data-project-item-title="'+esc(p.title)+'"':'disabled','Toggle '+d.name)+'<div class="project-device-copy"><b>'+esc(d.name)+'</b><p>'+esc(d.note||"")+'</p></div>'+(d.url?'<a class="project-device-link" href="'+esc(d.url)+'" target="_blank" rel="noopener" aria-label="Open '+esc(d.name)+' link">↗</a>':'')+'</div>').join("")+'</div></section>';
- } else html+='<section class="project-detail-section"><h3>Project notes</h3><p>'+esc(p.description||"No notes yet.")+'</p></section>';
+   html+='<section class="project-detail-section"><h3>Implementation</h3><div class="project-check-list">'+built.steps.map((x,index)=>{const row=byTitle.get(x.toLowerCase());return '<div class="project-check-row">'+projectCheckButton(!!row?.checked,row?'data-project-item="'+esc(row.id)+'" data-project-item-title="'+esc(p.title)+'"':'data-project-step-create="'+index+'"','Toggle '+x)+'<div class="project-check-copy">'+esc(x)+'</div></div>'}).join("")+'</div></section>';
+   const items=built.devices.map((d,index)=>{const row=byTitle.get(d.name.toLowerCase());return row?{...d,...row,name:row.title,note:row.notes||d.note,url:row.product_url||d.url,checked:!!row.checked}:{...d,requiredIndex:index}});
+   dbItems.filter(row=>row.item_type!=="task"&&!items.some(x=>(x.id&&x.id===row.id)||x.name.toLowerCase()===row.title.toLowerCase())).forEach(row=>items.push({name:row.title,note:row.notes||"",url:row.product_url||"",id:row.id,checked:!!row.checked}));
+   html+='<section class="project-detail-section"><h3>Devices / hardware</h3><div class="project-device-list">'+items.map(d=>'<div class="project-device project-device-checkable">'+projectCheckButton(!!d.checked,d.id?'data-project-item="'+esc(d.id)+'" data-project-item-title="'+esc(p.title)+'"':'data-project-device-create="'+d.requiredIndex+'"','Toggle '+d.name)+'<div class="project-device-copy"><b>'+esc(d.name)+'</b><p>'+esc(d.note||"")+'</p></div>'+(d.url?'<a class="project-device-link" href="'+esc(d.url)+'" target="_blank" rel="noopener" aria-label="Open '+esc(d.name)+' link">↗</a>':'')+'</div>').join("")+'</div></section>';
+ } else {
+   html+='<section class="project-detail-section"><h3>Items</h3><div class="project-device-list">'+(dbItems.length?dbItems.map(d=>'<div class="project-device project-device-checkable">'+projectCheckButton(!!d.checked,'data-project-item="'+esc(d.id)+'" data-project-item-title="'+esc(p.title)+'"','Toggle '+d.title)+'<div class="project-device-copy"><b>'+esc(d.title)+'</b><p>'+esc(d.notes||"")+'</p></div>'+(d.product_url?'<a class="project-device-link" href="'+esc(d.product_url)+'" target="_blank" rel="noopener" aria-label="Open '+esc(d.title)+' link">↗</a>':'')+'</div>').join(""):'<div class="quiet-state">No project items yet.</div>')+'</div></section>';
+ }
  $("projectDetailContent").innerHTML=html;
- document.querySelectorAll("[data-project-step]").forEach(b=>b.onclick=()=>toggleProjectStepCheck(p.title,+b.dataset.projectStep));
  document.querySelectorAll("[data-project-item]").forEach(b=>b.onclick=()=>toggleProjectItemCheck(b.dataset.projectItem,b.getAttribute("aria-pressed")!=="true",b.dataset.projectItemTitle));
+ document.querySelectorAll("[data-project-step-create]").forEach(b=>b.onclick=()=>{const step=built.steps[+b.dataset.projectStepCreate];createAndCheckProjectItem(p.title,step,"task","Required implementation step","")});
+ document.querySelectorAll("[data-project-device-create]").forEach(b=>b.onclick=()=>{const d=built.devices[+b.dataset.projectDeviceCreate];createAndCheckProjectItem(p.title,d.name,"device",d.note,d.url)});
 }
 $("projectBackBtn").onclick=()=>setPage("projects");
 $("newProjectBtn").onclick=()=>$("projectDialog").showModal();
-$("projectForm").addEventListener("submit",e=>{if(e.submitter?.value==="cancel")return;e.preventDefault();projects.unshift({title:$("projectTitle").value.trim(),description:$("projectDescription").value.trim(),status:$("projectStatus").value,priority:$("projectPriority").value,created:new Date().toISOString()});saveProjects();$("projectForm").reset();$("projectDialog").close();renderProjects()});
+$("projectForm").addEventListener("submit",async e=>{if(e.submitter?.value==="cancel")return;e.preventDefault();const {data:{session}}=await sb.auth.getSession();if(!isOwnerSession(session))return;const row={user_id:session.user.id,title:$("projectTitle").value.trim(),description:$("projectDescription").value.trim()||null,status:String($("projectStatus").value||"Active").toLowerCase().replace(" ","_")};const {error}=await sb.from("projects").insert(row);if(error){showErr(error);return}$("projectForm").reset();$("projectDialog").close();await renderProjects()});
 document.querySelectorAll(".command-card[data-jump]").forEach(b=>b.onclick=()=>setPage(b.dataset.jump));document.querySelectorAll("[data-focus-jump]").forEach(b=>b.onclick=()=>setPage(b.dataset.focusJump));
 function openGlobalSearch(){$("globalSearchDialog").showModal();$("globalSearchInput").value="";renderGlobalSearch("");setTimeout(()=>$("globalSearchInput").focus(),50)}
 $("globalSearchBtn").onclick=openGlobalSearch;$("closeGlobalSearch").onclick=()=>$("globalSearchDialog").close();
