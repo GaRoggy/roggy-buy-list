@@ -107,8 +107,9 @@ test('origin and DNS-rebinding host checks and private-network preflight', async
   });
   assert.equal(rebound, 403);
   const r = await fetch(f.url + '/api/chat', { method: 'OPTIONS', headers: { Origin: 'https://garoggy.github.io', 'Access-Control-Request-Method': 'POST',
-    'Access-Control-Request-Headers': 'authorization,content-type', 'Access-Control-Request-Private-Network': 'true' } });
+    'Access-Control-Request-Headers': 'authorization,content-type,last-event-id', 'Access-Control-Request-Private-Network': 'true' } });
   assert.equal(r.status, 204); assert.equal(r.headers.get('access-control-allow-origin'), 'https://garoggy.github.io');
+  assert.match(r.headers.get('access-control-allow-headers'), /Last-Event-ID/);
   assert.equal(r.headers.get('access-control-allow-private-network'), 'true'); assert.equal(f.calls.length, 0);
 });
 test('authenticated smart-home traffic stays behind the owner bridge', async t => {

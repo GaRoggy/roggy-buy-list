@@ -153,7 +153,7 @@ export function createBridge(cfg, { fetcher = fetch, ai = createAI(cfg, fetcher)
       if (req.method === 'OPTIONS') {
         if (!origin || !['GET', 'POST'].includes(req.headers['access-control-request-method'])) throw new AIError('ORIGIN_DENIED', 403);
         const headers = (req.headers['access-control-request-headers'] || '').toLowerCase().split(',').map(x => x.trim()).filter(Boolean);
-        if (headers.some(h => !['authorization', 'content-type'].includes(h))) throw new AIError('ORIGIN_DENIED', 403);
+        if (headers.some(h => !['authorization', 'content-type', 'last-event-id'].includes(h))) throw new AIError('ORIGIN_DENIED', 403);
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST');
         res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Last-Event-ID');
         // Private-network preflight is allowed only for the explicit website origin.
