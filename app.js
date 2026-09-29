@@ -531,7 +531,7 @@ $("digestAddForm").addEventListener("submit",async e=>{
 });
 
 function setPage(page){
- const primaryPages=["home","todos","buy"];
+ const primaryPages=["home","devices","todos","buy"];
  if(primaryPages.includes(page))lastPrimaryPage=page;
  else if(page==="reminders"&&primaryPages.includes(currentPage))shelfReturnPage=currentPage;
  currentPage=page;
@@ -743,7 +743,7 @@ document.addEventListener("keydown",e=>{
 
 
 /* Primary-page live panorama navigation v80 */
-const PRIMARY_SWIPE_PAGES=["home","todos","buy"];
+const PRIMARY_SWIPE_PAGES=["home","devices","todos","buy"];
 let swipeStartX=0,swipeStartY=0,swipeLastX=0,swipeTracking=false,swipeAxis=null,swipeNeighbor=null,swipeNeighborPage=null,swipePointerId=null,swipeStartTime=0,swipeLastTime=0,swipeVelocityX=0;
 let swipeVisualCurrent=null,swipeSettleTimer=null;
 function ensureSwipeHUD(){
@@ -763,7 +763,7 @@ function updateSwipeHUD(page=currentPage,progress=0,direction=0){
 }
 function swipeBlockedTarget(t){return !!t.closest("dialog,input,textarea,select,a,[contenteditable=true],.fab,.layne-chat-fab,.side-drawer")}
 function primaryPageEl(page){
- if(page==="home")return $("homePage");if(page==="todos")return $("todosPage");if(page==="buy")return $("listsPage");return null;
+ if(page==="home")return $("homePage");if(page==="devices")return $("devicesPage");if(page==="todos")return $("todosPage");if(page==="buy")return $("listsPage");return null;
 }
 function mountainPagePosition(page=currentPage){
  const idx=PRIMARY_SWIPE_PAGES.indexOf(page);return idx<0?0:idx;
@@ -792,7 +792,8 @@ function prepareSwipeNeighbor(direction){
  if(next<0||next>=PRIMARY_SWIPE_PAGES.length)return false;
  swipeNeighborPage=PRIMARY_SWIPE_PAGES[next];swipeNeighbor=primaryPageEl(swipeNeighborPage);
  if(!swipeNeighbor)return false;
- if(swipeNeighborPage==="todos")loadTodos();
+ if(swipeNeighborPage==="devices"){renderDevicesPage();loadSmartHome({silent:true}).catch(()=>{})}
+ else if(swipeNeighborPage==="todos")loadTodos();
  else if(swipeNeighborPage==="buy"){currentView="active";renderLists()}
  swipeNeighbor.hidden=false;swipeNeighbor.classList.add("swipe-panel","swipe-neighbor");
  return true;
@@ -885,7 +886,7 @@ function beginPrimarySwipe(x,y,target,pointerId=null){
  if(document.documentElement.classList.contains("is-settling")){
    clearTimeout(swipeSettleTimer);
    [swipeVisualCurrent,swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating");el.style.removeProperty("--panel-x")});
-   document.querySelectorAll("#homePage,#todosPage,#listsPage").forEach(el=>el.hidden=el!==primaryPageEl(currentPage));
+   document.querySelectorAll("#homePage,#devicesPage,#todosPage,#listsPage").forEach(el=>el.hidden=el!==primaryPageEl(currentPage));
    swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-settling");
  }
  clearSwipeStyles();swipeStartX=swipeLastX=x;swipeStartY=y;swipeStartTime=swipeLastTime=performance.now();swipeVelocityX=0;swipeTracking=true;swipeAxis=null;swipePointerId=pointerId;return true;
