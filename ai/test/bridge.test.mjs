@@ -24,6 +24,13 @@ async function fixture(t, opts = {}) {
       if (token === 'Bearer anonymous') return result({ id: owner, is_anonymous: true });
       return new Response('', { status: 401 });
     }
+    if (url.endsWith('/status')) return result({ status: 'ok', devices: [{ device_id: 'fixture_light', friendly_name: 'Fixture Light', room: 'living_room', type: 'light', capabilities: ['power'], availability: 'online', online: true, state: 'on', freshness: 'fresh' }] });
+    if (url.endsWith('/health')) return result({ status: 'ok' });
+    if (url.endsWith('/api/devices')) return result({ devices: [{ device_id: 'fixture_light', friendly_name: 'Fixture Light', room: 'living_room', capabilities: ['power'], availability: 'online', online: true, state: 'on', freshness: 'fresh' }] });
+    if (url.endsWith('/api/rooms')) return result({ rooms: [{ room_id: 'living_room', friendly_name: 'Living Room', device_count: 1, online_devices: 1 }] });
+    if (url.includes('/api/events/history')) return result({ events: [] });
+    if (url.endsWith('/api/commands')) return result({ message: 'Layne command accepted' });
+    if (url.endsWith('/api/devices/fixture_light/actions')) return result({ success: true });
     if (opts.offline) throw Error('sensitive Ollama detail');
     if (url.endsWith('/api/tags')) return result({ models: [{ name: 'fixture:local' }, { name: 'remote:cloud' }, { name: 'hidden:alias', remote_model: 'remote' }] });
     if (url.endsWith('/api/show')) return result(opts.remote ? { remote_host: 'https://ollama.com' } : {});
@@ -103,6 +110,23 @@ test('origin and DNS-rebinding host checks and private-network preflight', async
     'Access-Control-Request-Headers': 'authorization,content-type', 'Access-Control-Request-Private-Network': 'true' } });
   assert.equal(r.status, 204); assert.equal(r.headers.get('access-control-allow-origin'), 'https://garoggy.github.io');
   assert.equal(r.headers.get('access-control-allow-private-network'), 'true'); assert.equal(f.calls.length, 0);
+});
+test('authenticated smart-home traffic stays behind the owner bridge', async t => {
+  const f = await fixture(t, { cfg: { localAgentApiToken: 'agent-fixture' } });
+  const diagnostics = await f.request('/smart-home/diagnostics', null);
+  assert.equal(diagnostics.status, 200);
+  const diagnosticBody = await diagnostics.json();
+  assert.equal(diagnosticBody.bridge.status, 'online');
+  assert.equal(diagnosticBody.authentication.status, 'authenticated');
+  assert.equal(diagnosticBody.smart_home.status, 'online');
+  assert.equal(diagnosticBody.layne.status, 'online');
+  const devices = await f.request('/smart-home/devices', null);
+  assert.equal(devices.status, 200);
+  assert.equal((await devices.json()).devices[0].device_id, 'fixture_light');
+  const upstream = f.calls.find(call => call.url.endsWith('/api/devices'));
+  assert.equal(upstream.options.headers.Authorization, 'Bearer valid');
+  assert.equal((await f.request('/smart-home/commands', { text: 'status' })).status, 200);
+  assert.equal((await f.request('/smart-home/devices/fixture_light/actions', { action: 'power', value: 'off' })).status, 200);
 });
 test('offline Ollama and model failure return safe errors', async t => {
   const f = await fixture(t, { offline: true }); const r = await f.request('/api/models', null);

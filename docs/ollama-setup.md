@@ -12,6 +12,20 @@ Roggy Lists (GitHub Pages)
 
 The bridge does not use a Supabase service-role key and does not store conversations. It sends the browser's bearer token to Supabase Auth for remote verification on every request. It rejects every user except the configured owner UUID, rejects anonymous users, limits request size/frequency/concurrency, enforces timeouts, and logs only request IDs, durations, and safe error codes. Ollama is never bound to a Tailscale address, LAN address, or public internet address.
 
+## Smart-home transport
+
+The Devices shelf uses the same private bridge, not a browser connection to a device IP:
+
+```text
+Roggy Lists (GitHub Pages)
+  -> https://PC-NAME.TAILNET.ts.net/smart-home/*
+  -> authenticated 127.0.0.1:8787 bridge
+  -> 127.0.0.1:8776 smart-home service
+  -> Layne device registry and integrations
+```
+
+The browser never receives or calls `127.0.0.1:8776`, a LAN address, or a device API. The bridge forwards only authenticated smart-home reads, actions, diagnostics, and the event stream. Keep the Tailscale Serve endpoint tailnet-only; do not use Tailscale Funnel or expose port 8776 directly.
+
 ## One-time PC setup
 
 1. Install Node.js 24 LTS, Ollama for Windows, Tailscale for Windows, and Git. Sign in to the same Tailscale account on the PC and on each phone/tablet/browser device that should use local AI. Keep the tailnet ACL limited to your own devices.
@@ -94,7 +108,7 @@ Unregister-ScheduledTask -TaskName 'Roggy Local AI'
 
 ## Use it from iPhone or another device
 
-Install Tailscale on the device, sign in to the same tailnet, and keep Tailscale connected. Open the normal Roggy Lists URL in Safari. Sign in with the authorized GitHub/Supabase account, open **More → Local AI**, and choose **Reconnect / refresh**. The page should show `Ollama online · private` and list the locally installed models. A device outside the tailnet will show an offline message and cannot reach the bridge.
+Install Tailscale on the device, sign in to the same tailnet, and keep Tailscale connected. Open the normal Roggy Lists URL in Safari. Sign in with the authorized GitHub/Supabase account, open **More → Local AI**, and choose **Reconnect / refresh**. The page should show `Ollama online · private` and list the locally installed models. Open **Devices** to see the bridge, Layne, smart-home service, and individual-device diagnostics. A device outside the tailnet will show an offline message and cannot reach the bridge.
 
 The first Safari request may ask to allow access to devices on the local network. Allow it for the Roggy Lists site. The website still requires Supabase authentication even when the device is already on Tailscale. Signing out immediately clears the chat and prevents model discovery or generation.
 

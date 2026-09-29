@@ -16,6 +16,12 @@ export function config(env = process.env) {
   const ollama = new URL(env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434');
   if (ollama.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(ollama.hostname) ||
       ollama.username || ollama.password || ollama.search || ollama.hash || ollama.pathname !== '/') throw Error('OLLAMA_BASE_URL must be loopback HTTP only');
+  const smartHome = new URL(env.SMART_HOME_BASE_URL || 'http://127.0.0.1:8776');
+  if (smartHome.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(smartHome.hostname) ||
+      smartHome.username || smartHome.password || smartHome.search || smartHome.hash || smartHome.pathname !== '/') throw Error('SMART_HOME_BASE_URL must be loopback HTTP only');
+  const localAgent = new URL(env.LOCAL_AGENT_URL || 'http://127.0.0.1:8765');
+  if (localAgent.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(localAgent.hostname) ||
+      localAgent.username || localAgent.password || localAgent.search || localAgent.hash || localAgent.pathname !== '/') throw Error('LOCAL_AGENT_URL must be loopback HTTP only');
   const origins = required('OLLAMA_ALLOWED_ORIGINS').split(',').map(s => s.trim());
   for (const origin of origins) {
     const u = new URL(origin);
@@ -28,7 +34,10 @@ export function config(env = process.env) {
     if (u.protocol !== 'https:' || u.username || u.password || u.search || u.hash || u.pathname !== '/') throw Error('OLLAMA_BRIDGE_URL must be an HTTPS origin');
     hosts.add(u.host);
   }
-  return { supabase: supabase.origin, anonKey, owner, ollama: ollama.origin, origins: new Set(origins), hosts, port,
+  return { supabase: supabase.origin, anonKey, owner, ollama: ollama.origin, smartHome: smartHome.origin, localAgent: localAgent.origin,
+    localAgentApiToken: env.LOCAL_AGENT_API_TOKEN?.trim() || null,
+    localAgentTokenFile: env.LOCAL_AGENT_API_TOKEN_FILE?.trim() || 'C:\\Codex\\LocalAgent\\data\\api-token.txt',
+    origins: new Set(origins), hosts, port,
     timeoutMs: integer('OLLAMA_TIMEOUT_MS', 180000, 1000, 600000),
     maxTokens: integer('OLLAMA_MAX_TOKENS', 2048, 1, 8192), contextTokens: integer('OLLAMA_CONTEXT_TOKENS', 16384, 2048, 65536) };
 }

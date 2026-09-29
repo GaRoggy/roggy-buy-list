@@ -1,6 +1,8 @@
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+import { Readable } from 'node:stream';
+import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { config } from './config.mjs';
 import { authorize } from './auth.mjs';
@@ -32,12 +34,104 @@ async function readBody(req, signal) {
 }
 const json = (res, status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); };
 
+const SMART_HOME_PREFIX = '/smart-home';
+const SMART_HOME_PATH = /^\/(?:devices(?:\/[A-Za-z0-9._~%+\-]+(?:\/actions)?)?|rooms(?:\/[A-Za-z0-9._~%+\-]+)?|events\/(?:history|stream))$/;
+function smartHomeRequest(reqUrl) {
+  const parsed = new URL(reqUrl, 'http://bridge.local');
+  if (!parsed.pathname.startsWith(`${SMART_HOME_PREFIX}/`) && parsed.pathname !== SMART_HOME_PREFIX) return null;
+  const path = parsed.pathname.slice(SMART_HOME_PREFIX.length) || '/diagnostics';
+  if (path === '/diagnostics') return { kind: 'diagnostics', method: 'GET' };
+  if (path === '/commands') return { kind: 'proxy', method: 'POST', path: '/api/commands', search: parsed.search };
+  if (!SMART_HOME_PATH.test(path)) throw new AIError('SMART_HOME_ROUTE_NOT_FOUND', 404);
+  const isAction = path.endsWith('/actions');
+  const isStream = path === '/events/stream';
+  const method = isAction ? 'POST' : 'GET';
+  if (parsed.search && path === '/events/stream') return { kind: 'proxy', method, path: `/api${path}`, search: parsed.search };
+  return { kind: 'proxy', method, path: `/api${path}`, search: parsed.search, stream: isStream };
+}
+
+async function localAgentToken(cfg) {
+  if (cfg.localAgentApiToken) return cfg.localAgentApiToken;
+  try { return (await readFile(cfg.localAgentTokenFile, 'utf8')).trim() || null; } catch { return null; }
+}
+
+async function smartHomeDiagnostics(cfg, fetcher, signal) {
+  const result = {
+    bridge: { status: 'online', transport: 'private_tailscale' },
+    authentication: { status: 'authenticated' },
+    layne: { status: 'unknown' },
+    smart_home: { status: 'offline' },
+    devices: []
+  };
+  const probe = async (url, headers = {}) => {
+    const timeout = new AbortController();
+    const timer = setTimeout(() => timeout.abort(), 6000);
+    try {
+      return await fetcher(url, { method: 'GET', headers, redirect: 'error', signal: AbortSignal.any([signal, timeout.signal]) });
+    } finally { clearTimeout(timer); }
+  };
+  try {
+    const response = await probe(`${cfg.smartHome}/status`);
+    if (!response.ok) throw new Error(`smart_home_${response.status}`);
+    const body = await response.json();
+    result.smart_home = { status: body?.status === 'ok' ? 'online' : 'degraded' };
+    result.devices = Array.isArray(body?.devices) ? body.devices.map(device => ({
+      device_id: device.device_id,
+      friendly_name: device.friendly_name,
+      room: device.room,
+      type: device.type,
+      capabilities: device.capabilities,
+      availability: device.availability,
+      online: device.online,
+      state: device.state,
+      freshness: device.freshness,
+      last_seen: device.last_seen,
+      last_state_changed_at: device.last_state_changed_at
+    })) : [];
+  } catch { result.smart_home = { status: 'offline', reason: 'network_error' }; }
+  const token = await localAgentToken(cfg);
+  if (!token) result.layne = { status: 'unknown', reason: 'not_configured' };
+  else {
+    try {
+      const response = await probe(`${cfg.localAgent}/health`, { Authorization: `Bearer ${token}` });
+      result.layne = { status: response.ok ? 'online' : 'offline' };
+    } catch { result.layne = { status: 'offline', reason: 'network_error' }; }
+  }
+  return result;
+}
+
+async function proxySmartHome(req, res, cfg, fetcher, signal, route) {
+  const target = new URL(`${route.path}${route.search || ''}`, `${cfg.smartHome}/`);
+  const headers = { Accept: req.headers.accept || 'application/json', Authorization: req.headers.authorization };
+  if (req.headers['last-event-id']) headers['Last-Event-ID'] = req.headers['last-event-id'];
+  let body;
+  if (route.method === 'POST') {
+    body = JSON.stringify(await readBody(req, signal));
+    headers['Content-Type'] = 'application/json';
+  }
+  const connect = new AbortController();
+  const timer = setTimeout(() => connect.abort(), 8000);
+  let response;
+  try {
+    response = await fetcher(target.toString(), { method: route.method, headers, body, redirect: 'error', signal: AbortSignal.any([signal, connect.signal]) });
+  } catch { throw new AIError('SMART_HOME_UNAVAILABLE', 503); }
+  clearTimeout(timer);
+  const contentType = response.headers.get('content-type') || 'application/json; charset=utf-8';
+  res.writeHead(response.status, { 'Content-Type': contentType, 'Cache-Control': route.stream ? 'no-cache, no-store' : 'no-store', 'X-Accel-Buffering': 'no' });
+  if (!response.body) { res.end(); return; }
+  for await (const chunk of Readable.fromWeb(response.body)) {
+    signal.throwIfAborted();
+    if (!res.write(chunk)) await once(res, 'drain', { signal });
+  }
+  res.end();
+}
+
 export function createBridge(cfg, { fetcher = fetch, ai = createAI(cfg, fetcher), logger = row => console.log(JSON.stringify(row)) } = {}) {
   // Fixed-size global buckets avoid attacker-controlled IP/token maps. Forwarded headers are never trusted.
   const ingress = bucket(120), chats = bucket(10), discovery = bucket(30);
   let inflight = 0, generating = false;
   const active = new Set();
-  const server = createServer({ maxHeaderSize: 16384, headersTimeout: 10000, requestTimeout: 15000 }, async (req, res) => {
+  const server = createServer({ maxHeaderSize: 16384, headersTimeout: 10000, requestTimeout: 0 }, async (req, res) => {
     const started = Date.now(), id = randomUUID(), controller = new AbortController();
     const { signal } = controller; let timer, heartbeat, ownsGeneration = false, counted = false, outcome = 'OK';
     active.add(controller);
@@ -61,7 +155,7 @@ export function createBridge(cfg, { fetcher = fetch, ai = createAI(cfg, fetcher)
         const headers = (req.headers['access-control-request-headers'] || '').toLowerCase().split(',').map(x => x.trim()).filter(Boolean);
         if (headers.some(h => !['authorization', 'content-type'].includes(h))) throw new AIError('ORIGIN_DENIED', 403);
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST');
-        res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+        res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Last-Event-ID');
         // Private-network preflight is allowed only for the explicit website origin.
         if (req.headers['access-control-request-private-network'] === 'true') res.setHeader('Access-Control-Allow-Private-Network', 'true');
         res.setHeader('Access-Control-Max-Age', '300'); res.writeHead(204); res.end(); return;
@@ -70,6 +164,17 @@ export function createBridge(cfg, { fetcher = fetch, ai = createAI(cfg, fetcher)
       inflight++; counted = true;
       await authorize(req.headers.authorization, cfg, signal, fetcher);
       signal.throwIfAborted();
+      const smartHome = smartHomeRequest(req.url);
+      if (smartHome) {
+        if (smartHome.method !== req.method) throw new AIError('METHOD_NOT_ALLOWED', 405);
+        if (smartHome.kind === 'diagnostics') {
+          json(res, 200, await smartHomeDiagnostics(cfg, fetcher, signal));
+        } else {
+          if (smartHome.stream) clearTimeout(timer);
+          await proxySmartHome(req, res, cfg, fetcher, signal, smartHome);
+        }
+        return;
+      }
       if (req.url === '/api/models' && req.method === 'GET') {
         if (!discovery()) throw new AIError('RATE_LIMITED', 429);
         json(res, 200, { provider: 'ollama', models: await ai.models(signal) }); return;
