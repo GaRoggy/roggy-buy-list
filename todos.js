@@ -30,9 +30,9 @@ function renderTodos(){
   $("todoList").innerHTML=rows.length?rows.map(x=>{
     const email=x.email_url?'<a class="todo-email" href="'+esc(x.email_url)+'" target="_blank" rel="noopener noreferrer" title="'+esc(x.email_subject||"Open email")+'">✉ Email</a>':"";
     const notes=x.notes?'<p class="todo-notes">'+esc(x.notes)+'</p>':"";
-    return '<article class="todo-card '+(x.status==="done"?"todo-done":"")+'" data-todo-id="'+esc(x.id)+'"><button class="todo-check" data-todo-toggle="'+esc(x.id)+'" aria-label="'+(x.status==="done"?"Mark open":"Mark complete")+'">'+(x.status==="done"?"✓":"")+'</button><div class="todo-body"><div class="todo-title-row"><h3>'+esc(x.title)+'</h3><div class="todo-buy-priority"><button type="button" class="prioritybtn icon-action" data-todo-priority="'+esc(x.id)+'" data-dir="up">↑</button><span class="badge todo-priority '+esc(x.priority)+'">'+esc(x.priority)+'</span><button type="button" class="prioritybtn icon-action" data-todo-priority="'+esc(x.id)+'" data-dir="down">↓</button></div></div><div class="todo-meta">'+(x.category?'<span>'+esc(x.category)+'</span>':"")+todoDueLabel(x)+todoCompletedLabel(x)+email+'</div>'+notes+'</div><button class="todo-delete" data-todo-delete="'+esc(x.id)+'" aria-label="Delete task">×</button></article>';
+    return '<article class="todo-card '+(x.status==="done"?"todo-done":"")+'" data-todo-id="'+esc(x.id)+'"><button type="button" class="todo-check" data-todo-toggle="'+esc(x.id)+'" aria-label="'+(x.status==="done"?"Mark open":"Mark complete")+'">'+(x.status==="done"?"✓":"")+'</button><div class="todo-body"><div class="todo-title-row"><h3>'+esc(x.title)+'</h3><div class="todo-buy-priority"><button type="button" class="prioritybtn icon-action" data-todo-priority="'+esc(x.id)+'" data-dir="up">↑</button><span class="badge todo-priority '+esc(x.priority)+'">'+esc(x.priority)+'</span><button type="button" class="prioritybtn icon-action" data-todo-priority="'+esc(x.id)+'" data-dir="down">↓</button></div></div><div class="todo-meta">'+(x.category?'<span>'+esc(x.category)+'</span>':"")+todoDueLabel(x)+todoCompletedLabel(x)+email+'</div>'+notes+'</div><button type="button" class="todo-delete" data-todo-delete="'+esc(x.id)+'" aria-label="Delete task">×</button></article>';
   }).join(""):'<div class="system-card empty-project"><b>Nothing here.</b><p>Either you are terrifyingly efficient or this filter is empty.</p></div>';
-  document.querySelectorAll("[data-todo-toggle]").forEach(b=>b.onclick=()=>toggleTodo(b.dataset.todoToggle));
+  document.querySelectorAll("[data-todo-toggle]").forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();toggleTodo(b.dataset.todoToggle)});
   document.querySelectorAll("[data-todo-delete]").forEach(b=>b.onclick=()=>deleteTodo(b.dataset.todoDelete));document.querySelectorAll("[data-todo-priority]").forEach(b=>b.onclick=()=>changeTodoPriority(b.dataset.todoPriority,b.dataset.dir));
   renderHomeHighTodos();
 }
@@ -43,7 +43,7 @@ async function toggleTodo(id){
   const x=todos.find(t=>t.id===id);if(!x)return;
   const done=x.status!=="done",patch={status:done?"done":"open",completed_at:done?new Date().toISOString():null,updated_at:new Date().toISOString()};
   const {error}=await sb.from("todos").update(patch).eq("id",id);if(error){$("todoStatus").textContent=error.message;return}
-  Object.assign(x,patch);renderTodos();
+  const scrollY=window.scrollY;Object.assign(x,patch);renderTodos();requestAnimationFrame(()=>window.scrollTo({top:scrollY,left:0,behavior:"auto"}));
 }
 async function deleteTodo(id){
   const {error}=await sb.from("todos").delete().eq("id",id);if(error){$("todoStatus").textContent=error.message;return}
