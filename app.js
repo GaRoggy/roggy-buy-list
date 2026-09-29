@@ -32,7 +32,7 @@ let reminders=[],reminderView="today",remindersLoaded=false,reminderSessionVersi
 let monitorEmails=[],monitorEmailMessage="Sign in to view monitored email.";
 let digestibles=[],digestView="books",digestStatusView="queue";
 const SMART_HOME_API=(window.ROGGY_SMART_HOME_API||window.ROGGY_AI_CONFIG?.smartHomeUrl||"").replace(/\/$/,"");
-let smartHomeState={devices:[],rooms:[],events:[],diagnostics:null},smartHomeLoaded=false,smartHomeUnavailable=false,smartHomeFailure=null,smartHomeLoading=null,smartHomeStreamPromise=null,smartHomeStreamAbort=null,smartHomeStreamRetry=null,smartHomeLastEventId="",smartHomeControlAllowed=false,smartHomeAccessToken="",smartHomePendingActions=new Map();
+let smartHomeState={devices:[],rooms:[],events:[],diagnostics:null},smartHomeLoaded=false,smartHomeUnavailable=false,smartHomeFailure=null,smartHomeLoading=null,smartHomeStreamPromise=null,smartHomeStreamAbort=null,smartHomeStreamRetry=null,smartHomeLastEventId="",smartHomeControlAllowed=false,smartHomeAccessToken="",smartHomePendingActions=new Map(),smartHomeActionSequence=0;
 let layneChatMessages=[],layneChatBusy=false,layneChatError="";
 
 
@@ -140,7 +140,7 @@ function bindHomeDeviceLinks(){document.querySelectorAll("[data-device-jump]").f
 function snapshotDevice(device){return device?{...device,attributes:{...(device.attributes||{})}}:null}
 function beginDeviceAction(deviceId,body){
  const previous=applyDeviceActionState(deviceId,body);if(!previous)return {previous:null,version:0};
- const version=(smartHomePendingActions.get(deviceId)?.version||0)+1;
+ const version=++smartHomeActionSequence;
  smartHomePendingActions.set(deviceId,{version,body,optimistic:snapshotDevice(smartHomeState.devices.find(device=>device.device_id===deviceId)),awaitingConfirmation:false,expiresAt:Date.now()+10000});
  return {previous,version};
 }
@@ -151,10 +151,9 @@ function pendingDeviceState(device){
 }
 function actionStillCurrent(deviceId,version){return version>0&&smartHomePendingActions.get(deviceId)?.version===version}
 async function refreshAfterDeviceAction(deviceId,version){
- let refreshed=await loadSmartHome({silent:true});
+ const refreshed=await loadSmartHome({silent:true});
  if(actionStillCurrent(deviceId,version)){
-  smartHomePendingActions.delete(deviceId);
-  refreshed=await loadSmartHome({silent:true});
+  setTimeout(async()=>{if(!actionStillCurrent(deviceId,version))return;smartHomePendingActions.delete(deviceId);await loadSmartHome({silent:true}).catch(()=>{})},1500);
  }
  return refreshed;
 }
