@@ -1007,3 +1007,6 @@ header,.project-back,.fab,.page-tabs,.sub-tabs{z-index:40!important}
 .project-detail-hero{display:block!important}
 .project-check{touch-action:manipulation}
 .project-check-list,.project-device-list{overflow-anchor:none}
+
+/* Project ordering controls v108 */
+.project-card-wrap{position:relative}.project-card-wrap .project-card{width:100%;padding-right:72px}.project-order-controls{position:absolute;right:18px;top:50%;transform:translateY(-50%);display:grid;gap:6px;z-index:2}.project-order-controls button{width:34px;height:34px;border-radius:11px;border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);background:color-mix(in srgb,var(--panel) 86%,transparent);color:var(--accent);font-size:20px;font-weight:900;line-height:1}.project-order-controls button:disabled{opacity:.22}.project-order-controls button:not(:disabled):active{transform:scale(.94)}
