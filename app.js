@@ -610,9 +610,9 @@ sb.auth.onAuthStateChange((event,session)=>{if(session&&!isOwnerSession(session)
 
 
 
-/* Command center + personal OS v35 */
+/* Command center + personal OS v35 */ let homeDateTimer=null;const HOME_DATE_OPTIONS={weekday:"long",month:"long",day:"numeric"};function refreshHomeDate(now=new Date()){const el=$("homeDate");if(el)el.textContent=now.toLocaleDateString(undefined,HOME_DATE_OPTIONS);if(homeDateTimer)clearTimeout(homeDateTimer);const nextLocalMidnight=new Date(now);nextLocalMidnight.setHours(24,0,0,0);homeDateTimer=setTimeout(()=>{refreshHomeDate();if(currentPage==="home")renderHome()},Math.max(1000,nextLocalMidnight-now+50))}function refreshHomeForCurrentDate(){const previousDate=$("homeDate")?.textContent;refreshHomeDate();if(currentPage==="home"&&previousDate!==$("homeDate")?.textContent)renderHome()}
 function renderHome(){
- $("homeDate").textContent=new Date().toLocaleDateString([],{weekday:"long",month:"long",day:"numeric"});
+ refreshHomeDate();
  const now=new Date(),tomorrow=new Date(now);tomorrow.setHours(24,0,0,0);
  const allTodays=(reminders||[]).filter(x=>{const d=reminderStart(x),finish=reminderEnd(x);return d<tomorrow&&(finish>localDay(now)||d>=localDay(now))});
  const todays=allTodays.slice(0,4);
@@ -629,7 +629,7 @@ function renderHome(){
  document.querySelectorAll("[data-focus-jump]").forEach(b=>b.onclick=()=>setPage(b.dataset.focusJump));
  if(!remindersLoaded){remindersLoaded=true;loadReminders().then(()=>{if(currentPage==="home")renderHome()}).catch(()=>{})}
 }
-function renderImportantEmails(){
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)refreshHomeForCurrentDate()});window.addEventListener("focus",refreshHomeForCurrentDate);function renderImportantEmails(){
  if(!$("importantEmailList"))return;
  $("importantEmailList").innerHTML=monitorEmails.length?monitorEmails.map(x=>'<a class="important-email" href="https://mail.google.com/mail/u/0/#all/'+encodeURIComponent(x.source_message_id)+'" target="_blank" rel="noopener noreferrer"><span class="email-kind">'+esc(x.category)+'</span><div><b>'+esc(x.subject)+'</b><small>'+esc(x.sender)+' · '+esc(x.summary)+'</small><small>'+esc(x.reason||"")+'</small></div><time>'+esc(new Date(x.timestamp).toLocaleDateString())+'</time></a>').join(""):'<div class="quiet-state">'+esc(monitorEmailMessage)+'</div>';
 }
