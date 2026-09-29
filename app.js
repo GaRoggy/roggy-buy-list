@@ -70,13 +70,19 @@ function renderDeviceDiagnostics(){
 }
 function deviceTypeLabel(device){return smartStateLabel(device?.type||"device")}
 function deviceBrightness(device){const value=device?.attributes?.brightness;return Number.isFinite(Number(value))?Math.max(0,Math.min(100,Math.round(Number(value)))):null}
+function devicePowerState(device){
+ const raw=device?.state??device?.attributes?.power;
+ if(raw===true||["on","true","1","active"].includes(String(raw).toLowerCase()))return "on";
+ if(raw===false||["off","false","0","inactive"].includes(String(raw).toLowerCase()))return "off";
+ return String(raw??"unknown").toLowerCase();
+}
 function deviceLastActivity(device){const attrs=device?.attributes||{};return device?.last_state_changed_at||attrs.last_state_change||attrs.last_event_received||attrs.last_detected_at||attrs.last_detected||attrs.last_audio_at||device?.last_seen}
 function deviceFreshnessLine(device){if(!deviceOnline(device))return deviceLastActivity(device)?`Last seen ${smartRelative(deviceLastActivity(device))}`:"Offline";if(!deviceFresh(device))return `State stale${deviceLastActivity(device)?` · ${smartRelative(deviceLastActivity(device))}`:""}`;const relative=smartRelative(deviceLastActivity(device));return relative?`Updated ${relative}`:"Updated just now"}
 function deviceStatusTone(device){if(!deviceOnline(device))return "offline";if(!deviceFresh(device))return "stale";return "online"}
 function deviceStatusLine(device){
  if(!deviceOnline(device))return "Offline";
  if(!deviceFresh(device))return "Stale";
- const capabilities=device.capabilities||[],state=String(device.state||"unknown").toLowerCase();
+ const capabilities=device.capabilities||[],state=devicePowerState(device);
  if(capabilities.includes("power")){
    const brightness=deviceBrightness(device);
    return state==="on"?(brightness==null?"On":`On · ${brightness}%`):state==="off"?"Off":smartStateLabel(state);
@@ -95,7 +101,7 @@ function deviceControlsMarkup(device){
  const capabilities=device.capabilities||[],online=deviceUsable(device),id=esc(device.device_id),locked=!smartHomeControlAllowed;
  let html="";
  if(capabilities.includes("power")){
-   const state=String(device.state||"").toLowerCase();
+   const state=devicePowerState(device);
    html+=`<div class="device-control-group"><span class="device-control-label">Power</span><div class="device-toggle"><button type="button" class="device-action ${state==="on"?"selected":""}" data-device-id="${id}" data-device-action="power" data-device-value="on" ${!online||locked?"disabled":""}>On</button><button type="button" class="device-action ${state==="off"?"selected":""}" data-device-id="${id}" data-device-action="power" data-device-value="off" ${!online||locked?"disabled":""}>Off</button></div></div>`;
  }
  if(capabilities.includes("brightness")){
@@ -131,7 +137,32 @@ function deviceActivityText(event){const device=smartHomeState.devices.find(item
 function recentSmartHomeEvents(){return (smartHomeState.events||[]).filter(event=>event.type?.startsWith("device.")||event.type==="command.request").slice().sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp)).slice(0,5)}
 function focusDevice(deviceId){setPage("devices");setTimeout(()=>{const card=document.querySelector(`[data-device-card="${CSS.escape(deviceId)}"]`);if(card){card.scrollIntoView({behavior:"smooth",block:"center"});card.classList.add("device-highlight");setTimeout(()=>card.classList.remove("device-highlight"),1600)}},50)}
 function bindHomeDeviceLinks(){document.querySelectorAll("[data-device-jump]").forEach(button=>button.onclick=()=>focusDevice(button.dataset.deviceJump));document.querySelectorAll("[data-room-jump]").forEach(button=>button.onclick=()=>{setPage("devices");setTimeout(()=>document.getElementById(`smart-room-${CSS.escape(button.dataset.roomJump)}`)?.scrollIntoView({behavior:"smooth",block:"start"}),50)})}
-async function sendRoomPower(roomId,value){const room=smartHomeRooms().find(item=>item.room_id===roomId);const lights=roomDevices(room).filter(device=>device.capabilities?.includes("power")&&deviceUsable(device));if(!lights.length)return;const status=$("deviceStatus");if(status)status.textContent="Updating room lights…";try{await Promise.all(lights.map(device=>smartHomeFetch(`/devices/${encodeURIComponent(device.device_id)}/actions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"power",value})})));const refreshed=await loadSmartHome({silent:true});if(status)status.textContent=refreshed?"Room lights updated.":"Room lights command sent; showing last known state."}catch(error){if(status)status.textContent="Room light update failed: "+smartErrorMessage(error)}}
+function snapshotDevice(device){return device?{...device,attributes:{...(device.attributes||{})}}:null}
+function applyDeviceActionState(deviceId,body){
+ const device=smartHomeState.devices.find(item=>item.device_id===deviceId);if(!device)return null;
+ const previous=snapshotDevice(device),action=String(body?.action||"").toLowerCase();
+ if(action==="power"&&device.capabilities?.includes("power"))device.state=String(body.value).toLowerCase()==="off"?"off":"on";
+ if(action==="brightness"&&device.capabilities?.includes("brightness")){
+  const value=Math.max(0,Math.min(100,Math.round(Number(body.value))));
+  if(Number.isFinite(value))device.attributes={...(device.attributes||{}),brightness:value};
+ }
+ if((action==="power"&&device.capabilities?.includes("power"))||(action==="brightness"&&device.capabilities?.includes("brightness"))){
+  device.freshness="fresh";
+  device.last_state_changed_at=new Date().toISOString();
+  renderHomeDeviceStatus();renderDevicesPage();
+ }
+ return previous;
+}
+function restoreDeviceSnapshot(deviceId,previous){
+ const device=smartHomeState.devices.find(item=>item.device_id===deviceId);if(!device||!previous)return;
+ Object.assign(device,previous);renderHomeDeviceStatus();renderDevicesPage();
+}
+async function sendRoomPower(roomId,value){
+ const room=smartHomeRooms().find(item=>item.room_id===roomId),lights=roomDevices(room).filter(device=>device.capabilities?.includes("power")&&deviceUsable(device));if(!lights.length)return;
+ const status=$("deviceStatus"),snapshots=lights.map(device=>[device.device_id,applyDeviceActionState(device.device_id,{action:"power",value})]);if(status)status.textContent="Updating room lights…";
+ try{await Promise.all(lights.map(device=>smartHomeFetch(`/devices/${encodeURIComponent(device.device_id)}/actions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"power",value})})));const refreshed=await loadSmartHome({silent:true});if(status)status.textContent=refreshed?"Room lights updated.":"Room lights command sent; showing requested state until devices confirm."}
+ catch(error){snapshots.forEach(([deviceId,previous])=>restoreDeviceSnapshot(deviceId,previous));if(status)status.textContent="Room light update failed: "+smartErrorMessage(error)}
+}
 function renderHomeDeviceStatus(){
  const root=$("homeDeviceStatus");if(!root)return;
  if(smartHomeUnavailable){root.innerHTML=`<div class="quiet-state"><b>Smart Home</b><br>${esc(smartFailureKind(smartHomeFailure)==="authentication"?"Authentication failed.":"Bridge or smart-home service unavailable.")}</div>`;return}
@@ -164,8 +195,9 @@ function bindDeviceControls(){
 }
 async function sendDeviceAction(deviceId,body){
  if(!smartHomeControlAllowed){const status=$("deviceStatus");if(status)status.textContent="Sign in to control devices.";return}
- const status=$("deviceStatus");if(status)status.textContent="Updating device…";
- try{await smartHomeFetch(`/devices/${encodeURIComponent(deviceId)}/actions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const refreshed=await loadSmartHome({silent:true});if(status)status.textContent=refreshed?"Device state updated.":"Device command sent; showing last known state."}catch(error){if(status)status.textContent="Device update failed: "+smartErrorMessage(error)}
+ const status=$("deviceStatus"),previous=applyDeviceActionState(deviceId,body);if(status)status.textContent="Updating device…";
+ try{await smartHomeFetch(`/devices/${encodeURIComponent(deviceId)}/actions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const refreshed=await loadSmartHome({silent:true});if(status)status.textContent=refreshed?"Device state updated.":"Device command sent; showing requested state until the device confirms."}
+ catch(error){restoreDeviceSnapshot(deviceId,previous);if(status)status.textContent="Device update failed: "+smartErrorMessage(error)}
 }
 function connectSmartHomeStream(){
  if(smartHomeStreamPromise||!smartHomeAccessToken||!SMART_HOME_API)return;
