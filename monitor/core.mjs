@@ -55,11 +55,19 @@ export class Store {
       if (page.length < 500) return result;
     }
   }
+  async upsertEvents(source, events) {
+    if (!source?.id || !Array.isArray(events) || !events.length) return 0;
+    const rows = events.map(event => ({ ...event, user_id: this.env.MONITOR_USER_ID, source_id: source.id,
+      source_kind: source.kind }));
+    await this.api('monitor_events?on_conflict=user_id,source_id,source_event_id', {
+      method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(rows) });
+    return rows.length;
+  }
 }
 // Allowlist log fields; callers cannot accidentally serialize payloads/tokens/errors.
 export async function log(event, fields = {}) {
   const row = { timestamp: new Date().toISOString(), event };
-  for (const key of ['job_id', 'source_id', 'attempt', 'records_processed', 'error_code']) {
+  for (const key of ['job_id', 'source_id', 'attempt', 'records_processed', 'events_processed', 'error_code', 'duration_ms']) {
     if (fields[key] !== undefined) row[key] = fields[key];
   }
   const text = JSON.stringify(row);

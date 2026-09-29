@@ -7,7 +7,7 @@ The existing static PWA remains the frontend. A separate Node 24 Windows process
 
 ## Delivery status
 
-Implemented and tested locally: durable queue, fenced leases, retries, source status, Calendar snapshots with reminder projection, Gmail history sync, Plaid Transactions sync, deterministic analysis, structured daily brief and dashboard panels. No LLM calls and no external send/edit/payment operations exist.
+Implemented and tested locally: durable queue, fenced leases, retries, source status, Calendar snapshots with reminder projection, Gmail history sync, Plaid Transactions sync, deterministic analysis, structured daily brief and dashboard panels. The cloud Calendar function is deployed but remains dormant until its server-side Google secrets are configured. No LLM calls and no external send/edit/payment operations exist.
 
 **Live monitoring is not yet configured.** Google OAuth, a Supabase server secret, and finance provider authorization are required. Garmin live collection is blocked on official API eligibility/access; enabling it does not simulate success. No fake data is inserted into Supabase.
 
@@ -42,13 +42,35 @@ There are no production npm dependencies. You can run `node` commands directly; 
 6. Run `node --env-file=.env monitor/setup.mjs google`, then `node --env-file=.env monitor/setup.mjs brief`.
 7. Run `node --env-file=.env monitor/worker.mjs --once` twice. Verify source success timestamps, unchanged record/reminder counts on the second run, and updates/cancellations after changing a test event yourself in Google Calendar.
 
+For Gmail-only activation after OAuth, use `node --env-file=.env monitor/setup.mjs gmail` (or `npm run gmail:setup`). It verifies the authenticated Gmail profile and creates or enables exactly one owner-scoped Gmail source using that address. Calendar IDs are not required for this mode.
+
 Google OAuth apps in external Testing may receive refresh tokens that expire after seven days for these scopes. Follow Google's production/verification requirements for your use case; reauthorize when required. A revoked token stops that source and displays an error; it never switches to password scraping.
 
 Run authorization from your normal signed-in Windows PowerShell session. The development tool session's DPAPI roundtrip was blocked because its impersonated user profile was not loaded. The code fails closed with `SECRET_STORE_ERROR`; it does not fall back to plaintext or disable Windows protection. DPAPI authorization and scheduled-task execution still require validation in your normal Windows account.
 
 Calendar uses complete paginated snapshots every five minutes over the previous 30 days and next 366 days. Recurring instances, cancellations and reschedules are reconciled only after a full successful fetch. Dates outside the window become inactive locally, not externally deleted. All-day dates preserve their exclusive end and time zone. It intentionally uses bounded snapshots instead of sync tokens because a moving recurrence window requires reconciliation. Every imported active event projects into Reminders. Legacy reminders with an exact event ID are adopted; other historical imported rows need explicit mapping rather than guessing.
 
+### Cloud Calendar → Reminders
+
+`supabase/functions/sync-google-calendar/index.ts` is the production-safe, deterministic path for Calendar synchronization when the PC is off. Supabase `pg_cron` invokes `public.invoke_google_calendar_sync()` every five minutes. That function reads only two non-Google invocation values from Supabase Vault (`google_calendar_sync_url` and `google_calendar_sync_secret`) and sends a private request to the Edge Function. The Edge Function keeps Google OAuth values in Edge Function secrets, refreshes a read-only access token, and writes the existing `monitor_sources` and `monitor_records` tables. The existing `monitor_calendar_reminder` trigger then updates the existing `reminders` rows; no second reminder system is used.
+
+Cloud synchronization uses a seven-day past / 90-day future initial window, `singleEvents=true` for stable recurring occurrences, and Google's `nextSyncToken` for incremental runs. A bounded full reconciliation runs at least daily and after an expired sync token, so the rolling window and cancellations remain correct. Each calendar source has a short server-side lease, safe counters in `monitor_sources.last_result`, and a cursor containing only sync metadata. Local workers skip sources whose `config.sync_owner` is `cloud`.
+
+To activate the deployed function, configure these **server-side only** values in the Supabase Edge Function secret store: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `MONITOR_USER_ID`, `GOOGLE_CALENDAR_IDS` (a JSON array of canonical IDs, never `primary`), `MONITOR_TIMEZONE` (normally `America/Chicago`), and a random `SYNC_CRON_SECRET`. Then create Vault secrets whose values are the deployed function URL (`google_calendar_sync_url`) and the same `SYNC_CRON_SECRET` (`google_calendar_sync_secret`). Do not put any of these values in GitHub Pages, browser storage, `monitor_sources.config`, or logs. The refresh token must have only `https://www.googleapis.com/auth/calendar.readonly` for this cloud path. The local combined Gmail/Calendar OAuth flow can remain separate; it stores its refresh token with Windows DPAPI and does not make the PC a cloud dependency.
+
+Cloud Calendar reminders retain `source='google_calendar'`, calendar/event provenance, update timestamps, location, description, recurrence metadata and cancellation state. The browser filters cancelled and locally hidden rows, shows a small Calendar badge and displays a location when present. The current Reminders UI does not offer deletion of imported rows; the `hidden_locally` field is reserved for a future one-way hide control that would never edit or delete the Google event. Manual reminders have a different source and are never touched by Calendar synchronization.
+
 Gmail bootstraps the last 90 days, then uses history IDs for additions, deletions and label changes. An expired history ID triggers reconciliation including previously imported IDs. Classification is rule-based. Promotions, spam, sent mail and routine newsletters stay off the main dashboard. Ambiguous dates, currencies and extracted actions remain null; this version does not promise complete semantic extraction. Emails never trigger replies or sends.
+
+## Canonical events and Layne retrieval
+
+`monitor_records` remains the provider-owned record store. The additive `monitor_events` table is a compact, source-agnostic projection with an explicit schema version, source provenance, normalized timestamps, importance, confidence, action-required state, bounded entities/tags/domains and safe metadata. It has owner-only authenticated reads and service-role-only writes, with indexes for chronological, source/type, importance and action-required retrieval. It does not store raw Gmail bodies or credentials.
+
+After a successful monitor commit, `monitor/events.mjs` deterministically projects Gmail and Calendar records (and provides a Smart Home adapter for future source registration). Promotions/newsletters and other routine mail remain records but do not become Layne events. Deleted records produce tombstone events so stale context is not treated as active. Projection errors are logged separately and never roll back a provider cursor.
+
+`monitor/enrichment.mjs` is an optional, side-effect-free adapter for the existing lightweight Ollama worker. It receives only bounded canonical fields marked as untrusted event data, validates structured annotations, times out, and fails closed. It is not invoked for routine monitoring, so no model remains loaded for the event pipeline.
+
+The local agent's owner-authenticated `PersonalDataService` exposes `/event-data` and `/event-search`, plus the `CHECK_PERSONAL_EVENTS` and `SEARCH_PERSONAL_EVENTS` registered processes. Layne retrieves relevant events on demand; it does not ingest the inbox continuously. The existing `/email-data` and Roggy Lists email panel remain available during the migration.
 
 ## Finance authorization and behavior
 

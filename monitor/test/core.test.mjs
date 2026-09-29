@@ -37,3 +37,15 @@ test('successful run commits records and cursor together with fencing token', as
     async () => ({ records: [{ kind: 'email', external_id: '1' }], cursor: { historyId: '2' } }), async () => {});
   assert.equal(calls[0][0], 'commit'); assert.deepEqual(calls[0][1].p_cursor, { historyId: '2' });
 });
+
+test('successful run projects canonical events after the provider commit', async () => {
+  const calls = [];
+  const store = { env: {}, rpc: async (name, body) => { calls.push([name, body]); return 1; },
+    upsertEvents: async (source, events) => { calls.push(['events', source, events]); return events.length; } };
+  await runJob(store, { job: { id: 'job', lease_token: 'fence', attempts: 1 }, source: { id: 'source', kind: 'gmail' } },
+    async () => ({ records: [{ kind: 'email', external_id: 'message', payload: { category: 'bills', dashboard: true, subject: 'Due' } }], cursor: { historyId: '2' } }),
+    async () => {});
+  assert.equal(calls[0][0], 'commit');
+  assert.equal(calls[1][0], 'events');
+  assert.equal(calls[1][2][0].event_type, 'bill_due');
+});

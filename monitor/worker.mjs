@@ -1,9 +1,11 @@
 import { pathToFileURL } from 'node:url';
 import { config, Store, failure, backoff, log, MonitorError } from './core.mjs';
 import { collect } from './collectors.mjs';
+import { normalizeRecords } from './events.mjs';
 
 export async function runJob(store, claim, collector = collect, logger = log) {
   const { job, source } = claim;
+  const started = Date.now();
   const fence = { p_job: job.id, p_token: job.lease_token };
   let lost = false, heartbeat;
   const timer = setInterval(() => {
@@ -16,11 +18,23 @@ export async function runJob(store, claim, collector = collect, logger = log) {
     const result = await collector(source, store.env, store);
     if (lost) throw new MonitorError('STALE_LEASE');
     const count = await store.rpc('commit', { ...fence, p_records: result.records, p_cursor: result.cursor });
-    await logger('job_succeeded', { job_id: job.id, records_processed: count });
+    let eventsProcessed = 0;
+    if (typeof store.upsertEvents === 'function') {
+      try {
+        eventsProcessed = await store.upsertEvents(source, normalizeRecords(result.records, source));
+      } catch (error) {
+        // Event projection is additive. A projection outage must not roll back
+        // a successful provider cursor commit or cause duplicate reprocessing.
+        await logger('event_projection_failed', { job_id: job.id, source_id: source.id,
+          error_code: failure(error).code, duration_ms: Date.now() - started });
+      }
+    }
+    await logger('job_succeeded', { job_id: job.id, records_processed: count,
+      events_processed: eventsProcessed, duration_ms: Date.now() - started });
   } catch (error) {
     const err = failure(error);
     await store.rpc('fail', { ...fence, p_code: err.code, p_delay: Math.ceil(backoff(job.attempts, err.retryAfter)), p_terminal: err.terminal });
-    await logger('job_failed', { job_id: job.id, error_code: err.code });
+    await logger('job_failed', { job_id: job.id, error_code: err.code, duration_ms: Date.now() - started });
   } finally { clearInterval(timer); if (heartbeat) await heartbeat; }
 }
 async function main() {

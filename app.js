@@ -403,7 +403,7 @@ async function loadReminders(){
   const {data:{session}}=await sb.auth.getSession();
   if(version!==reminderSessionVersion)return;
   if(!isOwnerSession(session)){reminders=[];remindersLoaded=true;$("reminderStatus").textContent="Sign in to view private reminders.";renderReminders();return}
-  const {data:r,error}=await sb.from("reminders").select("*").eq("user_id",session.user.id).eq("completed",false).is("cancelled_at",null).order("start_at",{ascending:true});
+  const {data:r,error}=await sb.from("reminders").select("*").eq("user_id",session.user.id).eq("completed",false).is("cancelled_at",null).eq("hidden_locally",false).order("start_at",{ascending:true});
   if(version!==reminderSessionVersion)return;
   remindersLoaded=true;if(!error)$("reminderStatus").textContent="";
   if(error){showErr(error,"reminderStatus");reminders=[]}else reminders=r||[];
@@ -422,7 +422,8 @@ function renderReminders(){
   rows.forEach(x=>{const d=reminderStart(x),el=document.createElement("article");el.className="reminder-card";
     const when=x.all_day?"All day":d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});
     const day=reminderView==="week"?d.toLocaleDateString([],{weekday:"short",month:"short",day:"numeric"}):"";
-    el.innerHTML=`<div class="reminder-date">${esc(day)}</div><div class="reminder-body"><b>${esc(x.title)}</b><span>${esc(when)}</span></div>${x.source==="google_calendar"?'<span class="calendar-badge">Calendar</span>':""}`;
+    const location=x.location?`<small class="reminder-location">${esc(x.location)}</small>`:"";
+    el.innerHTML=`<div class="reminder-date">${esc(day)}</div><div class="reminder-body"><b>${esc(x.title)}</b><span>${esc(when)}</span>${location}</div>${x.source==="google_calendar"?'<span class="calendar-badge">Calendar</span>':""}`;
     $("reminderList").appendChild(el);
   });
 }

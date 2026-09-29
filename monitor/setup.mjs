@@ -12,7 +12,11 @@ async function main() {
     const get=await googleClient(env);const list=await pages(get,'calendar/v3/users/me/calendarList');
     console.log(JSON.stringify(list.items.map(c=>({id:c.id,name:c.summary,primary:!!c.primary})),null,2));return;
   }
-  if(mode==='google') {
+  if(mode==='gmail') {
+    const get=await googleClient(env),profile=await get('gmail/v1/users/me/profile');
+    if(!profile.emailAddress)throw new MonitorError('GMAIL_PROFILE_REQUIRED');
+    await add('gmail',profile.emailAddress,300,true);
+  } else if(mode==='google') {
     const get=await googleClient(env),profile=await get('gmail/v1/users/me/profile');
     const ids=JSON.parse(env.GOOGLE_CALENDAR_IDS||'[]');
     if(!Array.isArray(ids)||!ids.length||ids.some(id=>typeof id!=='string'||!id||id==='primary'))throw new MonitorError('GOOGLE_CALENDAR_IDS_REQUIRED');
@@ -25,7 +29,7 @@ async function main() {
     await add('finance',env.PLAID_ITEM_ID,3600,true);
   }else if(mode==='brief')await add('brief','daily',900,true);
   else if(mode==='garmin')await add('garmin','pending-official-access',1800,false);
-  else throw new MonitorError('USAGE_SETUP_GOOGLE_FINANCE_BRIEF_GARMIN_OR_LIST_CALENDARS');
+  else throw new MonitorError('USAGE_SETUP_GMAIL_GOOGLE_FINANCE_BRIEF_GARMIN_OR_LIST_CALENDARS');
   console.log('Source configuration saved. Run the worker once and inspect the dashboard status.');
 }
 main().catch(e=>{console.error(failure(e).code);process.exitCode=1});
