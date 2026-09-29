@@ -673,7 +673,7 @@ document.querySelectorAll(".mode-choice").forEach(b=>b.onclick=()=>{localStorage
 $("settingsShelfBtn").onclick=()=>{$("moreToggle").checked=false;$("settingsToggle").checked=true};
 
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");
-updateAuth().then(async session=>{if(isOwnerSession(session)){await loadLists();if(typeof loadHomeTasks==="function")await loadHomeTasks();setPage("home")}else setPage("home")});
+updateAuth().then(async session=>{if(isOwnerSession(session)){await loadLists();if(typeof loadHomeTasks==="function")await loadHomeTasks()}if(currentPage==="reminders")setPage("home")});
 
 /* UX pass v72 */
 document.addEventListener("keydown",e=>{
