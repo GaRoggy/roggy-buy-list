@@ -14,7 +14,6 @@ const PRIMARY_PAGES=Object.freeze([
  {id:"home",label:"Home",elementId:"homePage",title:"Roggy",subtitle:"Your command center."},
  {id:"devices",label:"Devices",elementId:"devicesPage",title:"Devices",subtitle:"Live smart-home control."},
  {id:"todos",label:"Tasks",elementId:"todosPage",title:"Tasks",subtitle:"Things that need doing."},
- {id:"mail",label:"Mail",elementId:"mailPage",title:"Mail",subtitle:"Possibly important messages."},
  {id:"buy",label:"Buy",elementId:"listsPage",title:"Buy List",subtitle:"Needs first. Luxuries later."}
 ]);
 const PRIMARY_PAGE_IDS=Object.freeze(PRIMARY_PAGES.map(page=>page.id));
@@ -25,7 +24,7 @@ function primaryPageElement(page){const definition=PRIMARY_PAGE_BY_ID.get(page);
 function renderPrimaryTabs(){
  const root=$("primaryPageTabs");if(!root)return;
  root.style.setProperty("--primary-page-count",PRIMARY_PAGES.length);
- root.innerHTML=PRIMARY_PAGES.map(page=>`<button class="page-tab" data-page="${page.id}" type="button">${page.label}${page.id==="mail"?'<span id="mailNavCount" class="mail-nav-count" hidden></span>':""}</button>`).join("");
+ root.innerHTML=PRIMARY_PAGES.map(page=>`<button class="page-tab" data-page="${page.id}" type="button">${page.label}</button>`).join("");
  root.querySelectorAll(".page-tab").forEach(button=>button.onclick=()=>setPage(button.dataset.page));
 }
 function syncPageNavigation(page=currentPage){
