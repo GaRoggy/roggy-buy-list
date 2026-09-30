@@ -14,6 +14,7 @@ const PRIMARY_PAGES=Object.freeze([
  {id:"home",label:"Home",elementId:"homePage",title:"Roggy",subtitle:"Your command center."},
  {id:"devices",label:"Devices",elementId:"devicesPage",title:"Devices",subtitle:"Live smart-home control."},
  {id:"todos",label:"Tasks",elementId:"todosPage",title:"Tasks",subtitle:"Things that need doing."},
+ {id:"mail",label:"Mail",elementId:"mailPage",title:"Mail",subtitle:"Possibly important messages."},
  {id:"buy",label:"Buy",elementId:"listsPage",title:"Buy List",subtitle:"Needs first. Luxuries later."}
 ]);
 const PRIMARY_PAGE_IDS=Object.freeze(PRIMARY_PAGES.map(page=>page.id));
@@ -24,7 +25,7 @@ function primaryPageElement(page){const definition=PRIMARY_PAGE_BY_ID.get(page);
 function renderPrimaryTabs(){
  const root=$("primaryPageTabs");if(!root)return;
  root.style.setProperty("--primary-page-count",PRIMARY_PAGES.length);
- root.innerHTML=PRIMARY_PAGES.map(page=>`<button class="page-tab" data-page="${page.id}" type="button">${page.label}</button>`).join("");
+ root.innerHTML=PRIMARY_PAGES.map(page=>`<button class="page-tab" data-page="${page.id}" type="button">${page.label}${page.id==="mail"?'<span id="mailNavCount" class="mail-nav-count" hidden></span>':""}</button>`).join("");
  root.querySelectorAll(".page-tab").forEach(button=>button.onclick=()=>setPage(button.dataset.page));
 }
 function syncPageNavigation(page=currentPage){
@@ -67,6 +68,7 @@ let digestibles=[],digestView="books",digestStatusView="queue";
 const SMART_HOME_API=(window.ROGGY_SMART_HOME_API||window.ROGGY_AI_CONFIG?.smartHomeUrl||"").replace(/\/$/,"");
 let smartHomeState={devices:[],rooms:[],events:[],diagnostics:null},smartHomeLoaded=false,smartHomeUnavailable=false,smartHomeFailure=null,smartHomeLoading=null,smartHomeStreamPromise=null,smartHomeStreamAbort=null,smartHomeStreamRetry=null,smartHomeLastEventId="",smartHomeStreamStatus="disconnected",smartHomeControlAllowed=false,smartHomeAccessToken="",smartHomePendingActions=new Map(),smartHomeActionSequence=0;
 let layneChatMessages=[],layneChatBusy=false,layneChatError="",laynePendingAction=null,layneSessionId=null;
+const layneVoiceChatEventIds=new Set(),layneVoiceResponseIds=new Set();
 
 
 function esc(s=""){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
@@ -285,10 +287,15 @@ setInterval(()=>{if(!document.hidden&&(currentPage==="home"||currentPage==="devi
 function layneResponseText(payload){if(typeof payload==="string")return payload;if(payload?.message)return String(payload.message);if(payload?.answer)return String(payload.answer);if(typeof payload?.result==="string")return payload.result;if(payload?.result?.message)return String(payload.result.message);return "Layne returned a response without text."}
 function layneConfirmationDecision(text){const normalized=String(text||"").trim().toLowerCase().replace(/[.!?,;:]+$/g,"");if(/^(yes|yeah|yep|do it|confirm|go ahead|okay|ok)$/.test(normalized))return true;if(/^(no|nope|cancel|never mind|nevermind|don't|dont|stop)$/.test(normalized))return false;return null}
 function laynePendingMarkup(action){if(!action?.id&&!action?.confirmation_id)return "";const id=esc(action.id||action.confirmation_id),preview=esc(String(action.preview||"this action").replace(/[.?]+$/,""));return `<div class="layne-confirmation-card" data-pending-action="${id}"><p>Layne wants to:</p><strong>${preview}</strong><div class="layne-confirmation-actions"><button type="button" class="secondary" data-confirmation-id="${id}" data-confirmation-decision="false">Cancel</button><button type="button" class="primary" data-confirmation-id="${id}" data-confirmation-decision="true">Confirm</button></div></div>`}
-function renderLayneChat(){const history=$("layneChatHistory"),error=$("layneChatError"),send=$("layneChatSend"),status=$("layneChatStatus");if(!history)return;history.innerHTML=layneChatMessages.map(message=>`<div class="layne-chat-message ${message.role===`user`?"user":"assistant"}"><b>${message.role===`user`?"You":"Layne"}</b><p>${esc(message.text)}</p>${message.pendingAction?laynePendingMarkup(message.pendingAction):""}</div>`).join("");history.scrollTop=history.scrollHeight;if(send)send.disabled=layneChatBusy||!smartHomeControlAllowed;if(status)status.textContent=layneChatBusy?"Layne is thinking…":"";if(error)error.textContent=layneChatError}
-function openLayneChat(){const dialog=$("layneChatDialog");if(!dialog)return;if(!smartHomeControlAllowed){$("layneChatError").textContent="Sign in to talk to Layne.";return}renderLayneChat();dialog.showModal();setTimeout(()=>$("layneChatPrompt")?.focus(),40)}
+function layneVoiceSourceLabel(message){return String(message?.friendly_name||message?.room||message?.microphone_id||"Voice").replace(/[_-]+/g," ").replace(/\b\w/g,character=>character.toUpperCase()).trim()||"Voice"}
+function renderLayneChat(){const history=$("layneChatHistory"),error=$("layneChatError"),send=$("layneChatSend"),status=$("layneChatStatus");if(!history)return;history.innerHTML=layneChatMessages.map(message=>{const label=message.source==="voice"?`ME · 🎤 ${layneVoiceSourceLabel(message)}`:message.role===`user`?"You":"Layne";return `<div class="layne-chat-message ${message.role===`user`?"user":"assistant"}"><b>${esc(label)}</b><p>${esc(message.text)}</p>${message.pendingAction?laynePendingMarkup(message.pendingAction):""}</div>`}).join("");history.scrollTop=history.scrollHeight;if(send)send.disabled=layneChatBusy||!smartHomeControlAllowed;if(status)status.textContent=layneChatBusy?"Layne is thinking…":"";if(error)error.textContent=layneChatError}
+function openLayneChat({focus=true}={}){const dialog=$("layneChatDialog");if(!dialog)return;if(!smartHomeControlAllowed){$("layneChatError").textContent="Sign in to talk to Layne.";return}renderLayneChat();if(!dialog.open)dialog.showModal();if(focus)setTimeout(()=>$("layneChatPrompt")?.focus(),40)}
 async function submitLayneConfirmation(confirmationId,approve,alreadyBusy=false){if((layneChatBusy&&!alreadyBusy)||!confirmationId)return;const active=laynePendingAction;if(!active||String(active.id||active.confirmation_id)!==String(confirmationId)){layneChatError="That confirmation is no longer active.";renderLayneChat();return}layneChatBusy=true;layneChatError="";renderLayneChat();try{const payload=await smartHomeFetch(`/confirmations/${encodeURIComponent(confirmationId)}`,{method:"POST",timeoutMs:30000,headers:{"Content-Type":"application/json"},body:JSON.stringify({approve})});laynePendingAction=null;layneChatMessages.push({role:"assistant",text:approve?(payload?.ok?"Done — the confirmed action completed.":layneResponseText(payload)):"Cancelled."});await loadSmartHome({silent:true})}catch(exception){layneChatError="Layne could not complete that confirmation: "+smartErrorMessage(exception)}finally{layneChatBusy=false;renderLayneChat()}}
 async function sendLayneChat(){const prompt=$("layneChatPrompt");if(!prompt||layneChatBusy)return;const text=prompt.value.trim();if(!text)return;if(!smartHomeControlAllowed){layneChatError="Sign in to talk to Layne.";renderLayneChat();return}layneChatError="";layneChatMessages.push({role:"user",text});prompt.value="";layneChatBusy=true;renderLayneChat();try{const decision=laynePendingAction?layneConfirmationDecision(text):null;if(decision!==null){await submitLayneConfirmation(laynePendingAction.id||laynePendingAction.confirmation_id,decision,true);return}const body={text};if(layneSessionId)body.context={session_id:layneSessionId};const payload=await smartHomeFetch("/commands",{method:"POST",timeoutMs:185000,headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});layneSessionId=payload?.session_id||layneSessionId;laynePendingAction=payload?.pending_action||null;layneChatMessages.push({role:"assistant",text:layneResponseText(payload),pendingAction:laynePendingAction});await loadSmartHome({silent:true})}catch(exception){layneChatError="Layne could not respond: "+smartErrorMessage(exception)}finally{layneChatBusy=false;renderLayneChat()}}
+function rememberLayneVoiceId(set,id){const value=String(id||"").trim();if(!value||set.has(value))return false;if(set.size>=512){const oldest=set.values().next().value;if(oldest)set.delete(oldest)}set.add(value);return true}
+function appendVoiceUserMessage(event){const eventId=String(event?.event_id||event?.transcript_event_id||"");const text=String(event?.chat_text||"").trim();if(!text||!rememberLayneVoiceId(layneVoiceChatEventIds,eventId))return false;layneChatMessages.push({role:"user",text,source:"voice",friendly_name:event.friendly_name,room:event.room,microphone_id:event.microphone_id,event_id:eventId,timestamp:event.timestamp,original_transcript:event.original_transcript||event.transcript||event.text||""});return true}
+function handleLayneVoiceEvent(event){if(!event||!smartHomeControlAllowed)return;if(event.type==="whisper_transcript"){if(event.final===false||!event.layne_activated||!String(event.chat_text||"").trim())return;if(appendVoiceUserMessage(event)){renderLayneChat();openLayneChat({focus:false})}return}if(event.type!=="layne_voice_response")return;const responseId=String(event.event_id||"");if(!rememberLayneVoiceId(layneVoiceResponseIds,responseId))return;if(!layneChatMessages.some(message=>message.source==="voice"&&message.event_id===String(event.transcript_event_id||""))){appendVoiceUserMessage({event_id:event.transcript_event_id,chat_text:event.chat_text,friendly_name:event.friendly_name,room:event.room,microphone_id:event.microphone_id,timestamp:event.timestamp,original_transcript:event.original_transcript})}if(event.session_id)layneSessionId=event.session_id;laynePendingAction=event.pending_action||null;layneChatMessages.push({role:"assistant",text:String(event.message||"Layne could not respond to that request."),pendingAction:laynePendingAction,source_event_id:event.transcript_event_id});renderLayneChat();openLayneChat({focus:false})}
+window.addEventListener("roggy-smart-home-event",event=>handleLayneVoiceEvent(event.detail));
 $('layneChatHistory')?.addEventListener('click',event=>{const button=event.target.closest('[data-confirmation-id]');if(!button)return;submitLayneConfirmation(button.dataset.confirmationId,button.dataset.confirmationDecision==='true')});
 $("layneChatFab")?.addEventListener("click",openLayneChat);
 $("layneChatClose")?.addEventListener("click",()=>$("layneChatDialog").close());
@@ -693,7 +700,7 @@ function renderBudgetFlow(){
  groups.forEach(g=>g.value=g.items.reduce((s,x)=>s+x._value,0));
  const nodes=[{id:"income",name:"Total Income",type:"source",value:m.income}];
  const links=[];
- groups.forEach(g=>{const gid="group:"+g.name;nodes.push({id:gid,name:g.name,type:"group",group:g.name,value:g.value});links.push({source:"income",target:gid,value:g.value,group:g.name});g.items.forEach((x,i)=>{const id=gid+":item:"+i;nodes.push({id,name:x.name,type:"item",group:g.name,value:x._value,notes:x.notes||""});links.push({source:gid,target:id,value:x._value,group:g.name})})});
+ groups.forEach(g=>{const gid="group:"+g.name;nodes.push({id:gid,name:g.name,type:"group",group:g.name,value:g.value});links.push({source:"income",target:gid,value:g.value,group:g.name});g.items.forEach((x,i)=>{const id=gid+":item:"+i;nodes.push({id,name:x.name,type:"item",group:g.name,value:x._value});links.push({source:gid,target:id,value:x._value,group:g.name})})});
  if(m.left>0){nodes.push({id:"leftover",name:"Left Over",type:"group",group:"Left Over",value:m.left});links.push({source:"income",target:"leftover",value:m.left,group:"Left Over"})}
  const W=1080,H=Math.max(680,560+Math.max(0,m.items.length-8)*34),left=180,right=785,top=24,bottom=24;
  const sankey=d3.sankey().nodeId(d=>d.id).nodeWidth(12).nodePadding(34).nodeAlign(d3.sankeyJustify).nodeSort((a,b)=>{const rank={"Savings":0,"Living":1,"Auto":2,"Subscriptions":3,"Other":4,"Left Over":5};const ag=a.type==="group"?rank[a.name]:(rank[a.group]??99),bg=b.type==="group"?rank[b.name]:(rank[b.group]??99);return ag-bg}).extent([[left,top],[right,H-bottom]]);
@@ -711,7 +718,7 @@ function renderBudgetFlow(){
  groupsOnly.forEach(d=>{const y=(d.y0+d.y1)/2,h=d.y1-d.y0,labelY=h<38?d.y0-9:y-3,valueY=h<38?d.y0+10:y+15;gl.append("text").attr("x",d.x1+12).attr("y",labelY).attr("class","sk-mid-label").text(d.name);gl.append("text").attr("x",d.x1+12).attr("y",valueY).attr("class","sk-mid-value").text(money(d.value)+" · "+(d.value/m.income*100).toFixed(1)+"%")});
  const items=graph.nodes.filter(n=>n.type==="item");
  const cards=svg.append("g");
- items.forEach(d=>{const cy=(d.y0+d.y1)/2,bh=Math.max(32,d.y1-d.y0),y=cy-bh/2,x=d.x1+12,w=270;cards.append("rect").attr("x",x).attr("y",y).attr("width",w).attr("height",bh).attr("rx",6).attr("class","sk-item");cards.append("rect").attr("x",x).attr("y",y).attr("width",7).attr("height",bh).attr("rx",3).attr("fill",colors[d.group]||"#94a3b8");cards.append("text").attr("x",x+18).attr("y",cy+(d.notes?.includes("paid_via_quicksilver")?-3:4)).attr("class","sk-item-label").text(d.name);if(d.notes?.includes("paid_via_quicksilver"))cards.append("text").attr("x",x+18).attr("y",cy+12).attr("class","sk-source-sub").text("Quicksilver → 360 Checking");cards.append("text").attr("x",x+w-12).attr("y",cy+4).attr("class","sk-item-value").text(money(d.value))});
+ items.forEach(d=>{const cy=(d.y0+d.y1)/2,bh=Math.max(32,d.y1-d.y0),y=cy-bh/2,x=d.x1+12,w=270;cards.append("rect").attr("x",x).attr("y",y).attr("width",w).attr("height",bh).attr("rx",6).attr("class","sk-item");cards.append("rect").attr("x",x).attr("y",y).attr("width",7).attr("height",bh).attr("rx",3).attr("fill",colors[d.group]||"#94a3b8");cards.append("text").attr("x",x+18).attr("y",cy+4).attr("class","sk-item-label").text(d.name);cards.append("text").attr("x",x+w-12).attr("y",cy+4).attr("class","sk-item-value").text(money(d.value))});
  root.appendChild(svg.node())
 }
 $("budgetModeMonthly").onclick=()=>{budgetMode="monthly";$("budgetModeMonthly").classList.add("active");$("budgetModePaycheck").classList.remove("active");renderBudget()}
@@ -777,7 +784,7 @@ function setPage(page){
  else if(page==="reminders"&&isPrimaryPage(currentPage))shelfReturnPage=currentPage;
  currentPage=page;
  window.scrollTo({top:0,behavior:"instant"});syncPageNavigation(page);
- const special=[...PRIMARY_PAGE_IDS.filter(pageId=>pageId!=="buy"),"mail","drivers","reminders","budget","digestibles","projects","project-detail","health","vehicle","ai"],isSpecial=special.includes(page);
+ const special=[...PRIMARY_PAGE_IDS.filter(pageId=>pageId!=="buy"),"drivers","reminders","budget","digestibles","projects","project-detail","health","vehicle","ai"],isSpecial=special.includes(page);
  $("listsPage").hidden=!(["buy","groceries"].includes(page));
  special.forEach(p=>{const el=$(p==="project-detail"?"projectDetailPage":p+"Page");if(el)el.hidden=page!==p});
  $("backupBtn").style.display=isSpecial?"none":"";$("addBtn").style.display="";
@@ -790,7 +797,6 @@ function setPage(page){
   else if(page==="mail"){$("addBtn").style.display="none";loadEmailQueue("mail")}
   else {currentView="active";document.querySelectorAll(".sub-tab").forEach(z=>z.classList.toggle("active",z.dataset.view==="active"));renderLists()}
  }
- else if(page==="mail"){ $("pageTitle").textContent="Mail";$("pageSubtitle").textContent="Possibly important messages.";$("addBtn").style.display="none";loadEmailQueue("mail") }
  else if(page==="ai"){ $("pageTitle").textContent="Local AI";$("pageSubtitle").textContent="A private conversation with your PC.";$("addBtn").style.display="none"; }
  else if(page==="projects"){ $("pageTitle").textContent="Projects";$("pageSubtitle").textContent="Everything with a finish line.";renderProjects(); }
  else if(page==="health"){ $("pageTitle").textContent="Health";$("pageSubtitle").textContent="Garmin-powered wellness."; $("addBtn").style.display="none"; }
@@ -842,9 +848,10 @@ function applyAuthSession(session){
  session=isOwnerSession(session)?session:null;
  const hadSession=smartHomeControlAllowed,hasSession=!!session,authIdentityChanged=hadSession!==hasSession;
  if(!session&&smartHomeStreamAbort)smartHomeStreamAbort.abort();
+ if(!session)smartHomeStreamStatus="disconnected";
  if(!session&&smartHomeStreamRetry){clearTimeout(smartHomeStreamRetry);smartHomeStreamRetry=null}
  smartHomeControlAllowed=hasSession;smartHomeAccessToken=session?.access_token||"";
- if(!session){smartHomeLoaded=false;smartHomeUnavailable=false;smartHomeFailure=null;smartHomeState={devices:[],rooms:[],events:[],diagnostics:null};layneChatMessages=[];laynePendingAction=null;layneSessionId=null;renderLayneChat()}
+ if(!session){smartHomeLoaded=false;smartHomeUnavailable=false;smartHomeFailure=null;smartHomeState={devices:[],rooms:[],events:[],diagnostics:null};layneChatMessages=[];laynePendingAction=null;layneSessionId=null;layneVoiceChatEventIds.clear();layneVoiceResponseIds.clear();renderLayneChat()}
  setPrivacyGate(session);
  if(authIdentityChanged){reminderSessionVersion++;emailQueueSessionVersion++;reminders=[];remindersLoaded=false;monitorEmails=[];monitorEmailMessage=session?"Loading monitored email…":"Sign in to view monitored email.";emailQueues={dashboard:[],finance:[],mail:[]};emailQueuePages={dashboard:{cursor:null,exhausted:false,loading:false,loaded:false},finance:{cursor:null,exhausted:false,loading:false,loaded:false},mail:{cursor:null,exhausted:false,loading:false,loaded:false}};emailQueuesLoaded=false;emailQueueMessages={dashboard:session?"Loading monitored email…":"Sign in to view monitored email.",finance:session?"Loading financial email…":"Sign in to view financial email.",mail:session?"Loading mail…":"Sign in to view mail."};renderImportantEmails();renderEmailQueue("finance");renderEmailQueue("mail");if(session)loadEmailQueues().catch(()=>{})}
  window.dispatchEvent(new CustomEvent("roggy-auth",{detail:{signedIn:hasSession}}));
@@ -1020,7 +1027,7 @@ document.addEventListener("keydown",e=>{
    page order/count; all gesture and background math is derived from it. */
 const SWIPE_COMMIT_RATIO=.25,SWIPE_FAST_DISTANCE_RATIO=.14,SWIPE_PARALLAX=.78,SWIPE_EDGE_RESISTANCE=.16,SWIPE_GLIDE_MS=420;
 let swipeStartX=0,swipeStartY=0,swipeLastX=0,swipeTracking=false,swipeAxis=null,swipeNeighbor=null,swipeNeighborPage=null,swipePointerId=null,swipeStartTime=0,swipeLastTime=0,swipeVelocityX=0;
-let swipeVisualCurrent=null,swipeSettleTimer=null,swipeGeometry=null,swipeRAF=0,swipePendingDx=0;
+let swipeVisualCurrent=null,swipeSettleTimer=null;
 function swipeViewport(){
  const page=primaryPageElement(currentPage),rect=page?.getBoundingClientRect(),root=document.documentElement;
  return {width:Math.max(1,Math.round(root.clientWidth||document.body?.clientWidth||rect?.width||1)),height:Math.max(1,Math.round(window.visualViewport?.height||root.clientHeight||document.body?.clientHeight||1))};
@@ -1036,31 +1043,19 @@ function panoramaMetrics(){
  const image=panoramaElement(),viewport=swipeViewport();ensurePanoramaTravel();const rect=image?.getBoundingClientRect(),imageWidth=rect?.width||image?.naturalWidth||viewport.width,imageHeight=rect?.height||viewport.height;
  return {viewportWidth:viewport.width,imageWidth:Math.max(viewport.width,imageWidth),maxOffset:Math.max(0,imageWidth-viewport.width),maxVerticalOffset:Math.max(0,imageHeight-viewport.height)};
 }
-function captureSwipeGeometry(){
- const viewport=swipeViewport(),tabs=document.querySelector(".page-tabs"),header=document.querySelector("header");
- const tabsStyle=tabs?getComputedStyle(tabs):null;
- const pageTop=Math.max(0,(tabs?.getBoundingClientRect().bottom||header?.getBoundingClientRect().bottom||0)+(parseFloat(tabsStyle?.marginBottom)||0));
- ensurePanoramaTravel();
- const image=panoramaElement(),rect=image?.getBoundingClientRect(),imageWidth=Math.max(viewport.width,rect?.width||image?.naturalWidth||viewport.width),imageHeight=rect?.height||viewport.height;
- const maxOffset=Math.max(0,imageWidth-viewport.width),maxVerticalOffset=Math.max(0,imageHeight-viewport.height),count=PRIMARY_PAGES.length;
- const offsets=PRIMARY_PAGES.map((_,index)=>count<2?0:-(index/(count-1))*maxOffset);
- return {width:viewport.width,height:viewport.height,pageTop,maxOffset,maxVerticalOffset,offsets};
-}
 function mountainPagePosition(page=currentPage){const idx=primaryPageIndex(page);return idx<0?0:idx}
-function mountainPageOffset(page=currentPage,geometry=swipeGeometry){
- const idx=mountainPagePosition(page);
- if(geometry?.offsets&&geometry.offsets[idx]!=null)return geometry.offsets[idx];
+function mountainPageOffset(page=currentPage){
  const count=PRIMARY_PAGES.length,metrics=panoramaMetrics();
- return count<2?0:-(idx/(count-1))*metrics.maxOffset;
+ return count<2?0:-(mountainPagePosition(page)/(count-1))*metrics.maxOffset;
 }
 let mountainScrollY=window.scrollY||0;
 function setMountainView(page=currentPage,dragPx=0){
- const geometry=swipeGeometry,viewportWidth=geometry?.width||swipeViewport().width,metrics=geometry||panoramaMetrics(),idx=primaryPageIndex(page);let x=mountainPageOffset(page,geometry);
+ const viewport=swipeViewport(),metrics=panoramaMetrics(),idx=primaryPageIndex(page);let x=mountainPageOffset(page);
  if(idx>=0&&dragPx){
   const direction=dragPx<0?1:-1,targetIdx=idx+direction;
   if(targetIdx>=0&&targetIdx<PRIMARY_PAGES.length){
-   const target=PRIMARY_PAGES[targetIdx].id,progress=Math.min(1,Math.abs(dragPx)/viewportWidth),parallaxProgress=progress*(SWIPE_PARALLAX+(1-SWIPE_PARALLAX)*progress);
-   x=x+(mountainPageOffset(target,geometry)-x)*parallaxProgress;
+   const target=PRIMARY_PAGES[targetIdx].id,progress=Math.min(1,Math.abs(dragPx)/viewport.width),parallaxProgress=progress*(SWIPE_PARALLAX+(1-SWIPE_PARALLAX)*progress);
+   x=x+(mountainPageOffset(target)-x)*parallaxProgress;
   }
  }
  x=Math.max(-metrics.maxOffset,Math.min(0,x));
@@ -1087,10 +1082,9 @@ function updateSwipeHUD(page=currentPage,progress=0,direction=0){
 }
 function swipeBlockedTarget(t){return !!t.closest("dialog,input,textarea,select,a,[contenteditable=true],.fab,.layne-chat-fab,.side-drawer")}
 function clearSwipeStyles(){
- if(swipeRAF){cancelAnimationFrame(swipeRAF);swipeRAF=0}
- [swipeVisualCurrent,primaryPageElement(currentPage),swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating","swipe-land-lock","swipe-post-settle");el.style.removeProperty("--panel-x");el.style.removeProperty("--panel-y");el.style.removeProperty("--swipe-opacity")});
+ [swipeVisualCurrent,primaryPageElement(currentPage),swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating","swipe-land-lock");el.style.removeProperty("--panel-x");el.style.removeProperty("--swipe-opacity")});
  if(swipeNeighbor&&swipeNeighborPage!==currentPage)swipeNeighbor.hidden=true;
- swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;swipeGeometry=null;document.documentElement.classList.remove("is-swiping","is-settling","swipe-ready");document.documentElement.dataset.swipeDirection="idle";document.documentElement.style.removeProperty("--swipe-page-top");
+ swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-swiping","is-settling","swipe-ready");document.documentElement.dataset.swipeDirection="idle";
  updateSwipeHUD(currentPage,0,0);
 }
 function prepareSwipeNeighbor(direction){
@@ -1106,9 +1100,9 @@ function prepareSwipeNeighbor(direction){
  return true;
 }
 function positionSwipePanels(dx){
- if(!swipeGeometry)swipeGeometry=captureSwipeGeometry();
- document.documentElement.style.setProperty("--swipe-page-top",swipeGeometry.pageTop+"px");
- const width=swipeGeometry.width,idx=primaryPageIndex(currentPage),direction=dx<0?1:-1,current=primaryPageElement(currentPage),progress=Math.min(1,Math.abs(dx)/(width*SWIPE_COMMIT_RATIO));
+ const tabs=document.querySelector(".page-tabs"),headerBottom=(tabs?.getBoundingClientRect().bottom||document.querySelector("header")?.getBoundingClientRect().bottom||0)+(parseFloat(getComputedStyle(tabs||document.documentElement).marginBottom)||0);
+ document.documentElement.style.setProperty("--swipe-page-top",Math.max(0,headerBottom)+"px");
+ const {width}=swipeViewport(),idx=primaryPageIndex(currentPage),direction=dx<0?1:-1,current=primaryPageElement(currentPage),progress=Math.min(1,Math.abs(dx)/(width*SWIPE_COMMIT_RATIO));
  if(idx<0||!current)return;
  swipeVisualCurrent=current;updateSwipeHUD(currentPage,progress,direction);
  const atEdge=(idx===0&&direction<0)||(idx===PRIMARY_PAGES.length-1&&direction>0);
@@ -1120,52 +1114,40 @@ function positionSwipePanels(dx){
   swipeNeighbor=null;swipeNeighborPage=null;if(!prepareSwipeNeighbor(direction))return;
  }
  document.documentElement.classList.add("is-swiping");
- current.classList.add("swipe-panel");current.style.setProperty("--panel-x",dx+"px");current.style.setProperty("--swipe-opacity",(1-Math.min(.06,Math.abs(dx)/width*.06)).toFixed(3));
- if(swipeNeighbor){swipeNeighbor.style.setProperty("--panel-x",(dx+direction*width)+"px");swipeNeighbor.style.setProperty("--swipe-opacity",(.96+Math.min(.04,Math.abs(dx)/width*.04)).toFixed(3))}
+ current.classList.add("swipe-panel");current.style.setProperty("--panel-x",dx+"px");current.style.setProperty("--swipe-opacity",(1-Math.min(.08,Math.abs(dx)/width*.08)).toFixed(3));
+ if(swipeNeighbor){swipeNeighbor.style.setProperty("--panel-x",(dx+direction*width)+"px");swipeNeighbor.style.setProperty("--swipe-opacity",(.94+Math.min(.06,Math.abs(dx)/width*.06)).toFixed(3))}
  setMountainView(currentPage,dx);
 }
 function settleSwipe(commit,dx){
- if(swipeRAF){cancelAnimationFrame(swipeRAF);swipeRAF=0;positionSwipePanels(dx)}
- if(!swipeGeometry)swipeGeometry=captureSwipeGeometry();
- const current=primaryPageElement(currentPage),width=swipeGeometry.width,direction=dx<0?1:-1,idx=primaryPageIndex(currentPage),targetPage=idx>=0&&idx+direction>=0&&idx+direction<PRIMARY_PAGES.length?PRIMARY_PAGES[idx+direction].id:null,canCommit=!!(commit&&swipeNeighbor&&swipeNeighborPage===targetPage);
+ const current=primaryPageElement(currentPage),{width}=swipeViewport(),direction=dx<0?1:-1,idx=primaryPageIndex(currentPage),targetPage=idx>=0&&idx+direction>=0&&idx+direction<PRIMARY_PAGES.length?PRIMARY_PAGES[idx+direction].id:null,canCommit=!!(commit&&swipeNeighbor&&swipeNeighborPage===targetPage);
  document.documentElement.classList.remove("is-swiping");document.documentElement.classList.add("is-settling");
  swipeVisualCurrent=current;[current,swipeNeighbor].filter(Boolean).forEach(el=>el.classList.add("swipe-animating"));
  if(canCommit){
-  const target=swipeNeighborPage;currentPage=target;lastPrimaryPage=target;syncPageNavigation(target);updateSwipeHUD(target,1,direction);
-  window.dispatchEvent(new CustomEvent("roggy-page",{detail:{page:target,source:"swipe"}}));
-  requestAnimationFrame(()=>{
+  const target=swipeNeighborPage;currentPage=target;lastPrimaryPage=target;syncPageNavigation(target);updateSwipeHUD(target,1,direction);window.dispatchEvent(new CustomEvent("roggy-page",{detail:{page:target}}));
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
    if(current)current.style.setProperty("--panel-x",(-direction*width)+"px");
    if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x","0px");
    setMountainView(target,0);
-  });
+  }));
   clearTimeout(swipeSettleTimer);swipeSettleTimer=setTimeout(()=>{
-   const landed=swipeNeighbor,beforeTop=landed?.getBoundingClientRect().top??0;
+   const landed=swipeNeighbor;
+   if(landed){const r=landed.getBoundingClientRect();document.documentElement.style.setProperty("--swipe-land-top",r.top+"px");landed.classList.add("swipe-land-lock")}
    if(current&&current!==landed)current.hidden=true;
-   if(landed){
-    landed.classList.remove("swipe-neighbor","swipe-animating");
-    landed.style.removeProperty("--panel-x");landed.style.removeProperty("--swipe-opacity");
-    const afterTop=landed.getBoundingClientRect().top,deltaY=beforeTop-afterTop;
-    if(Math.abs(deltaY)>.5){landed.style.setProperty("--panel-y",deltaY+"px");landed.classList.add("swipe-post-settle")}
-   }
-   swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-settling","is-swiping","swipe-ready");syncPageNavigation(target);updateSwipeHUD(target,0,0);
-   const finishLanding=()=>{
-    if(landed){landed.style.setProperty("--panel-y","0px");requestAnimationFrame(()=>setTimeout(()=>{landed.classList.remove("swipe-panel","swipe-post-settle");landed.style.removeProperty("--panel-y")},120))}
-    swipeGeometry=null;document.documentElement.style.removeProperty("--swipe-page-top");setMountainView(target,0);
-   };
-   requestAnimationFrame(finishLanding);
+   if(landed){landed.classList.remove("swipe-neighbor","swipe-animating");landed.style.removeProperty("--panel-x");landed.style.removeProperty("--swipe-opacity")}
+   swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-settling","is-swiping","swipe-ready");syncPageNavigation(target);
+   requestAnimationFrame(()=>requestAnimationFrame(()=>{if(landed)landed.classList.remove("swipe-panel","swipe-land-lock");document.documentElement.style.removeProperty("--swipe-land-top");updateSwipeHUD(target,0,0);setMountainView(target,0)}));
   },SWIPE_GLIDE_MS);
  }else{
   updateSwipeHUD(currentPage,0,0);
-  requestAnimationFrame(()=>{if(current)current.style.setProperty("--panel-x","0px");if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x",(direction*width)+"px");setMountainView(currentPage,0)});
-  clearTimeout(swipeSettleTimer);swipeSettleTimer=setTimeout(clearSwipeStyles,SWIPE_GLIDE_MS+30);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{if(current)current.style.setProperty("--panel-x","0px");if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x",(direction*width)+"px");setMountainView(currentPage,0)}));
+  clearTimeout(swipeSettleTimer);swipeSettleTimer=setTimeout(clearSwipeStyles,SWIPE_GLIDE_MS+80);
  }
 }
 function finishSwipe(){
  if(!swipeTracking)return;
- const dx=swipeLastX-swipeStartX,width=swipeGeometry?.width||swipeViewport().width,idx=primaryPageIndex(currentPage),direction=dx<0?1:-1,threshold=width*SWIPE_COMMIT_RATIO,fastIntent=Math.abs(swipeVelocityX)>.72&&Math.abs(dx)>width*SWIPE_FAST_DISTANCE_RATIO;
+ const dx=swipeLastX-swipeStartX,{width}=swipeViewport(),idx=primaryPageIndex(currentPage),direction=dx<0?1:-1,threshold=width*SWIPE_COMMIT_RATIO,fastIntent=Math.abs(swipeVelocityX)>.72&&Math.abs(dx)>width*SWIPE_FAST_DISTANCE_RATIO;
  swipeTracking=false;swipePointerId=null;
  if(swipeAxis==="x"){
-  if(swipeRAF){cancelAnimationFrame(swipeRAF);swipeRAF=0;positionSwipePanels(dx)}
   const atEdge=(idx===0&&direction<0)||(idx===PRIMARY_PAGES.length-1&&direction>0),commit=!atEdge&&(Math.abs(dx)>=threshold||fastIntent);
   settleSwipe(commit,dx);
  }else{clearSwipeStyles();setMountainView(currentPage,0)}
@@ -1174,22 +1156,18 @@ function finishSwipe(){
 function beginPrimarySwipe(x,y,target,pointerId=null){
  if(swipeBlockedTarget(target)||!isPrimaryPage(currentPage))return false;
  if(document.documentElement.classList.contains("is-settling")){
-   clearTimeout(swipeSettleTimer);if(swipeRAF){cancelAnimationFrame(swipeRAF);swipeRAF=0}
-   const active=primaryPageElement(currentPage);
-   document.querySelectorAll(".primary-page").forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating","swipe-land-lock","swipe-post-settle");el.style.removeProperty("--panel-x");el.style.removeProperty("--panel-y");el.style.removeProperty("--swipe-opacity");el.hidden=el!==active});
-   swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;swipeGeometry=null;document.documentElement.classList.remove("is-settling","is-swiping","swipe-ready");syncPageNavigation(currentPage);setMountainView(currentPage,0);
+   clearTimeout(swipeSettleTimer);[swipeVisualCurrent,swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating","swipe-land-lock");el.style.removeProperty("--panel-x");el.style.removeProperty("--swipe-opacity")});
+   document.querySelectorAll(".primary-page").forEach(el=>el.hidden=el!==primaryPageElement(currentPage));
+   swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-settling");syncPageNavigation(currentPage);
  }
- clearSwipeStyles();swipeGeometry=captureSwipeGeometry();document.documentElement.style.setProperty("--swipe-page-top",swipeGeometry.pageTop+"px");
- swipeStartX=swipeLastX=x;swipeStartY=y;swipeStartTime=swipeLastTime=performance.now();swipeVelocityX=0;swipePendingDx=0;swipeTracking=true;swipeAxis=null;swipePointerId=pointerId;return true;
+ clearSwipeStyles();swipeStartX=swipeLastX=x;swipeStartY=y;swipeStartTime=swipeLastTime=performance.now();swipeVelocityX=0;swipeTracking=true;swipeAxis=null;swipePointerId=pointerId;return true;
 }
 function movePrimarySwipe(x,y){
  if(!swipeTracking)return false;
  const dx=x-swipeStartX,dy=y-swipeStartY;
- if(!swipeAxis&&Math.hypot(dx,dy)>7)swipeAxis=Math.abs(dx)>Math.abs(dy)*1.08?"x":"y";
+ if(!swipeAxis&&Math.hypot(dx,dy)>8)swipeAxis=Math.abs(dx)>Math.abs(dy)*1.12?"x":"y";
  if(swipeAxis!=="x")return false;
- const now=performance.now(),dt=Math.max(1,now-swipeLastTime);swipeVelocityX=(swipeVelocityX*.62)+(((x-swipeLastX)/dt)*.38);swipeLastTime=now;swipeLastX=x;swipePendingDx=dx;
- if(!swipeRAF)swipeRAF=requestAnimationFrame(()=>{swipeRAF=0;positionSwipePanels(swipePendingDx)});
- return true;
+ const now=performance.now(),dt=Math.max(1,now-swipeLastTime);swipeVelocityX=(swipeVelocityX*.58)+(((x-swipeLastX)/dt)*.42);swipeLastTime=now;swipeLastX=x;positionSwipePanels(dx);return true;
 }
 document.addEventListener("touchstart",e=>{if(e.touches.length!==1)return;const t=e.touches[0];beginPrimarySwipe(t.clientX,t.clientY,e.target,"touch")},{passive:true});
 document.addEventListener("touchmove",e=>{if(!swipeTracking||swipePointerId!=="touch"||e.touches.length!==1)return;const t=e.touches[0];if(movePrimarySwipe(t.clientX,t.clientY))e.preventDefault()},{passive:false});
@@ -1199,7 +1177,7 @@ document.addEventListener("pointerdown",e=>{if(e.pointerType!=="mouse"||e.button
 document.addEventListener("pointermove",e=>{if(!swipeTracking||e.pointerType!=="mouse"||e.pointerId!==swipePointerId)return;if(movePrimarySwipe(e.clientX,e.clientY))e.preventDefault()},{passive:false});
 document.addEventListener("pointerup",e=>{if(swipeTracking&&e.pointerType==="mouse"&&e.pointerId===swipePointerId)finishSwipe()},{passive:true});
 document.addEventListener("pointercancel",e=>{if(swipeTracking&&e.pointerType==="mouse"&&e.pointerId===swipePointerId){swipeTracking=false;swipeAxis=null;swipePointerId=null;settleSwipe(false,0)}},{passive:true});
-window.addEventListener("roggy-page",e=>{if(e.detail?.source!=="swipe")setMountainView(e.detail.page,0)});
+window.addEventListener("roggy-page",e=>setMountainView(e.detail.page,0));
 ensureSwipeHUD();syncPageNavigation(currentPage);setMountainView(currentPage,0);
 panoramaElement()?.addEventListener("load",()=>setMountainView(currentPage,0));
 function refreshSwipeGeometry(){if(swipeTracking&&swipeAxis==="x")positionSwipePanels(swipeLastX-swipeStartX);else setMountainView(currentPage,0)}
