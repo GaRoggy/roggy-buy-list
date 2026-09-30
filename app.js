@@ -767,7 +767,7 @@ function setPage(page){
  else if(page==="reminders"&&isPrimaryPage(currentPage))shelfReturnPage=currentPage;
  currentPage=page;
  window.scrollTo({top:0,behavior:"instant"});syncPageNavigation(page);
- const special=[...PRIMARY_PAGE_IDS.filter(pageId=>pageId!=="buy"),"drivers","reminders","budget","digestibles","projects","project-detail","health","vehicle","ai"],isSpecial=special.includes(page);
+ const special=[...PRIMARY_PAGE_IDS.filter(pageId=>pageId!=="buy"),"mail","drivers","reminders","budget","digestibles","projects","project-detail","health","vehicle","ai"],isSpecial=special.includes(page);
  $("listsPage").hidden=!(["buy","groceries"].includes(page));
  special.forEach(p=>{const el=$(p==="project-detail"?"projectDetailPage":p+"Page");if(el)el.hidden=page!==p});
  $("backupBtn").style.display=isSpecial?"none":"";$("addBtn").style.display="";
@@ -780,6 +780,7 @@ function setPage(page){
   else if(page==="mail"){$("addBtn").style.display="none";loadEmailQueue("mail")}
   else {currentView="active";document.querySelectorAll(".sub-tab").forEach(z=>z.classList.toggle("active",z.dataset.view==="active"));renderLists()}
  }
+ else if(page==="mail"){ $("pageTitle").textContent="Mail";$("pageSubtitle").textContent="Possibly important messages.";$("addBtn").style.display="none";loadEmailQueue("mail") }
  else if(page==="ai"){ $("pageTitle").textContent="Local AI";$("pageSubtitle").textContent="A private conversation with your PC.";$("addBtn").style.display="none"; }
  else if(page==="projects"){ $("pageTitle").textContent="Projects";$("pageSubtitle").textContent="Everything with a finish line.";renderProjects(); }
  else if(page==="health"){ $("pageTitle").textContent="Health";$("pageSubtitle").textContent="Garmin-powered wellness."; $("addBtn").style.display="none"; }
