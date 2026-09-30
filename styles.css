@@ -1032,3 +1032,26 @@ header,.project-back,.fab,.page-tabs,.sub-tabs{z-index:40!important}
 .email-detail-facts span{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}.email-detail-facts b{font-size:12px;line-height:1.35;overflow-wrap:anywhere}
 .email-detail-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:16px}.email-detail-actions button{min-height:42px}.email-detail-link{display:inline-block;margin-top:14px;color:var(--accent);font-size:12px;font-weight:800}
 @media(max-width:560px){.email-card-actions{grid-column:2;grid-row:1;align-self:center;justify-content:flex-end;padding:0;max-width:148px}.email-queue-card{grid-template-columns:minmax(0,1fr) auto}.email-detail-facts{grid-template-columns:1fr}.email-detail-actions{display:grid;grid-template-columns:1fr}.email-detail-actions button{width:100%}}
+
+
+/* Seamless swipe compositor pass v110 */
+.swipe-panel{
+ transform:translate3d(var(--panel-x,0px),var(--panel-y,0px),0)!important;
+ backface-visibility:hidden!important;
+ -webkit-backface-visibility:hidden!important;
+}
+.swipe-panel.swipe-animating,.swipe-neighbor.swipe-animating{
+ transition:transform 420ms cubic-bezier(.20,.78,.20,1),opacity 420ms cubic-bezier(.20,.78,.20,1)!important;
+}
+html:not(.is-swiping) .mountain-panorama{
+ transition:transform 420ms cubic-bezier(.20,.78,.20,1)!important;
+}
+.is-swiping .swipe-panel,.is-swiping .swipe-neighbor,.is-swiping .mountain-panorama{
+ transition:none!important;
+}
+.is-swiping .swipe-panel,.is-settling .swipe-panel,.is-swiping .mountain-panorama,.is-settling .mountain-panorama{
+ filter:none!important;
+}
+.is-swiping .swipe-neighbor,.is-settling .swipe-neighbor{box-shadow:none!important}
+.is-settling .page-tab.active{animation:none!important}
+.swipe-post-settle{transition:transform 110ms cubic-bezier(.20,.80,.20,1)!important}
