@@ -8,7 +8,13 @@ async function authorize() {
   const { GOOGLE_CLIENT_ID: client_id, GOOGLE_CLIENT_SECRET: client_secret } = process.env;
   if (!client_id || !client_secret) throw new MonitorError('GOOGLE_CLIENT_CONFIG_REQUIRED');
   const state = randomBytes(32).toString('hex'), verifier = randomBytes(64).toString('base64url');
-  const scopes = ['https://www.googleapis.com/auth/calendar.readonly', 'https://www.googleapis.com/auth/gmail.readonly'];
+  const scopes = [
+    'https://www.googleapis.com/auth/calendar.readonly',
+    'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/tasks.readonly',
+    'https://www.googleapis.com/auth/contacts',
+    'https://www.googleapis.com/auth/drive.readonly'
+  ];
   let redirect, busy = false;
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, redirect);
@@ -26,14 +32,14 @@ async function authorize() {
       await mkdir('.secrets', { recursive: true });
       await writeFile('.secrets/google.tokens.json', protect(tokens.refresh_token));
       res.end('Read-only authorization saved with Windows user encryption. You can close this tab.');
-      console.log('Google authorization saved. Start the worker using this same Windows account.');
+      console.log('Google authorization saved with contact-edit permission. Start the worker using this same Windows account.');
     } catch (e) { res.writeHead(400); res.end('Authorization failed; see the local error code.'); console.error(failure(e).code); process.exitCode = 1; }
     finally { clearTimeout(timeout); server.close(); }
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   redirect = `http://127.0.0.1:${server.address().port}/`;
   const timeout = setTimeout(() => { server.close(); console.error('OAUTH_TIMEOUT'); process.exitCode = 1; }, 300000);
-  console.log('Open this URL on this PC and approve read-only access:\n' +
+  console.log('Open this URL on this PC and approve the requested Google access:\n' +
     'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({ client_id, redirect_uri: redirect,
       response_type: 'code', scope: scopes.join(' '), state, code_challenge: createHash('sha256').update(verifier).digest('base64url'),
       code_challenge_method: 'S256', access_type: 'offline', prompt: 'consent' }));

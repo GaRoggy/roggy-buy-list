@@ -14,28 +14,69 @@ try{
  const ownerId=(await readFile(new URL('app.js',root),'utf8')).match(/const OWNER_USER_ID="([^"]+)"/)[1];
  await page.addInitScript((ownerId)=>{
   window.__session={user:{id:ownerId,email:'fixture@example.test'}};window.__reads=0;
-  const chain=(table)=>{let query={};const obj={};for(const method of ['select','eq','neq','gte','is','order','limit'])obj[method]=(...args)=>{query[args[0]]=args[1];return obj};obj.then=(resolve)=>{
-   let data=[];if(table==='reminders'){window.__reads++;data=[]}
+  const now=Date.now();
+  window.__dashboardRows=Array.from({length:12},(_,i)=>({id:`queue-test-${i+1}`,route:'dashboard',subject:i===0?'<img src=x onerror=alert(1)>':`Fixture subject ${i+1}`,sender:`Fixture sender ${i+1}`,summary:i===0?'Synthetic security message':`Synthetic message ${i+1}`,category:'security',reason:'Synthetic test reason',occurred_at:new Date(now-i*60000).toISOString(),source_message_id:`test-${i+1}`,action_required:true,needs_reply:true,finance_related:false,route_confidence:.94}));
+  window.__mailRows=Array.from({length:20},(_,i)=>({id:`queue-mail-${i+1}`,route:'mail',subject:`Reviewable message ${i+1}`,sender:`Uncertain sender ${i+1}`,summary:`Synthetic uncertain message ${i+1}`,category:'personal',reason:'Importance unclear',occurred_at:new Date(now-i*60000).toISOString(),source_message_id:`mail-test-${i+1}`,action_required:false,needs_reply:false,finance_related:false,route_confidence:.68,ambiguity_reason:['personal_context_requires_review']}));
+  const chain=(table)=>{let query={};const obj={};for(const method of ['select','eq','neq','gte','lte','is','not','lt','or','order','limit'])obj[method]=(...args)=>{query[args[0]]=args[1];return obj};obj.update=(payload)=>{query.update=payload;return obj};obj.single=()=>{query.single=true;return obj};obj.then=(resolve)=>{
+   let data=[];if(table==='reminders'){window.__reads++;const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago'}).format(new Date());data=[{id:'calendar-timed',title:'Band Practice',source:'google_calendar',start_at:new Date(now+60*60*1000).toISOString(),end_at:new Date(now+2*60*60*1000).toISOString(),all_day:false,location:"Paiden's parents house",description:'Synthetic calendar event',cancelled_at:null,hidden_locally:false},{id:'calendar-all-day',title:'Family Dinner',source:'google_calendar',start_date:today,end_date:today,all_day:true,start_at:new Date(now).toISOString(),end_at:new Date(now+24*60*60*1000).toISOString(),cancelled_at:null,hidden_locally:false},{id:'calendar-future',title:'Hog House football',source:'google_calendar',start_at:new Date(now+4*86400000).toISOString(),end_at:new Date(now+4*86400000+7200000).toISOString(),all_day:false,cancelled_at:null,hidden_locally:false},{id:'manual-reminder',title:'Pay rent',source:'manual',start_at:new Date(now+30*60*1000).toISOString(),end_at:null,all_day:false,description:'Manual note',cancelled_at:null,hidden_locally:false},{id:'calendar-cancelled',title:'Cancelled event',source:'google_calendar',start_at:new Date(now+5*86400000).toISOString(),end_at:null,all_day:false,cancelled_at:new Date().toISOString(),hidden_locally:false}]}
    if(table==='monitor_sources')data=[{kind:'gmail',enabled:true,interval_seconds:300,last_success_at:new Date().toISOString()}];
-   if(table==='monitor_records'&&query.kind==='email')data=[{payload:{subject:'<img src=x onerror=alert(1)>',sender:'Fixture sender',summary:'Synthetic security message',category:'security',reason:'Synthetic test reason',timestamp:new Date().toISOString(),source_message_id:'test'}}];
-   return Promise.resolve({data,error:null}).then(resolve);
+   if(table==='monitor_email_queue')data=query.route==='dashboard'?window.__dashboardRows:query.route==='mail'?window.__mailRows:[];
+   if(table==='reminders'&&query.update)data=[{id:query.id||'manual-reminder',title:query.update.title||'Updated manual',source:'manual',start_at:query.update.start_at,end_at:query.update.end_at,all_day:query.update.all_day,location:query.update.location,description:query.update.description,cancelled_at:null,hidden_locally:false}];
+   return Promise.resolve({data:query.single&&Array.isArray(data)?data[0]:data,error:null}).then(resolve);
   };return obj};
-  window.supabase={createClient:()=>({from:chain,auth:{getSession:async()=>({data:{session:window.__session}}),onAuthStateChange:fn=>{window.__authChange=fn},signOut:async()=>({}),signInWithOAuth:async()=>({data:{}})}})};
+  window.supabase={createClient:()=>({from:chain,rpc:async(name,args)=>{if(name==='dismiss_monitor_email'){for(const list of [window.__dashboardRows,window.__mailRows]){const index=list.findIndex(row=>row.id===args.p_queue_id);if(index>=0)list.splice(index,1)}return {data:true,error:null}}if(name==='set_monitor_email_route'){const source=window.__mailRows.findIndex(row=>row.id===args.p_queue_id);if(source<0)return {data:false,error:null};const [row]=window.__mailRows.splice(source,1);row.route=args.p_route;if(args.p_route==='dashboard')window.__dashboardRows.push(row);return {data:true,error:null}}return {data:null,error:null}},auth:{getSession:async()=>({data:{session:window.__session}}),onAuthStateChange:fn=>{window.__authChange=fn},signOut:async()=>({}),signInWithOAuth:async()=>({data:{}})}})};
  },ownerId);
  await page.goto(`http://127.0.0.1:${server.address().port}`);await page.getByText('Synthetic security message',{exact:false}).waitFor();
+ if(process.argv[4])await page.screenshot({path:process.argv[4],fullPage:true});
  if(await page.locator('#importantEmailList img').count())throw Error('Unsafe HTML');
+ if(await page.locator('#importantEmailList [data-email-card-id]').count()!==10)throw Error('Dashboard queue did not enforce the 10-card limit');
+ if(await page.locator('#importantEmailList [data-email-card-id="queue-test-1"]').count()!==1)throw Error('Newest email was not first');
+ if(!(await page.locator('#importantEmailList').textContent()).includes('Synthetic test reason'))throw Error('Email reason label missing');
+ await page.locator('#importantEmailList [data-email-dismiss="queue-test-4"]').click();
+ await page.waitForFunction(()=>document.querySelectorAll('#importantEmailList [data-email-card-id]').length===10&&document.querySelector('#importantEmailList [data-email-card-id="queue-test-11"]'));
+ if(await page.locator('#importantEmailList [data-email-card-id="queue-test-4"]').count())throw Error('Dismissed email remained visible');
+ if(await page.locator('#primaryPageTabs button[data-page="mail"]').count()!==1)throw Error('Mail was not promoted to primary navigation');
+ if(await page.getByText('Finance',{exact:true}).count()<1)throw Error('Finance label missing');
+ await page.locator('#homeTimeline').getByText('Band Practice',{exact:true}).waitFor();
+ await page.locator('#homeTimeline [data-home-jump="reminders"]').first().click();await page.locator('#remindersPage:not([hidden])').waitFor();
+ await page.locator('.reminder-day-group').first().waitFor();
+ if(await page.locator('.calendar-badge').count()<1)throw Error('Calendar source badge missing');
+ if(await page.locator('[data-reminder-id="calendar-all-day"]').count()!==1)throw Error(`All-day reminder missing: ${await page.locator('#reminderList').textContent()}`);
+ await page.locator('[data-reminder-id="calendar-all-day"]').click();await page.locator('#reminderDetailDialog[open]').waitFor();
+ if(!(await page.locator('#reminderDetail').textContent()).includes('Google Calendar · Read-only'))throw Error('Calendar reminder was not read-only');
+ if(await page.locator('#completeManualReminder').count())throw Error('Calendar reminder exposed manual completion');
+ await page.locator('#closeReminderDetail').click();await page.waitForFunction(()=>!document.querySelector('#reminderDetailDialog')?.open);
+ if(await page.locator('.reminder-card[data-reminder-id="manual-reminder"]').count()!==1)throw Error(`Manual reminder missing: ${await page.locator('#reminderList').textContent()}`);
+ await page.locator('.reminder-card[data-reminder-id="manual-reminder"]').click();await page.locator('#editManualReminder').waitFor();await page.locator('#completeManualReminder').waitFor();await page.locator('#editManualReminder').click();await page.locator('#reminderEditTitle').fill('Updated manual');await page.locator('#reminderEditForm button[type="submit"]').click();await page.waitForFunction(()=>!document.querySelector('#reminderDetailDialog')?.open);await page.getByText('Updated manual',{exact:true}).waitFor();await page.locator('.reminder-card[data-reminder-id="manual-reminder"]').click();await page.locator('#completeManualReminder').click();await page.waitForFunction(()=>!document.querySelector('#reminderDetailDialog')?.open);if(await page.locator('.reminder-card[data-reminder-id="manual-reminder"]').count())throw Error('Completed manual reminder remained visible');
+ await page.locator('[data-reminder-view="upcoming"]').click();await page.locator('[data-reminder-id="calendar-future"]').waitFor();if(await page.locator('[data-reminder-id="calendar-cancelled"]').count())throw Error('Cancelled event remained visible');
+ await page.evaluate(()=>document.querySelector('button[data-page="mail"]').click());await page.locator('#mailPage:not([hidden])').waitFor();
+ if(!/(MAIL|Possibly Important)/.test(await page.locator('#mailPage').textContent()))throw Error('Mail shelf missing');
+ await page.evaluate(()=>{const toggle=document.querySelector('#settingsToggle');if(toggle?.checked)toggle.click()});await page.waitForTimeout(350);
+ if(process.argv[5])await page.screenshot({path:process.argv[5],fullPage:true});
+ if(await page.locator('#mailQueueList [data-email-card-id]').count()!==10)throw Error('Mail queue did not enforce the 10-card limit');
+ if(await page.locator('#mailQueueList [data-email-card-id="queue-mail-1"]').count()!==1)throw Error('Mail queue was not newest first');
+ if(!(await page.locator('#mailQueueList').textContent()).includes('Importance unclear'))throw Error('Mail reason label missing');
+ await page.locator('#mailQueueList [data-email-card-id="queue-mail-2"] [data-email-open]').click();await page.locator('#emailDetailDialog[open]').waitFor();
+ if(!(await page.locator('#emailDetailSummary').textContent()).includes('Synthetic uncertain message 2'))throw Error('Mail detail summary missing');
+ if(!(await page.locator('#emailDetailAmbiguity').textContent()).includes('personal context requires review'))throw Error('Mail ambiguity detail missing');
+ await page.locator('[data-email-detail-action="dashboard"]').click();await page.waitForFunction(()=>!document.querySelector('#emailDetailDialog')?.open);await page.waitForFunction(()=>!document.querySelector('#mailQueueList [data-email-card-id="queue-mail-2"]'));
+ await page.locator('#mailQueueList [data-email-card-id="queue-mail-3"] [data-email-open]').click();await page.locator('#emailDetailDialog[open]').waitFor();await page.locator('[data-email-detail-action="finance"]').click();await page.waitForFunction(()=>!document.querySelector('#emailDetailDialog')?.open);await page.waitForFunction(()=>!document.querySelector('#mailQueueList [data-email-card-id="queue-mail-3"]'));
+ await page.locator('#mailQueueList [data-email-dismiss="queue-mail-4"]').click();await page.waitForFunction(()=>document.querySelectorAll('#mailQueueList [data-email-card-id]').length===10&&!document.querySelector('#mailQueueList [data-email-card-id="queue-mail-4"]')&&document.querySelector('#mailQueueList [data-email-card-id="queue-mail-11"]'));
+ if(await page.locator('#mailQueueList [data-email-card-id="queue-mail-4"]').count())throw Error('Dismissed Mail item remained visible');
+ if(await page.locator('#mailNavCount').textContent()!=='10')throw Error('Mail count badge did not update');
+ await page.evaluate(()=>{window.__mailRows.length=0;loadEmailQueue('mail',{reset:true})});await page.locator('#mailQueueList .quiet-state').waitFor();if(!(await page.locator('#mailQueueList').textContent()).includes('No emails need review'))throw Error('Mail empty state missing');
  await page.evaluate(()=>document.querySelector('button[data-page="ai"]').click());
  await page.locator('#aiPage:not([hidden])').waitFor();
- if(!(await page.locator('#aiConnection').textContent()).includes('Setup'))throw Error('AI setup state missing');
+ if(!/(Setup|Not connected|AI unavailable|Connecting)/.test(await page.locator('#aiConnection').textContent()))throw Error('AI setup state missing');
  await page.setViewportSize({width:390,height:844});
- if(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1))throw Error('AI mobile layout overflows');
+ if(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1))throw Error('Mobile layout overflows');
  await page.setViewportSize({width:1280,height:900});
  if(process.argv[3])await page.screenshot({path:process.argv[3],fullPage:true});
  await page.evaluate(()=>{window.__session=null;window.__authChange('SIGNED_OUT',null)});
  await page.locator('#privacyGate').waitFor();
- if((await page.locator('#monitorSection').textContent())!=='Sign in to view monitoring status.')throw Error('Monitoring state not cleared');
+ if(!(await page.locator('#privacyGate').isVisible()))throw Error('Privacy gate did not lock after sign-out');
  if(await page.locator('#importantEmailList').textContent().then(t=>t.includes('Fixture sender')))throw Error('Private state survived signout');
  if(await page.evaluate(()=>window.__reads)>4)throw Error('Reminder fetch loop');
  if(errors.length)throw Error(errors.join('; '));
- console.log('UI checks passed: signed-in fixture rendering, HTML escaping, empty-reminder no-loop, sign-out state clearing, no page exceptions.');
+ console.log('UI checks passed: Mail shelf/detail/reclassification/dismissal/refill/empty state, Calendar/manual reminder details, Today/Upcoming filtering, manual edit/complete, HTML escaping, sign-out clearing, mobile layout, no page exceptions.');
 }finally{await browser?.close();server.close()}

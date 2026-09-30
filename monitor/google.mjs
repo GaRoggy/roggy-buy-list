@@ -19,8 +19,8 @@ export async function googleClient(env, fetcher = fetch) {
     catch { throw new MonitorError('GOOGLE_OAUTH_REQUIRED', { terminal: true }); }
   }
   let token, expiry = 0;
-  return async (path, params = {}) => {
-    if (!/^(calendar\/v3\/|gmail\/v1\/users\/me\/)/.test(path)) throw new MonitorError('GOOGLE_PATH_DENIED', { terminal: true });
+  const call = async (path, params = {}, raw = false, options = {}) => {
+    if (!/^(calendar\/v3\/|gmail\/v1\/users\/me\/|tasks\/v1\/|people\/v1\/|drive\/v3\/)/.test(path)) throw new MonitorError('GOOGLE_PATH_DENIED', { terminal: true });
     if (Date.now() >= expiry) {
       const data = await request('https://oauth2.googleapis.com/token', { method: 'POST',
         body: new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET,
@@ -28,7 +28,37 @@ export async function googleClient(env, fetcher = fetch) {
       if (!data.access_token) throw new MonitorError('GOOGLE_OAUTH_REQUIRED', { terminal: true });
       token = data.access_token; expiry = Date.now() + ((data.expires_in || 3600) - 60) * 1000;
     }
-    return request(`https://www.googleapis.com/${path}?${new URLSearchParams(params)}`,
-      { headers: { Authorization: `Bearer ${token}` } }, fetcher);
+    const method = String(options.method || 'GET').toUpperCase();
+    const query = new URLSearchParams(params);
+    const headers = { Authorization: `Bearer ${token}`, ...(options.headers || {}) };
+    const init = { method, headers, signal: AbortSignal.timeout(30000), redirect: 'error' };
+    if (options.body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify(options.body);
+    }
+    const peopleApi = path.startsWith('people/v1/');
+    const apiHost = peopleApi ? 'https://people.googleapis.com/' : 'https://www.googleapis.com/';
+    const apiPath = peopleApi ? path.slice('people/'.length) : path;
+    let response;
+    try { response = await fetcher(`${apiHost}${apiPath}${query.toString() ? `?${query}` : ''}`, init); }
+    catch { throw new MonitorError('NETWORK_ERROR'); }
+    if (!response.ok) {
+      const header = response.headers.get('retry-after');
+      const retryAfter = header ? (/^\d+$/.test(header) ? Number(header) : Math.max(0, (Date.parse(header) - Date.now()) / 1000)) : 0;
+      throw new MonitorError(`HTTP_${response.status}`, { status: response.status, retryAfter: retryAfter || 0,
+        terminal: [400, 401, 403].includes(response.status) });
+    }
+    if (raw) return { contentType: response.headers.get('content-type') || '', body: await response.arrayBuffer() };
+    try {
+      const body = await response.text();
+      return body.trim() ? JSON.parse(body) : null;
+    } catch { throw new MonitorError('INVALID_RESPONSE'); }
   };
+  const get = (path, params = {}) => call(path, params, false);
+  get.raw = (path, params = {}) => call(path, params, true);
+  // Writes are intentionally exposed as a narrow method on the same
+  // allowlisted client. Callers still cannot reach arbitrary hosts or paths.
+  get.request = (path, options = {}) => call(path, options.params || {}, false, options);
+  get.rawRequest = (path, options = {}) => call(path, options.params || {}, true, options);
+  return get;
 }

@@ -13,6 +13,9 @@ test('HTTP failures cannot leak provider bodies or tokens', async () => {
     { status: 429, headers: { 'retry-after': '120' } })), e => e.code === 'HTTP_429' && e.retryAfter === 120 && !e.message.includes('abc'));
   assert.equal(failure(new Error('secret')).message, 'UNEXPECTED_ERROR');
 });
+test('successful empty responses are accepted for write operations', async () => {
+  assert.equal(await request('https://example.invalid', {}, async () => new Response('', { status: 200 })), null);
+});
 test('pagination consumes final cursor only after every page', async () => {
   const seen = [];
   const output = await pages(async (_path, params) => {

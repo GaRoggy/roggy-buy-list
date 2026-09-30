@@ -11,7 +11,10 @@
     "test:ai": "node --test ai/test/*.test.mjs",
     "monitor": "node --env-file=.env monitor/worker.mjs",
     "monitor:once": "node --env-file=.env monitor/worker.mjs --once",
+    "calibrate:email": "node --env-file=.env monitor/calibrate-email.mjs",
+    "reclassify:email": "node --env-file=.env monitor/reclassify-email.mjs",
     "google:auth": "node --env-file=.env monitor/google-auth.mjs",
-    "gmail:setup": "node --env-file=.env monitor/setup.mjs gmail"
+    "gmail:setup": "node --env-file=.env monitor/setup.mjs gmail",
+    "google:services": "node --env-file=.env monitor/setup.mjs google-services"
   }
 }

@@ -115,12 +115,19 @@ async function proxySmartHome(req, res, cfg, fetcher, signal, route) {
     headers['Content-Type'] = 'application/json';
   }
   const connect = new AbortController();
-  const timer = setTimeout(() => connect.abort(), 8000);
+  // Natural-language commands are relayed to LocalAgent's bounded planner;
+  // use the same configured budget as the planner instead of the short
+  // device-request timeout.
+  const timeoutMs = route.path === '/api/commands' ? cfg.timeoutMs : 8000;
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; connect.abort(); }, timeoutMs);
   let response;
   try {
     response = await fetcher(target.toString(), { method: route.method, headers, body, redirect: 'error', signal: AbortSignal.any([signal, connect.signal]) });
-  } catch { throw new AIError('SMART_HOME_UNAVAILABLE', 503); }
-  clearTimeout(timer);
+  } catch (error) {
+    if (signal.aborted) throw signal.reason || error;
+    throw new AIError(timedOut ? 'SMART_HOME_TIMEOUT' : 'SMART_HOME_UNAVAILABLE', timedOut ? 504 : 503);
+  } finally { clearTimeout(timer); }
   const contentType = response.headers.get('content-type') || 'application/json; charset=utf-8';
   res.writeHead(response.status, { 'Content-Type': contentType, 'Cache-Control': route.stream ? 'no-cache, no-store' : 'no-store', 'X-Accel-Buffering': 'no' });
   if (!response.body) { res.end(); return; }
@@ -175,6 +182,10 @@ export function createBridge(cfg, { fetcher = fetch, ai = createAI(cfg, fetcher)
         if (smartHome.kind === 'diagnostics') {
           json(res, 200, await smartHomeDiagnostics(cfg, fetcher, signal));
         } else {
+          if (smartHome.path === '/api/commands') {
+            clearTimeout(timer);
+            timer = setTimeout(() => controller.abort(new AIError('GENERATION_TIMEOUT', 504)), cfg.timeoutMs);
+          }
           if (smartHome.stream) clearTimeout(timer);
           await proxySmartHome(req, res, cfg, fetcher, signal, smartHome);
         }

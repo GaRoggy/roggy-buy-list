@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#6d28d9">
 <title>Roggy Lists</title>
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="styles.css?v=104">
+<link rel="stylesheet" href="styles.css?v=107">
 <link rel="stylesheet" href="todos.css?v=61">
 <link rel="apple-touch-icon" href="icon.svg?v=2">
 </head>
@@ -18,12 +18,7 @@
   <div class="header-actions"><button id="authBtn" class="auth-btn">Sign in</button><button id="backupBtn" class="icon-btn" aria-label="Backup">⇩</button></div>
 </header>
 
-<nav class="page-tabs">
-  <button class="page-tab active" data-page="home">Home</button>
-  <button class="page-tab" data-page="devices">Devices</button>
-  <button class="page-tab" data-page="todos">Tasks</button>
-  <button class="page-tab" data-page="buy">Buy</button>
-</nav>
+<nav id="primaryPageTabs" class="page-tabs" aria-label="Primary sections"></nav>
 
 <input id="moreToggle" class="drawer-toggle" type="checkbox" hidden>
 <label class="drawer-backdrop" for="moreToggle" aria-label="Close menu"></label>
@@ -34,7 +29,7 @@
   <button class="page-tab drawer-page-tab" data-page="groceries" onclick="document.getElementById('moreToggle').checked=false">Groceries</button>
   <button class="page-tab drawer-page-tab" data-page="projects" onclick="document.getElementById('moreToggle').checked=false">Projects</button>
   <button class="page-tab drawer-page-tab" data-page="drivers" onclick="document.getElementById('moreToggle').checked=false">Bad Drivers</button>
-  <button class="page-tab drawer-page-tab" data-page="budget" onclick="document.getElementById('moreToggle').checked=false">Budget 🔒</button>
+  <button class="page-tab drawer-page-tab" data-page="budget" onclick="document.getElementById('moreToggle').checked=false">Finance</button>
   <button class="page-tab drawer-page-tab" data-page="digestibles" onclick="document.getElementById('moreToggle').checked=false">Digestibles</button>
   <div class="under-construction-group">
     <div class="under-construction-title">Under Construction</div>
@@ -101,7 +96,7 @@
       <button class="command-card" data-jump="digestibles"><span>◉</span><div><b>Digestibles</b><small>Watch · read · rate</small></div></button>
     </section>
     <section class="home-section device-status-section"><div class="section-head"><div><span class="eyebrow">SMART HOME</span><h3>Devices</h3></div><button class="text-action" data-home-jump="devices">Open shelf</button></div><div id="homeDeviceStatus" class="home-device-status"></div></section>
-    <section class="home-section email-section"><div class="section-head"><div><span class="eyebrow">EMAIL</span><h3>Worth Your Attention</h3></div><span class="mail-filter-badge">No ads</span></div><div id="importantEmailList" class="important-email-list"></div></section>
+    <section class="home-section email-section"><div class="section-head"><div><span class="eyebrow">EMAIL</span><h3>Action Required</h3></div><span class="mail-filter-badge">Last 21 days</span></div><div id="importantEmailList" class="important-email-list"></div></section>
   </main>
 </section>
 
@@ -227,16 +222,42 @@
 <section id="remindersPage" hidden>
   <nav class="sub-tabs reminder-subtabs">
     <button class="reminder-tab active" data-reminder-view="today">Today</button>
-    <button class="reminder-tab" data-reminder-view="tomorrow">Tomorrow</button>
-    <button class="reminder-tab" data-reminder-view="week">This Week</button>
+    <button class="reminder-tab" data-reminder-view="upcoming">Upcoming</button>
+    <button class="reminder-tab" data-reminder-view="all">All</button>
   </nav>
   <main class="reminder-main">
     <button id="remindersBackBtn" class="project-back" type="button">← Back to current page</button>
-    <section id="reminderStatus" class="status"></section>
+    <section id="reminderStatus" class="status" aria-live="polite"></section>
     <section id="reminderList" class="reminder-list"></section>
-    <p class="reminder-note">Calendar events synced into Roggy Lists are marked with a calendar badge.</p>
+    <p class="reminder-note">Calendar events are synced read-only. Manual reminders remain separate.</p>
   </main>
 </section>
+
+<section id="mailPage" hidden>
+  <main class="system-main email-queue-main">
+    <div class="system-intro"><span class="eyebrow">MAIL</span><h2>Possibly Important</h2><p>Messages worth a closer look when the routing is uncertain.</p></div>
+    <section id="mailQueueStatus" class="status" aria-live="polite"></section>
+    <section id="mailQueueList" class="email-queue-list" aria-live="polite" aria-label="Mail review queue"></section>
+  </main>
+</section>
+<dialog id="emailDetailDialog" class="email-detail-dialog">
+  <div class="detail-dialog">
+    <div class="dialog-head"><div><span class="eyebrow">MAIL REVIEW</span><h2 id="emailDetailSubject">(No subject)</h2></div><button id="closeEmailDetail" class="plain" type="button" aria-label="Close email details">✕</button></div>
+    <p id="emailDetailSender" class="email-detail-sender"></p>
+    <p id="emailDetailWhen" class="email-detail-when"></p>
+    <p id="emailDetailSummary" class="email-detail-summary"></p>
+    <div class="email-detail-facts">
+      <div><span>Why it surfaced</span><b id="emailDetailReason"></b></div>
+      <div><span>Classifier confidence</span><b id="emailDetailConfidence"></b></div>
+      <div><span>Action</span><b id="emailDetailAction"></b></div>
+      <div><span>Financial relevance</span><b id="emailDetailFinance"></b></div>
+      <div><span>Reply</span><b id="emailDetailReply"></b></div>
+      <div><span>Ambiguity</span><b id="emailDetailAmbiguity"></b></div>
+    </div>
+    <div class="email-detail-actions"><button type="button" class="primary" data-email-detail-action="dashboard">Move to Dashboard</button><button type="button" class="secondary" data-email-detail-action="finance">Move to Finance</button><button type="button" class="secondary" data-email-detail-action="hidden">Mark not important</button></div>
+    <a id="emailDetailGmail" class="email-detail-link" href="#" target="_blank" rel="noopener noreferrer">Open in Gmail</a>
+  </div>
+</dialog>
 
 <section id="digestiblesPage" hidden>
   <nav class="sub-tabs digest-tabs"><button class="digest-tab active" data-digest-view="books">Books</button><button class="digest-tab" data-digest-view="movies">Movies</button><button class="digest-tab" data-digest-view="animes">Animes</button></nav>
@@ -256,34 +277,35 @@
 <section id="budgetPage" hidden>
   <main class="budget-main">
     <section id="budgetLock" class="budget-lock">
-      <div class="lock-icon">🔒</div><h2>Budget Locked</h2>
-      <p>Your budget requires a local device unlock before anything is shown.</p>
+      <div class="lock-icon">🔒</div><h2>Finance Locked</h2>
+      <p>Your finance data requires a local device unlock before anything is shown.</p>
       <button id="faceUnlockBtn" class="primary budget-unlock">Unlock with Face ID / Passkey</button>
       <button id="pinUnlockBtn" class="secondary budget-unlock">Use PIN</button>
-      <button id="setupBudgetLockBtn" class="plain-link">Set up / reset budget lock</button>
+      <button id="setupBudgetLockBtn" class="plain-link">Set up / reset finance lock</button>
       <div id="budgetLockStatus" class="status"></div>
     </section>
     <section id="budgetContent" hidden>
-      <div class="budget-head"><div><h2>Budget</h2><p>Private financial dashboard</p></div><button id="lockBudgetBtn" class="secondary">Lock now</button></div>
+      <div class="budget-head"><div><h2>Finance</h2><p>Private financial dashboard</p></div><button id="lockBudgetBtn" class="secondary">Lock now</button></div>
       <div class="budget-mode"><button id="budgetModeMonthly" class="active">Monthly</button><button id="budgetModePaycheck">Per paycheck</button></div>
       <div class="budget-summary"><div><span>Total Income</span><b id="budgetIncome">—</b></div><div><span>Total Allocated</span><b id="budgetSpending">—</b></div><div><span>Left Over</span><b id="budgetAvailable">—</b></div></div>
       <div id="budgetDataStatus" class="status"></div>
       <article class="budget-panel"><div class="budget-panel-head"><div><h3>Money flow</h3><p>Income → categories → individual allocations.</p></div></div><div id="budgetFlow" class="budget-flow"></div></article>
-      <article class="budget-panel"><div class="budget-panel-head"><div><h3>Budget table</h3><p>Spreadsheet-style view of the same numbers.</p></div></div><div class="table-scroll"><table class="budget-table"><thead><tr><th>Category</th><th>Item</th><th>Amount</th><th>% of Total</th></tr></thead><tbody id="budgetTableBody"></tbody></table></div></article>
-      <p class="budget-security-note">Budget records load only after this screen is unlocked and the signed-in account passes database ownership checks.</p>
+      <article class="budget-panel"><div class="budget-panel-head"><div><h3>Finance table</h3><p>Spreadsheet-style view of the same numbers.</p></div></div><div class="table-scroll"><table class="budget-table"><thead><tr><th>Category</th><th>Item</th><th>Amount</th><th>% of Total</th></tr></thead><tbody id="budgetTableBody"></tbody></table></div></article>
+      <article class="budget-panel finance-email-panel"><div class="budget-panel-head"><div><h3>Financial email</h3><p>Receipts, confirmations, statements, and other informational money mail.</p></div></div><section id="financeEmailStatus" class="status"></section><section id="financeEmailList" class="email-queue-list"></section></article>
+      <p class="budget-security-note">Finance records load only after this screen is unlocked and the signed-in account passes database ownership checks.</p>
     </section>
   </main>
 </section>
 
 <dialog id="budgetSetupDialog"><form method="dialog" id="budgetSetupForm">
-  <div class="dialog-head"><h2>Secure Budget</h2><button value="cancel" class="plain">✕</button></div>
+  <div class="dialog-head"><h2>Secure Finance</h2><button value="cancel" class="plain">✕</button></div>
   <p class="setup-copy">Create a private PIN on this device. It is salted and hashed before storage; the PIN itself is never saved.</p>
   <label>New PIN<input id="budgetPinNew" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="new-password" required placeholder="4–8 digits"></label>
   <label>Confirm PIN<input id="budgetPinConfirm" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="new-password" required></label>
   <div class="actions"><button value="cancel" class="secondary">Cancel</button><button value="default" class="primary">Save PIN</button></div>
 </form></dialog>
 <dialog id="budgetPinDialog"><form method="dialog" id="budgetPinForm">
-  <div class="dialog-head"><h2>Enter Budget PIN</h2><button value="cancel" class="plain">✕</button></div>
+  <div class="dialog-head"><h2>Enter Finance PIN</h2><button value="cancel" class="plain">✕</button></div>
   <label>PIN<input id="budgetPinEntry" type="password" inputmode="numeric" maxlength="8" autocomplete="off" required autofocus></label>
   <div id="budgetPinError" class="status"></div>
   <div class="actions"><button value="cancel" class="secondary">Cancel</button><button value="default" class="primary">Unlock</button></div>
@@ -347,14 +369,16 @@
 
 <dialog id="driverDetailDialog"><div class="detail-dialog"><div class="dialog-head"><h2>Observation</h2><button id="closeDriverDetail" class="plain">✕</button></div><div id="driverDetail"></div></div></dialog>
 
+<dialog id="reminderDetailDialog"><div class="detail-dialog reminder-detail-dialog"><div class="dialog-head"><div><span id="reminderDetailKicker" class="dialog-kicker">REMINDER</span><h2 id="reminderDetailTitle">Reminder</h2></div><button id="closeReminderDetail" class="plain" type="button" aria-label="Close reminder details">✕</button></div><div id="reminderDetail"></div></div></dialog>
+
 <input id="importFile" type="file" accept="application/json" hidden>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
 <script src="ai-config.js?v=42"></script>
-<script src="app.js?v=90"></script>
-<script src="monitor-ui.js?v=52"></script>
+<script src="app.js?v=93"></script>
+<script src="monitor-ui.js?v=53"></script>
 <script src="todos.js?v=64"></script>
 <script type="module" src="ai-ui.js?v=41"></script>
 </body></html>

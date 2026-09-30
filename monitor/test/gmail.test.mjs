@@ -33,3 +33,29 @@ test('label changes revisit messages and history records deduplicate IDs', async
   });
   assert.equal(reads,1);assert.equal(output.records[0].payload.dashboard,false);
 });
+test('a provider-forbidden message is retained as a non-content review record', async () => {
+  const output = await syncGmail({cursor:{historyId:'old'}},async path => {
+    if(path.endsWith('history'))return{historyId:'new',history:[{messages:[{id:'blocked'}]}]};
+    throw new MonitorError('HTTP_403',{status:403,terminal:true});
+  });
+  assert.deepEqual(output.records,[{kind:'email',external_id:'blocked',status:'needs_review',occurred_at:null,
+    payload:{category:'unavailable',dashboard:false,
+      extraction_notes:'Gmail denied access to this message; it was skipped without storing message content.'}}]);
+});
+test('incremental sync retries only previously unavailable messages', async () => {
+  let reads = 0;
+  const output = await syncGmail({ id:'s', cursor:{historyId:'old'} }, async path => {
+    if(path.endsWith('history')) return { historyId:'new', history:[] };
+    reads++;
+    return message('Recovered message');
+  }, [{ source_id:'s', external_id:'blocked', status:'needs_review' }]);
+  assert.equal(reads,1);
+  assert.equal(output.records[0].external_id,'blocked');
+  assert.equal(output.records[0].status,undefined);
+});
+test('history access throttling remains retryable', async () => {
+  await assert.rejects(syncGmail({ cursor:{historyId:'old'} }, async path => {
+    if(path.endsWith('history')) throw new MonitorError('HTTP_403',{status:403,terminal:true});
+    return { historyId:'new' };
+  }), error => error.code === 'HTTP_403' && error.terminal === false && error.retryAfter >= 60);
+});

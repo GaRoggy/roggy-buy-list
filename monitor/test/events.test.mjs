@@ -20,6 +20,15 @@ test('Gmail normalizer keeps actionable structure and omits raw body', () => {
   assert.equal(result.summary, 'Payment is due Friday.');
 });
 
+test('Gmail event confidence uses relevant semantic evidence instead of unrelated field confidence', () => {
+  const result = normalizeRecord({ kind: 'email', external_id: 'message-2', occurred_at: '2026-09-29T12:00:00Z',
+    payload: { category: 'personal', route: 'dashboard', dashboard: true, subject: 'Question', summary: 'Please reply.',
+      action_required: true, needs_reply: true, importance: true, importance_score: 0.7,
+      route_confidence: 0.91, importance_confidence: 0.82, action_confidence: 0.88, reply_confidence: 0.94,
+      finance_confidence: 0.2, low_value_confidence: 0.1 } }, source, new Date('2026-09-29T12:01:00Z'));
+  assert.equal(result.confidence >= 0.82, true);
+});
+
 test('routine Gmail categories remain monitor records without Layne events', () => {
   const records = normalizeRecords([
     { kind: 'email', external_id: 'promo', payload: { category: 'promotions', dashboard: false, subject: 'Sale' } },

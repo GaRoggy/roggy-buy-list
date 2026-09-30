@@ -72,11 +72,10 @@ function normalizeEmail(record, source, now) {
       action_required: false, tags: ['gmail', 'deleted'] };
   }
   const category = typeof payload.category === 'string' ? payload.category : 'unimportant';
-  // Promotions, newsletters, spam and routine mail stay in monitor_records but
-  // do not become Layne-facing events.
-  if (!payload.dashboard && !EMAIL_IMPORTANCE[category]) return null;
-  const actionRequired = Boolean(payload.required_action || payload.due_date) ||
-    ['security', 'bills', 'appointments', 'calendar', 'work', 'school'].includes(category);
+  const route = typeof payload.route === 'string' ? payload.route : (payload.dashboard ? 'dashboard' : 'hidden');
+  // Hidden/promotional mail remains provider data but is not presented to Layne.
+  if (route === 'hidden' || !EMAIL_IMPORTANCE[category]) return null;
+  const actionRequired = Boolean(payload.action_required || payload.required_action || payload.due_date);
   const title = clip(payload.subject, MAX_TITLE) || '(No subject)';
   const summary = clip(payload.summary, MAX_SUMMARY);
   const metadata = {
@@ -89,14 +88,32 @@ function normalizeEmail(record, source, now) {
       ? { amount: clip(String(payload.monetary_amount.amount ?? ''), 40), currency: clip(payload.monetary_amount.currency, 8) }
       : null,
   };
+  const importance = Number.isFinite(Number(payload.importance_score)) ? Number(payload.importance_score) : (EMAIL_IMPORTANCE[category] ?? 0.5);
+  const confidenceFields = [payload.route_confidence, payload.importance_confidence];
+  if (route === 'dashboard') confidenceFields.push(payload.action_confidence, payload.needs_reply ? payload.reply_confidence : null);
+  if (route === 'finance') confidenceFields.push(payload.finance_confidence);
+  if (route === 'hidden') confidenceFields.push(payload.low_value_confidence);
+  const confidenceValues = confidenceFields.filter(value => value !== null && value !== undefined && value !== '')
+    .map(Number).filter(Number.isFinite);
+  const confidence = confidenceValues.length ? Math.max(0, Math.min(1, Math.min(...confidenceValues)))
+    : (payload.summary_method === 'provider_snippet' ? 0.9 : 0.75);
   return { ...event, event_type: EMAIL_TYPES[category] || 'email', title, summary,
-    importance: EMAIL_IMPORTANCE[category] ?? 0.5,
-    confidence: payload.summary_method === 'provider_snippet' ? 0.9 : 0.75,
-    action_required: actionRequired,
-    suggested_actions: actionRequired ? [{ type: 'review_email', description: 'Review this email.' }] : [],
+    importance,
+    confidence,
+    action_required: actionRequired || Boolean(payload.needs_reply),
+    suggested_actions: (actionRequired || payload.needs_reply) ? [{ type: 'review_email', description: 'Review this email.' }] : [],
     entities: senderEntity(payload.sender || payload.company_person),
-    domains: EMAIL_DOMAINS[category] || ['communication'],
-    tags: ['gmail', category], metadata };
+    domains: route === 'finance' ? ['finance'] : (EMAIL_DOMAINS[category] || ['communication']),
+    tags: ['gmail', category, route], metadata: { ...metadata, route,
+      needs_reply: Boolean(payload.needs_reply), importance: Boolean(payload.importance),
+      importance_confidence: payload.importance_confidence ?? null,
+      action_confidence: payload.action_confidence ?? null, reply_confidence: payload.reply_confidence ?? null,
+      finance_confidence: payload.finance_confidence ?? null, low_value: Boolean(payload.low_value),
+      low_value_confidence: payload.low_value_confidence ?? null, route_confidence: payload.route_confidence ?? null,
+      ambiguity_reason: Array.isArray(payload.ambiguity_reason) ? payload.ambiguity_reason.slice(0, 8) : [],
+      semantic_evidence: Array.isArray(payload.semantic_evidence) ? payload.semantic_evidence.slice(0, 12) : [],
+      semantic_version: payload.semantic_version ?? null, semantic_model_version: payload.semantic_model_version ?? null,
+      semantic_status: payload.semantic_status ?? null, routing_policy_version: payload.routing_policy_version ?? null } };
 }
 
 function normalizeCalendar(record, source, now) {
@@ -146,6 +163,38 @@ function normalizeGeneric(record, source, now) {
     importance: 0.4, confidence: 0.5, domains: [source.kind || 'monitor'], tags: [source.kind || 'monitor'] };
 }
 
+function normalizeGoogleTask(record, source, now) {
+  const event = base(record, source, now), p = record.payload && typeof record.payload === 'object' ? record.payload : {};
+  const deleted = record.status === 'deleted';
+  return { ...event, event_type: deleted ? 'google_task_deleted' : 'task', title: clip(p.title, MAX_TITLE),
+    summary: clip(p.notes, MAX_SUMMARY), occurred_at: timestamp(p.due, event.occurred_at),
+    importance: p.completed ? 0.2 : 0.58, confidence: 0.98, action_required: !p.completed && !deleted,
+    suggested_actions: !p.completed && !deleted ? [{ type: 'review_task', description: 'Review this task.' }] : [],
+    domains: ['tasks'], tags: ['google_tasks', p.completed ? 'completed' : 'open'],
+    metadata: { list_id: clip(p.list_id, 256), list_title: clip(p.list_title, 240), due: clip(p.due, 80),
+      completed: Boolean(p.completed), parent: clip(p.parent, 256), untrusted_source: true } };
+}
+
+function normalizeGooglePerson(record, source, now) {
+  const event = base(record, source, now), p = record.payload && typeof record.payload === 'object' ? record.payload : {};
+  return { ...event, event_type: 'person_contact', title: clip(p.canonical_name, MAX_TITLE),
+    summary: clip((p.emails || [])[0], MAX_SUMMARY), importance: 0.3, confidence: 0.99,
+    action_required: false, domains: ['people'], tags: ['google_people', 'contact'],
+    entities: [{ type: 'person', name: clip(p.canonical_name, 200), ...(p.emails?.[0] ? { address: p.emails[0] } : {}) }],
+    metadata: { resource_name: clip(p.resource_name, 300), aliases: Array.isArray(p.aliases) ? p.aliases.slice(0, 8) : [],
+      organization: clip(p.organization, 240), job_title: clip(p.job_title, 200), untrusted_source: true } };
+}
+
+function normalizeDriveFile(record, source, now) {
+  const event = base(record, source, now), p = record.payload && typeof record.payload === 'object' ? record.payload : {};
+  const deleted = record.status === 'deleted';
+  return { ...event, event_type: deleted ? 'drive_file_deleted' : 'drive_file', title: clip(p.name, MAX_TITLE),
+    summary: clip(p.mime_type, MAX_SUMMARY), importance: 0.25, confidence: 0.99, action_required: false,
+    domains: ['documents'], tags: ['google_drive', p.mime_type || 'file'],
+    metadata: { file_id: clip(p.file_id, 256), mime_type: clip(p.mime_type, 200), modified_time: clip(p.modified_time, 80),
+      web_view_link: clip(p.web_view_link, 1000), parent_ids: Array.isArray(p.parent_ids) ? p.parent_ids.slice(0, 20) : [], untrusted_source: true } };
+}
+
 export function normalizeRecord(record, source, now = new Date()) {
   if (!record || !source?.id || !record.external_id) return null;
   if (record.kind === 'email' || source.kind === 'gmail') return normalizeEmail(record, source, now);
@@ -154,6 +203,9 @@ export function normalizeRecord(record, source, now = new Date()) {
     return normalizeSmartHome({ ...(record.payload && typeof record.payload === 'object' ? record.payload : {}),
       event_id: record.external_id, timestamp: record.occurred_at, deleted: record.status === 'deleted' }, source, now);
   }
+  if (record.kind === 'google_task' || source.kind === 'google_tasks') return normalizeGoogleTask(record, source, now);
+  if (record.kind === 'google_person' || source.kind === 'google_people') return normalizeGooglePerson(record, source, now);
+  if (record.kind === 'google_drive_file' || source.kind === 'google_drive') return normalizeDriveFile(record, source, now);
   return normalizeGeneric(record, source, now);
 }
 
