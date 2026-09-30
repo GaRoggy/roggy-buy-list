@@ -12,7 +12,8 @@ export function normalizeCalendar(event, calendarId, zone) {
       time_zone: event.start?.timeZone || zone, calendar_id: calendarId, location: event.location || null,
       description: event.description || null, attendees: (event.attendees || []).map(a => ({ email: a.email, response: a.responseStatus, self: !!a.self })),
       updated: event.updated || null, recurring_event_id: event.recurringEventId || null,
-      original_start: event.originalStartTime || null, url: event.htmlLink || null } };
+      original_start: event.originalStartTime || null, recurrence: Array.isArray(event.recurrence) ? event.recurrence : null,
+      url: event.htmlLink || null } };
 }
 export async function syncCalendar(source, get, existing = [], now = new Date()) {
   if (source.external_id === 'primary') throw new MonitorError('CANONICAL_CALENDAR_ID_REQUIRED', { terminal: true });

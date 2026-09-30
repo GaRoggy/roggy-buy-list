@@ -7,6 +7,36 @@ const PROJECT_KEY="roggy-projects-v1";
 let projects=JSON.parse(localStorage.getItem(PROJECT_KEY)||"[]");
 function saveProjects(){localStorage.setItem(PROJECT_KEY,JSON.stringify(projects))}
 
+/* The primary navigation order is the contract shared by tabs, swipe panels,
+   page indicators, and the panorama. Secondary shelves (including Groceries)
+   intentionally do not belong here. */
+const PRIMARY_PAGES=Object.freeze([
+ {id:"home",label:"Home",elementId:"homePage",title:"Roggy",subtitle:"Your command center."},
+ {id:"devices",label:"Devices",elementId:"devicesPage",title:"Devices",subtitle:"Live smart-home control."},
+ {id:"todos",label:"Tasks",elementId:"todosPage",title:"Tasks",subtitle:"Things that need doing."},
+ {id:"mail",label:"Mail",elementId:"mailPage",title:"Mail",subtitle:"Possibly important messages."},
+ {id:"buy",label:"Buy",elementId:"listsPage",title:"Buy List",subtitle:"Needs first. Luxuries later."}
+]);
+const PRIMARY_PAGE_IDS=Object.freeze(PRIMARY_PAGES.map(page=>page.id));
+const PRIMARY_PAGE_BY_ID=new Map(PRIMARY_PAGES.map(page=>[page.id,page]));
+const primaryPageIndex=page=>PRIMARY_PAGE_IDS.indexOf(page);
+const isPrimaryPage=page=>PRIMARY_PAGE_BY_ID.has(page);
+function primaryPageElement(page){const definition=PRIMARY_PAGE_BY_ID.get(page);return definition?document.getElementById(definition.elementId):null}
+function renderPrimaryTabs(){
+ const root=$("primaryPageTabs");if(!root)return;
+ root.style.setProperty("--primary-page-count",PRIMARY_PAGES.length);
+ root.innerHTML=PRIMARY_PAGES.map(page=>`<button class="page-tab" data-page="${page.id}" type="button">${page.label}${page.id==="mail"?'<span id="mailNavCount" class="mail-nav-count" hidden></span>':""}</button>`).join("");
+ root.querySelectorAll(".page-tab").forEach(button=>button.onclick=()=>setPage(button.dataset.page));
+}
+function syncPageNavigation(page=currentPage){
+ document.querySelectorAll(".page-tab").forEach(button=>{
+  const active=button.dataset.page===page;
+  button.classList.toggle("active",active);
+  if(button.closest("#primaryPageTabs")){if(active)button.setAttribute("aria-current","page");else button.removeAttribute("aria-current")}
+ });
+ PRIMARY_PAGES.forEach(definition=>primaryPageElement(definition.id)?.classList.add("primary-page"));
+}
+
 const seed={buy:[
 ["Indoor doormat","Home","Need"],["Outdoor doormat","Home","Need"],["Extended small mirror for office","Office","Want"],["Soft light for office meetings","Office","Want"],["Indoor mood lighting — lamps, LEDs, etc.","Home / Decoration","Eventually"],["Outdoor Christmas lights","Decoration","Eventually"],["Blackout curtains","Home","Need"],["Curtain rods x3","Home","Need"],["Fruit bowl","Kitchen","Want"],["Glass food storage container set","Kitchen","Need"],["Hard reusable ice packs for keeping food cold","Kitchen","Need"],["Soft reusable ice packs for injuries","Health / First Aid","Need"],["Flexible silicone ice trays","Kitchen","Need"]
 ].map((x,i)=>({id:"b"+(i+1),item:x[0],category:x[1],priority:x[2],quantity:x[0].includes("x3")?"3":"",status:"Looking",notes:"",deleted:false,created:"2026-09-17"})),
@@ -30,10 +60,14 @@ let data={buy:[],groceries:[]},currentPage="reminders",currentView="active",curr
 let baseline=FALLBACK_BASELINE,drivers=[],driverView="overview",charts={};
 let reminders=[],reminderView="today",remindersLoaded=false,reminderSessionVersion=0,lastPrimaryPage="home",shelfReturnPage="home";
 let monitorEmails=[],monitorEmailMessage="Sign in to view monitored email.";
+const EMAIL_QUEUE_MAX=10,EMAIL_QUEUE_PAGE_SIZE=16,EMAIL_QUEUE_WINDOW_DAYS=21;
+let emailQueues={dashboard:[],finance:[],mail:[]},emailQueueMessages={dashboard:"Sign in to view monitored email.",finance:"Sign in to view financial email.",mail:"Sign in to view mail."};
+let emailQueuePages={dashboard:{cursor:null,exhausted:false,loading:false,loaded:false},finance:{cursor:null,exhausted:false,loading:false,loaded:false},mail:{cursor:null,exhausted:false,loading:false,loaded:false}};
+let emailQueuesLoaded=false,emailQueueSessionVersion=0;
 let digestibles=[],digestView="books",digestStatusView="queue";
 const SMART_HOME_API=(window.ROGGY_SMART_HOME_API||window.ROGGY_AI_CONFIG?.smartHomeUrl||"").replace(/\/$/,"");
 let smartHomeState={devices:[],rooms:[],events:[],diagnostics:null},smartHomeLoaded=false,smartHomeUnavailable=false,smartHomeFailure=null,smartHomeLoading=null,smartHomeStreamPromise=null,smartHomeStreamAbort=null,smartHomeStreamRetry=null,smartHomeLastEventId="",smartHomeControlAllowed=false,smartHomeAccessToken="",smartHomePendingActions=new Map(),smartHomeActionSequence=0;
-let layneChatMessages=[],layneChatBusy=false,layneChatError="";
+let layneChatMessages=[],layneChatBusy=false,layneChatError="",laynePendingAction=null,layneSessionId=null;
 
 
 function esc(s=""){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
@@ -240,9 +274,13 @@ async function loadSmartHome({silent=false}={}){
 }
 setInterval(()=>{if(!document.hidden&&(currentPage==="home"||currentPage==="devices")&&!smartHomeStreamPromise)loadSmartHome({silent:true}).catch(()=>{})},30000);
 function layneResponseText(payload){if(typeof payload==="string")return payload;if(payload?.message)return String(payload.message);if(payload?.answer)return String(payload.answer);if(typeof payload?.result==="string")return payload.result;if(payload?.result?.message)return String(payload.result.message);return "Layne returned a response without text."}
-function renderLayneChat(){const history=$("layneChatHistory"),error=$("layneChatError"),send=$("layneChatSend"),status=$("layneChatStatus");if(!history)return;history.innerHTML=layneChatMessages.map(message=>`<div class="layne-chat-message ${message.role===`user`?"user":"assistant"}"><b>${message.role===`user`?"You":"Layne"}</b><p>${esc(message.text)}</p></div>`).join("");history.scrollTop=history.scrollHeight;if(send)send.disabled=layneChatBusy||!smartHomeControlAllowed;if(status)status.textContent=layneChatBusy?"Layne is thinking…":"";if(error)error.textContent=layneChatError}
+function layneConfirmationDecision(text){const normalized=String(text||"").trim().toLowerCase().replace(/[.!?,;:]+$/g,"");if(/^(yes|yeah|yep|do it|confirm|go ahead|okay|ok)$/.test(normalized))return true;if(/^(no|nope|cancel|never mind|nevermind|don't|dont|stop)$/.test(normalized))return false;return null}
+function laynePendingMarkup(action){if(!action?.id&&!action?.confirmation_id)return "";const id=esc(action.id||action.confirmation_id),preview=esc(String(action.preview||"this action").replace(/[.?]+$/,""));return `<div class="layne-confirmation-card" data-pending-action="${id}"><p>Layne wants to:</p><strong>${preview}</strong><div class="layne-confirmation-actions"><button type="button" class="secondary" data-confirmation-id="${id}" data-confirmation-decision="false">Cancel</button><button type="button" class="primary" data-confirmation-id="${id}" data-confirmation-decision="true">Confirm</button></div></div>`}
+function renderLayneChat(){const history=$("layneChatHistory"),error=$("layneChatError"),send=$("layneChatSend"),status=$("layneChatStatus");if(!history)return;history.innerHTML=layneChatMessages.map(message=>`<div class="layne-chat-message ${message.role===`user`?"user":"assistant"}"><b>${message.role===`user`?"You":"Layne"}</b><p>${esc(message.text)}</p>${message.pendingAction?laynePendingMarkup(message.pendingAction):""}</div>`).join("");history.scrollTop=history.scrollHeight;if(send)send.disabled=layneChatBusy||!smartHomeControlAllowed;if(status)status.textContent=layneChatBusy?"Layne is thinking…":"";if(error)error.textContent=layneChatError}
 function openLayneChat(){const dialog=$("layneChatDialog");if(!dialog)return;if(!smartHomeControlAllowed){$("layneChatError").textContent="Sign in to talk to Layne.";return}renderLayneChat();dialog.showModal();setTimeout(()=>$("layneChatPrompt")?.focus(),40)}
-async function sendLayneChat(){const prompt=$("layneChatPrompt");if(!prompt||layneChatBusy)return;const text=prompt.value.trim();if(!text)return;if(!smartHomeControlAllowed){layneChatError="Sign in to talk to Layne.";renderLayneChat();return}layneChatError="";layneChatMessages.push({role:"user",text});prompt.value="";layneChatBusy=true;renderLayneChat();try{const payload=await smartHomeFetch("/commands",{method:"POST",timeoutMs:185000,headers:{"Content-Type":"application/json"},body:JSON.stringify({text})});layneChatMessages.push({role:"assistant",text:layneResponseText(payload)});await loadSmartHome({silent:true})}catch(exception){layneChatError="Layne could not respond: "+smartErrorMessage(exception)}finally{layneChatBusy=false;renderLayneChat()}}
+async function submitLayneConfirmation(confirmationId,approve,alreadyBusy=false){if((layneChatBusy&&!alreadyBusy)||!confirmationId)return;const active=laynePendingAction;if(!active||String(active.id||active.confirmation_id)!==String(confirmationId)){layneChatError="That confirmation is no longer active.";renderLayneChat();return}layneChatBusy=true;layneChatError="";renderLayneChat();try{const payload=await smartHomeFetch(`/confirmations/${encodeURIComponent(confirmationId)}`,{method:"POST",timeoutMs:30000,headers:{"Content-Type":"application/json"},body:JSON.stringify({approve})});laynePendingAction=null;layneChatMessages.push({role:"assistant",text:approve?(payload?.ok?"Done — the confirmed action completed.":layneResponseText(payload)):"Cancelled."});await loadSmartHome({silent:true})}catch(exception){layneChatError="Layne could not complete that confirmation: "+smartErrorMessage(exception)}finally{layneChatBusy=false;renderLayneChat()}}
+async function sendLayneChat(){const prompt=$("layneChatPrompt");if(!prompt||layneChatBusy)return;const text=prompt.value.trim();if(!text)return;if(!smartHomeControlAllowed){layneChatError="Sign in to talk to Layne.";renderLayneChat();return}layneChatError="";layneChatMessages.push({role:"user",text});prompt.value="";layneChatBusy=true;renderLayneChat();try{const decision=laynePendingAction?layneConfirmationDecision(text):null;if(decision!==null){await submitLayneConfirmation(laynePendingAction.id||laynePendingAction.confirmation_id,decision,true);return}const body={text};if(layneSessionId)body.context={session_id:layneSessionId};const payload=await smartHomeFetch("/commands",{method:"POST",timeoutMs:185000,headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});layneSessionId=payload?.session_id||layneSessionId;laynePendingAction=payload?.pending_action||null;layneChatMessages.push({role:"assistant",text:layneResponseText(payload),pendingAction:laynePendingAction});await loadSmartHome({silent:true})}catch(exception){layneChatError="Layne could not respond: "+smartErrorMessage(exception)}finally{layneChatBusy=false;renderLayneChat()}}
+$('layneChatHistory')?.addEventListener('click',event=>{const button=event.target.closest('[data-confirmation-id]');if(!button)return;submitLayneConfirmation(button.dataset.confirmationId,button.dataset.confirmationDecision==='true')});
 $("layneChatFab")?.addEventListener("click",openLayneChat);
 $("layneChatClose")?.addEventListener("click",()=>$("layneChatDialog").close());
 $("layneChatForm")?.addEventListener("submit",event=>{event.preventDefault();sendLayneChat()});
@@ -394,43 +432,238 @@ async function addDriver(){
 $("driverForm").addEventListener("submit",e=>{if(e.submitter?.value==="cancel")return;e.preventDefault();addDriver().catch(e=>showErr(e,"driverStatus"));$("driverDialog").close();$("driverForm").reset()});
 $("closeDriverDetail").onclick=()=>$("driverDetailDialog").close();
 
+const REMINDER_TIME_ZONE="America/Chicago",REMINDER_PAST_DAYS=14,REMINDER_FUTURE_DAYS=180;
+let reminderLastLoadedAt=null,reminderSyncStale=false,reminderLoading=false;
+function reminderZoneParts(value){
+  const date=value instanceof Date?value:new Date(value);if(Number.isNaN(date.getTime()))return null;
+  const parts=new Intl.DateTimeFormat("en-US",{timeZone:REMINDER_TIME_ZONE,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false,hourCycle:"h23"}).formatToParts(date),out={};
+  parts.forEach(p=>{if(p.type!=="literal")out[p.type]=p.value});return out;
+}
+function reminderDayKey(x){
+  if(x?.all_day&&x.start_date)return String(x.start_date).slice(0,10);
+  const p=reminderZoneParts(x?.start_at);return p?`${p.year}-${p.month}-${p.day}`:"";
+}
+function reminderTodayKey(){
+  const p=reminderZoneParts(new Date());return p?`${p.year}-${p.month}-${p.day}`:"";
+}
+function reminderDayOffset(key,days){
+  const [year,month,day]=String(key).split("-").map(Number),date=new Date(Date.UTC(year,month-1,day));
+  date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10);
+}
+function reminderDateLabel(key){
+  const today=reminderTodayKey();if(key===today)return "TODAY";if(key===reminderDayOffset(today,1))return "TOMORROW";
+  const date=new Date(`${key}T12:00:00`);if(Number.isNaN(date.getTime()))return "DATE UNAVAILABLE";
+  return new Intl.DateTimeFormat("en-US",{timeZone:REMINDER_TIME_ZONE,month:"short",day:"numeric"}).format(date).toUpperCase();
+}
+function reminderTime(value){
+  const date=value instanceof Date?value:new Date(value);if(Number.isNaN(date.getTime()))return "Time unavailable";
+  return new Intl.DateTimeFormat([], {timeZone:REMINDER_TIME_ZONE,hour:"numeric",minute:"2-digit"}).format(date);
+}
+function reminderDateTime(value){
+  const date=value instanceof Date?value:new Date(value);if(Number.isNaN(date.getTime()))return "Time unavailable";
+  return `${new Intl.DateTimeFormat("en-US",{timeZone:REMINDER_TIME_ZONE,month:"short",day:"numeric"}).format(date)} · ${reminderTime(date)}`;
+}
+function reminderTimeRange(x){
+  if(x?.all_day)return "All day";
+  const start=new Date(x?.start_at);if(Number.isNaN(start.getTime()))return "Time unavailable";
+  const end=x?.end_at?new Date(x.end_at):null;if(!end||Number.isNaN(end.getTime())||end<=start)return reminderTime(start);
+  return reminderDayKey(x)===reminderDayKey({...x,start_at:x.end_at,all_day:false,start_date:null})?`${reminderTime(start)} – ${reminderTime(end)}`:`${reminderDateTime(start)} – ${reminderDateTime(end)}`;
+}
+function reminderCompare(a,b){
+  const dayCompare=reminderDayKey(a).localeCompare(reminderDayKey(b));if(dayCompare)return dayCompare;
+  if(Boolean(a.all_day)!==Boolean(b.all_day))return a.all_day?-1:1;
+  const startA=new Date(a.start_at||`${a.start_date}T00:00:00`).getTime(),startB=new Date(b.start_at||`${b.start_date}T00:00:00`).getTime();
+  return (Number.isFinite(startA)?startA:0)-(Number.isFinite(startB)?startB:0)||(a.title||"").localeCompare(b.title||"");
+}
+function reminderWindow(){
+  const now=new Date(),from=new Date(now),to=new Date(now);from.setDate(from.getDate()-REMINDER_PAST_DAYS);to.setDate(to.getDate()+REMINDER_FUTURE_DAYS);return{from:from.toISOString(),to:to.toISOString()};
+}
 async function loadReminders(){
   const version=reminderSessionVersion;
   const {data:{session}}=await sb.auth.getSession();
   if(version!==reminderSessionVersion)return;
-  if(!isOwnerSession(session)){reminders=[];remindersLoaded=true;$("reminderStatus").textContent="Sign in to view private reminders.";renderReminders();return}
-  const {data:r,error}=await sb.from("reminders").select("*").eq("user_id",session.user.id).eq("completed",false).is("cancelled_at",null).order("start_at",{ascending:true});
+  if(!isOwnerSession(session)){reminders=[];remindersLoaded=true;reminderSyncStale=false;$("reminderStatus").textContent="Sign in to view private reminders.";renderReminders();return}
+  const bounds=reminderWindow();reminderLoading=true;
+  if(!reminders.length)$("reminderStatus").textContent="Loading reminders…";else renderReminders();
+  const {data:r,error}=await sb.from("reminders").select("*").eq("user_id",session.user.id).eq("completed",false).is("cancelled_at",null).eq("hidden_locally",false).gte("start_at",bounds.from).lte("start_at",bounds.to).order("start_at",{ascending:true}).limit(500);
   if(version!==reminderSessionVersion)return;
-  remindersLoaded=true;if(!error)$("reminderStatus").textContent="";
-  if(error){showErr(error,"reminderStatus");reminders=[]}else reminders=r||[];
-  renderReminders();
+  reminderLoading=false;remindersLoaded=true;
+  if(error){reminderSyncStale=true;$("reminderStatus").textContent=reminders.length?"Sync unavailable · showing last synced reminders.":"Reminders are unavailable right now.";renderReminders();return}
+  reminders=(r||[]).filter(x=>!x.cancelled_at&&!x.hidden_locally&&!x.completed);reminderLastLoadedAt=new Date();reminderSyncStale=false;$("reminderStatus").textContent="";renderReminders();
 }
+function emailQueueCutoff(){return new Date(Date.now()-EMAIL_QUEUE_WINDOW_DAYS*86400000).toISOString()}
+function emailQueueRoot(route){return route==="dashboard"?$("importantEmailList"):route==="finance"?$("financeEmailList"):$("mailQueueList")}
+function emailQueueStatus(route){return route==="dashboard"?null:route==="finance"?$("financeEmailStatus"):$("mailQueueStatus")}
+function emailQueueEmpty(route){return route==="dashboard"?"No emails need your attention.":route==="finance"?"No recent financial emails.":"No emails need review."}
+function updateMailNavCount(){const badge=$("mailNavCount"),count=Math.min(EMAIL_QUEUE_MAX,(emailQueues.mail||[]).length);if(!badge)return;badge.hidden=count===0;badge.textContent=count?String(count):""}
+function emailQueuePageState(route){return emailQueuePages[route]||(emailQueuePages[route]={cursor:null,exhausted:false,loading:false,loaded:false})}
+function emailReasonLabel(value,route){
+ const fallback=route==="dashboard"?"Action required":route==="finance"?"Financial information":"Possibly important";
+ const clean=String(value||"").replace(/[_-]+/g," ").replace(/\s+/g," ").trim();
+ return clean?clean.replace(/\.$/,""):fallback;
+}
+function emailConfidenceLabel(value){const score=Number(value);if(!Number.isFinite(score)||score<0.65)return "Low confidence";if(score<0.82)return "Medium confidence";return "Uncertain"}
+function emailDetailReason(row){
+ const route=row.route||"mail";
+ if(row.reason)return emailReasonLabel(row.reason,route);
+ if(row.needs_reply)return "May need a reply";
+ if(row.finance_related&&Number(row.finance_confidence)<.8)return "Financial relevance uncertain";
+ if(Array.isArray(row.ambiguity_reason)&&row.ambiguity_reason.length)return "Importance unclear";
+ return "Possibly important";
+}
+function emailQueueCard(x,route,extraClass=""){
+ const subject=x.subject||"(No subject)",sender=x.sender||"Unknown sender",summary=String(x.summary||"").trim(),reason=emailDetailReason(x),confidence=route==="mail"?`<span class="email-confidence">${esc(emailConfidenceLabel(x.route_confidence))}</span>`:"";
+ const date=x.occurred_at?new Date(x.occurred_at):null,when=date&&!Number.isNaN(date.getTime())?date.toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):"";
+ const href=x.source_message_id?`https://mail.google.com/mail/u/0/#all/${encodeURIComponent(x.source_message_id)}`:"#";
+ const content=`<span class="email-kind">${esc(route)}</span><div class="email-queue-content"><strong class="email-sender">${esc(sender)}</strong><b class="email-subject">${esc(subject)}</b>${summary?`<small class="email-summary">${esc(summary)}</small>`:""}<span class="email-reason">${esc(reason)}</span>${confidence}</div><time datetime="${esc(x.occurred_at||"")}">${esc(when)}</time>`;
+ const main=route==="mail"?`<button type="button" class="important-email email-open" data-email-open="${esc(x.id)}" data-email-route="mail" aria-label="Open ${esc(subject)}">${content}</button>`:`<a class="important-email" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${content}</a>`;
+ const actions=route==="mail"?`<div class="email-card-actions"><button type="button" class="email-route-action" data-email-route-action="dashboard" data-email-route-id="${esc(x.id)}">Dashboard</button><button type="button" class="email-route-action" data-email-route-action="finance" data-email-route-id="${esc(x.id)}">Finance</button><button type="button" class="email-dismiss" data-email-dismiss="${esc(x.id)}" data-email-route="mail" aria-label="Dismiss ${esc(subject)}">Dismiss</button></div>`:`<button type="button" class="email-dismiss" data-email-dismiss="${esc(x.id)}" data-email-route="${esc(route)}" aria-label="Dismiss ${esc(subject)}">Dismiss</button>`;
+ return `<article class="email-queue-card ${extraClass}" data-email-card-id="${esc(x.id)}">${main}${actions}</article>`;
+}
+function renderEmailQueue(route,options={}){
+ const root=emailQueueRoot(route);if(!root)return;
+ const before=new Map([...root.querySelectorAll("[data-email-card-id]")].map(node=>[node.dataset.emailCardId,node.getBoundingClientRect().top]));
+ const rows=emailQueues[route]||[],enterIds=new Set(options.enterIds||[]);
+ root.innerHTML=rows.length?rows.slice(0,EMAIL_QUEUE_MAX).map(x=>emailQueueCard(x,route,enterIds.has(x.id)?"email-card-entering":"")).join(""):`<div class="quiet-state">${esc(emailQueueMessages[route]||emailQueueEmpty(route))}</div>`;
+ root.querySelectorAll("[data-email-card-id]").forEach(node=>{
+   const previous=before.get(node.dataset.emailCardId);if(previous==null)return;
+   const delta=previous-node.getBoundingClientRect().top;if(Math.abs(delta)<1)return;
+   node.style.transform=`translateY(${delta}px)`;requestAnimationFrame(()=>{node.style.transform=""});
+ });
+ const status=emailQueueStatus(route);if(status)status.textContent=emailQueueMessages[route]?.startsWith("Monitoring unavailable")?emailQueueMessages[route]:"";
+ updateMailNavCount();
+}
+function emailQueueQuery(route,session,state){
+ let query=sb.from("monitor_email_queue").select("*").eq("user_id",session.user.id).eq("route",route).is("dismissed_at",null).not("occurred_at","is",null).gte("occurred_at",emailQueueCutoff()).order("occurred_at",{ascending:false}).order("id",{ascending:false});
+ if(state.cursor){const stamp=state.cursor.occurredAt;query=query.or(`occurred_at.lt.${stamp},and(occurred_at.eq.${stamp},id.lt.${state.cursor.id})`)}
+ return query.limit(EMAIL_QUEUE_PAGE_SIZE);
+}
+async function loadEmailQueue(route,{append=false,reset=false}={}){
+ const state=emailQueuePageState(route);if(state.loading)return;
+ if(append&&state.exhausted)return;
+ if(!append&&state.loaded&&!reset){renderEmailQueue(route);return}
+ const version=emailQueueSessionVersion;state.loading=true;
+ if(reset){state.cursor=null;state.exhausted=false;state.loaded=false;emailQueues[route]=[]}
+ const {data:{session}}=await sb.auth.getSession();
+ if(version!==emailQueueSessionVersion){state.loading=false;return}
+ if(!isOwnerSession(session)){emailQueues[route]=[];state.loaded=true;state.exhausted=true;state.loading=false;emailQueuesLoaded=true;emailQueueMessages[route]="Sign in to view monitored email.";renderEmailQueue(route);return}
+ if(!append){emailQueueMessages[route]="Loading…";renderEmailQueue(route)}
+ const {data,error}=await emailQueueQuery(route,session,state);
+ if(version!==emailQueueSessionVersion){state.loading=false;return}
+ if(error){if(!emailQueues[route]?.length)emailQueues[route]=[];emailQueueMessages[route]="Monitoring unavailable. Showing the last synced mail.";state.loading=false;state.loaded=true;renderEmailQueue(route);return}
+ const existing=new Set((emailQueues[route]||[]).map(row=>row.id)),fresh=(data||[]).filter(row=>!existing.has(row.id));
+ emailQueues[route]=[...(emailQueues[route]||[]),...fresh].sort((a,b)=>new Date(b.occurred_at||0)-new Date(a.occurred_at||0)||(b.id||"").localeCompare(a.id||""));
+ if(fresh.length){const last=fresh[fresh.length-1];state.cursor={occurredAt:last.occurred_at,id:last.id}}
+ state.exhausted=fresh.length<EMAIL_QUEUE_PAGE_SIZE;state.loaded=true;state.loading=false;emailQueuesLoaded=true;emailQueueMessages[route]="";
+ renderEmailQueue(route,{enterIds:append?fresh.map(row=>row.id):[]});
+}
+async function loadEmailQueues(){const routes=["dashboard","mail"];if(budgetUnlocked)routes.push("finance");await Promise.all(routes.map(route=>loadEmailQueue(route)))}
+function waitForEmailAnimation(){return new Promise(resolve=>setTimeout(resolve,180))}
+async function dismissEmailQueueItem(id,route){
+ const prior=[...(emailQueues[route]||[])],row=prior.find(item=>item.id===id);if(!row)return;
+ const button=document.querySelector(`[data-email-dismiss="${CSS.escape(id)}"]`),card=button?.closest("[data-email-card-id]");
+ if(button)button.disabled=true;if(card)card.classList.add("email-card-dismissing");
+ const {error}=await sb.rpc("dismiss_monitor_email",{p_queue_id:id});
+ await waitForEmailAnimation();
+ if(error){emailQueueMessages[route]="Could not dismiss this message.";if(card)card.classList.remove("email-card-dismissing");renderEmailQueue(route);return}
+ emailQueues[route]=prior.filter(item=>item.id!==id);renderEmailQueue(route);
+ if(emailQueues[route].length<=EMAIL_QUEUE_MAX&&!emailQueuePageState(route).exhausted)loadEmailQueue(route,{append:true}).catch(()=>{});
+}
+async function moveEmailQueueItem(id,from,to,note=""){
+ const prior=[...(emailQueues[from]||[])],row=prior.find(item=>item.id===id);if(!row)return;
+ const card=document.querySelector(`[data-email-card-id="${CSS.escape(id)}"]`);card?.classList.add("email-card-dismissing");
+ const {data,error}=await sb.rpc("set_monitor_email_route",{p_queue_id:id,p_route:to,p_note:note||null});
+ await waitForEmailAnimation();
+ if(error||data===false){emailQueueMessages[from]="Could not update this message.";if(card)card.classList.remove("email-card-dismissing");renderEmailQueue(from);return}
+ emailQueues[from]=prior.filter(item=>item.id!==id);renderEmailQueue(from);
+ if(to!=="hidden"){emailQueues[to]=(emailQueues[to]||[]).filter(item=>item.id!==id);await loadEmailQueue(to,{reset:true}).catch(()=>{});}
+ if(currentPage==="mail")openEmailDetail(null);
+}
+function openEmailDetail(id){
+ const dialog=$("emailDetailDialog");if(!dialog)return;
+ if(!id){dialog.close();return}
+ const row=(emailQueues.mail||[]).find(item=>item.id===id);if(!row)return;
+ dialog.dataset.emailId=id;$('emailDetailSender').textContent=row.sender||"Unknown sender";$('emailDetailSubject').textContent=row.subject||"(No subject)";
+ $('emailDetailSummary').textContent=row.summary||"No summary available.";$('emailDetailWhen').textContent=row.occurred_at?new Date(row.occurred_at).toLocaleString([],{dateStyle:"medium",timeStyle:"short"}):"Received time unavailable";
+ $('emailDetailReason').textContent=emailDetailReason(row);$('emailDetailConfidence').textContent=emailConfidenceLabel(row.route_confidence);
+ $('emailDetailAction').textContent=row.action_required?"Detected action may be needed.":"No definite action detected.";
+ $('emailDetailFinance').textContent=row.finance_related?"Financial relevance detected.":"No financial relevance detected.";
+ $('emailDetailReply').textContent=row.needs_reply?"A reply may be needed.":"No clear reply expectation detected.";
+ $('emailDetailAmbiguity').textContent=Array.isArray(row.ambiguity_reason)&&row.ambiguity_reason.length?row.ambiguity_reason.map(value=>String(value).replace(/[_-]+/g," ")).join(" · "):"No additional ambiguity recorded.";
+ $('emailDetailGmail').href=row.source_message_id?`https://mail.google.com/mail/u/0/#all/${encodeURIComponent(row.source_message_id)}`:"#";dialog.showModal();
+}
+document.addEventListener("click",e=>{const dismiss=e.target.closest("[data-email-dismiss]");if(dismiss){e.preventDefault();e.stopPropagation();dismissEmailQueueItem(dismiss.dataset.emailDismiss,dismiss.dataset.emailRoute).catch(()=>{});return}const action=e.target.closest("[data-email-route-action]");if(action){e.preventDefault();e.stopPropagation();moveEmailQueueItem(action.dataset.emailRouteId,"mail",action.dataset.emailRouteAction).catch(()=>{});return}const detailAction=e.target.closest("[data-email-detail-action]");if(detailAction){e.preventDefault();const id=$("emailDetailDialog")?.dataset.emailId;moveEmailQueueItem(id,"mail",detailAction.dataset.emailDetailAction).catch(()=>{});return}const open=e.target.closest("[data-email-open]");if(open){e.preventDefault();openEmailDetail(open.dataset.emailOpen)}});
+$("closeEmailDetail")?.addEventListener("click",()=>$("emailDetailDialog")?.close());
+
 function localDay(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate())}
+function reminderRowsForView(){
+  const today=reminderTodayKey();return (reminders||[]).filter(x=>{const key=reminderDayKey(x);if(!key)return false;if(reminderView==="today")return key===today||(x.source!=="google_calendar"&&key<today);if(reminderView==="upcoming")return key>today;return true}).sort(reminderCompare);
+}
+function reminderEmptyMessage(){return reminderView==="today"?"Nothing scheduled for today.":reminderView==="upcoming"?"No upcoming reminders.":"No reminders in the current window."}
+function reminderCard(x){
+  const location=x.location?`<small class="reminder-location">${esc(x.location)}</small>`:"",source=x.source==="google_calendar"?'<span class="calendar-badge">Calendar</span>':"";
+  return `<button type="button" class="reminder-card" data-reminder-id="${esc(x.id)}"><span class="reminder-body"><b>${esc(x.title||"Untitled reminder")}</b><span>${esc(reminderTimeRange(x))}</span>${location}</span>${source}</button>`;
+}
 function renderReminders(){
-  const now=new Date(),today=localDay(now),tomorrow=new Date(today);tomorrow.setDate(today.getDate()+1);
-  const afterTomorrow=new Date(tomorrow);afterTomorrow.setDate(tomorrow.getDate()+1);
-  const weekEnd=new Date(today);weekEnd.setDate(today.getDate()+(7-today.getDay()));
-  let start=today,end=tomorrow;
-  if(reminderView==="tomorrow"){start=tomorrow;end=afterTomorrow}
-  if(reminderView==="week"){start=today;end=weekEnd}
-  const rows=reminders.filter(x=>{const d=reminderStart(x),finish=reminderEnd(x);return d<end&&(finish>start||d>=start)});
-  $("reminderList").innerHTML=rows.length?"":'<div class="card empty">Nothing scheduled here.</div>';
-  rows.forEach(x=>{const d=reminderStart(x),el=document.createElement("article");el.className="reminder-card";
-    const when=x.all_day?"All day":d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});
-    const day=reminderView==="week"?d.toLocaleDateString([],{weekday:"short",month:"short",day:"numeric"}):"";
-    el.innerHTML=`<div class="reminder-date">${esc(day)}</div><div class="reminder-body"><b>${esc(x.title)}</b><span>${esc(when)}</span></div>${x.source==="google_calendar"?'<span class="calendar-badge">Calendar</span>':""}`;
-    $("reminderList").appendChild(el);
-  });
+  const root=$("reminderList");if(!root)return;const rows=reminderRowsForView();
+  if(reminderLoading&&!rows.length){root.innerHTML='<div class="quiet-state">Loading reminders…</div>';return}
+  if(!rows.length){root.innerHTML=`<div class="quiet-state">${esc(reminderEmptyMessage())}</div>`;return}
+  const today=reminderTodayKey(),groups=new Map();rows.forEach(x=>{const key=reminderDayKey(x);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(x)});
+  root.innerHTML=[...groups].map(([key,group])=>`<section class="reminder-day-group"><h3 class="reminder-day-heading">${esc(key<today&&reminderView==="today"?`OVERDUE · ${reminderDateLabel(key)}`:reminderDateLabel(key))}</h3><div class="reminder-day-items">${group.map(reminderCard).join("")}</div></section>`).join("");
+}
+function reminderDetails(x){
+  const calendar=x.source==="google_calendar",source=calendar?"Google Calendar · Read-only":"Manual reminder",location=x.location?`<div class="reminder-detail-row"><span>Location</span><b>${esc(x.location)}</b></div>`:"",description=x.description?`<div class="reminder-detail-description"><span>Description</span><p>${esc(x.description)}</p></div>`:"";
+  return `<div class="reminder-detail-source ${calendar?"calendar":"manual"}">${esc(source)}</div><div class="reminder-detail-row"><span>Date</span><b>${esc(reminderDateLabel(reminderDayKey(x)))}</b></div><div class="reminder-detail-row"><span>When</span><b>${esc(reminderTimeRange(x))}</b></div>${location}${description}${calendar?'<p class="reminder-detail-note">This event is controlled by Google Calendar. Changes made there will sync here automatically.</p>':'<div class="reminder-detail-actions"><button type="button" class="secondary" id="editManualReminder">Edit reminder</button><button type="button" class="primary reminder-complete" id="completeManualReminder">Mark complete</button></div>'}`;
+}
+function reminderInputTime(value){
+  const p=reminderZoneParts(value);return p?`${p.hour}:${p.minute}`:"09:00";
+}
+function reminderLocalToIso(dateText,timeText){
+  const [year,month,day]=String(dateText).split("-").map(Number),[hour,minute]=String(timeText||"00:00").split(":").map(Number);if(!year||!month||!day||!Number.isFinite(hour)||!Number.isFinite(minute))return null;
+  const localUtc=Date.UTC(year,month-1,day,hour,minute),offsetAtGuess=reminderZoneParts(new Date(localUtc));if(!offsetAtGuess)return null;
+  const offsetGuess=Date.UTC(Number(offsetAtGuess.year),Number(offsetAtGuess.month)-1,Number(offsetAtGuess.day),Number(offsetAtGuess.hour),Number(offsetAtGuess.minute))-localUtc;
+  const first=new Date(localUtc-offsetGuess),parts=reminderZoneParts(first);if(!parts)return null;
+  const offset=Date.UTC(Number(parts.year),Number(parts.month)-1,Number(parts.day),Number(parts.hour),Number(parts.minute))-first.getTime();return new Date(localUtc-offset).toISOString();
+}
+function reminderEditor(x){
+  const allDay=Boolean(x.all_day),date=reminderDayKey(x),startTime=allDay?"":reminderInputTime(x.start_at),endTime=allDay?"":(x.end_at?reminderInputTime(x.end_at):"");
+  return `<form id="reminderEditForm" class="reminder-edit-form"><label>Title<input id="reminderEditTitle" maxlength="240" required value="${esc(x.title||"")}"></label><label>Date<input id="reminderEditDate" type="date" required value="${esc(date)}"></label><label class="reminder-edit-all-day"><input id="reminderEditAllDay" type="checkbox" ${allDay?"checked":""}> All day</label><div class="grid2 reminder-time-fields"><label>Start<input id="reminderEditStart" type="time" value="${esc(startTime)}"></label><label>End<input id="reminderEditEnd" type="time" value="${esc(endTime)}"></label></div><label>Location<input id="reminderEditLocation" maxlength="300" value="${esc(x.location||"")}"></label><label>Description<textarea id="reminderEditDescription" rows="4" maxlength="4000">${esc(x.description||"")}</textarea></label><div class="actions"><button type="button" class="secondary" id="cancelReminderEdit">Cancel</button><button type="submit" class="primary">Save changes</button></div></form>`;
+}
+function showReminderEditor(x){
+  $("reminderDetail").innerHTML=reminderEditor(x);const form=$("reminderEditForm"),allDay=$("reminderEditAllDay"),fields=document.querySelector(".reminder-time-fields");
+  const syncFields=()=>{fields.hidden=allDay.checked;$("reminderEditStart").required=!allDay.checked};allDay.onchange=syncFields;syncFields();$("cancelReminderEdit").onclick=()=>openReminderDetail(x.id);form.onsubmit=e=>{e.preventDefault();saveManualReminder(x).catch(()=>{})};
+}
+async function saveManualReminder(previous){
+  const {data:{session}}=await sb.auth.getSession();if(!isOwnerSession(session)||previous.source!=="manual")return;
+  const title=$("reminderEditTitle").value.trim(),date=$("reminderEditDate").value,allDay=$("reminderEditAllDay").checked,start=$("reminderEditStart").value,end=$("reminderEditEnd").value;if(!title||!date||(!allDay&&!start)){return}
+  let startAt,endAt,startDate=null,endDate=null;
+  if(allDay){startDate=date;endDate=reminderDayOffset(date,1);startAt=reminderLocalToIso(date,"00:00");endAt=reminderLocalToIso(endDate,"00:00")}else{startAt=reminderLocalToIso(date,start);endAt=end?reminderLocalToIso(date,end):null;if(endAt&&new Date(endAt)<=new Date(startAt))return}
+  const updates={title,start_at:startAt,end_at:endAt,all_day:allDay,start_date:startDate,end_date:endDate,location:$("reminderEditLocation").value.trim()||null,description:$("reminderEditDescription").value.trim()||null};
+  const {data,error}=await sb.from("reminders").update(updates).eq("id",previous.id).eq("user_id",session.user.id).eq("source","manual").select().single();if(error||!data)return;
+  const index=reminders.findIndex(x=>String(x.id)===String(previous.id));if(index>=0)reminders[index]=data;$("reminderDetailDialog").close();renderReminders();
+}
+function openReminderDetail(id){
+  const reminder=reminders.find(x=>String(x.id)===String(id));if(!reminder)return;
+  $("reminderDetailKicker").textContent=reminder.source==="google_calendar"?"CALENDAR EVENT":"REMINDER";$("reminderDetailTitle").textContent=reminder.title||"Reminder";$("reminderDetail").innerHTML=reminderDetails(reminder);$("reminderDetailDialog").dataset.reminderId=reminder.id;$("reminderDetailDialog").showModal();
+  const complete=$("completeManualReminder");if(complete)complete.onclick=()=>completeManualReminder(reminder.id);const edit=$("editManualReminder");if(edit)edit.onclick=()=>showReminderEditor(reminder);
+}
+async function completeManualReminder(id){
+  const {data:{session}}=await sb.auth.getSession(),reminder=reminders.find(x=>String(x.id)===String(id));if(!reminder||reminder.source!=="manual"||!isOwnerSession(session))return;
+  const button=$("completeManualReminder");if(button)button.disabled=true;const {error}=await sb.from("reminders").update({completed:true}).eq("id",id).eq("user_id",session.user.id).eq("source","manual");
+  if(error){if(button){button.disabled=false;button.textContent="Could not complete"}return}$("reminderDetailDialog").close();reminders=reminders.filter(x=>String(x.id)!==String(id));renderReminders();
 }
 document.querySelectorAll(".reminder-tab").forEach(b=>b.onclick=()=>{reminderView=b.dataset.reminderView;document.querySelectorAll(".reminder-tab").forEach(z=>z.classList.toggle("active",z===b));renderReminders()});
+document.addEventListener("click",e=>{const card=e.target.closest(".reminder-card[data-reminder-id]");if(card)openReminderDetail(card.dataset.reminderId)});
+$("closeReminderDetail").onclick=()=>$("reminderDetailDialog").close();
+$("reminderDetailDialog").addEventListener("click",e=>{if(e.target===$("reminderDetailDialog"))$("reminderDetailDialog").close()});
 
 
 const BUDGET_PIN_KEY="roggy-budget-pin-v1",BUDGET_CRED_KEY="roggy-budget-credential-v1";let budgetUnlocked=false,budgetTimer=null,budgetEntries=[],budgetMode="monthly";
 function bytesToB64(b){return btoa(String.fromCharCode(...new Uint8Array(b)))} function b64ToBytes(s){return Uint8Array.from(atob(s),c=>c.charCodeAt(0))}
 async function hashPin(pin,salt){const k=await crypto.subtle.importKey("raw",new TextEncoder().encode(pin),"PBKDF2",false,["deriveBits"]);return bytesToB64(await crypto.subtle.deriveBits({name:"PBKDF2",salt,iterations:210000,hash:"SHA-256"},k,256))}
 function budgetConfigured(){return !!localStorage.getItem(BUDGET_PIN_KEY)} function touchBudget(){clearTimeout(budgetTimer);if(budgetUnlocked)budgetTimer=setTimeout(lockBudget,5*60*1000)}
-async function unlockBudget(){budgetUnlocked=true;$("budgetLock").hidden=true;$("budgetContent").hidden=false;touchBudget();await loadBudgetData()}
-function lockBudget(){budgetUnlocked=false;clearTimeout(budgetTimer);$("budgetContent").hidden=true;$("budgetLock").hidden=false;budgetEntries=[];$("budgetFlow").innerHTML="";$("budgetTableBody").innerHTML=""}
+async function unlockBudget(){budgetUnlocked=true;$("budgetLock").hidden=true;$("budgetContent").hidden=false;touchBudget();await loadBudgetData();await loadEmailQueue("finance")}
+function lockBudget(){budgetUnlocked=false;clearTimeout(budgetTimer);$("budgetContent").hidden=true;$("budgetLock").hidden=false;budgetEntries=[];emailQueues.finance=[];emailQueuePages.finance={cursor:null,exhausted:false,loading:false,loaded:false};emailQueueMessages.finance="";renderEmailQueue("finance");$("budgetFlow").innerHTML="";$("budgetTableBody").innerHTML=""}
 async function setupBudgetPin(pin){const salt=crypto.getRandomValues(new Uint8Array(16)),hash=await hashPin(pin,salt);localStorage.setItem(BUDGET_PIN_KEY,JSON.stringify({salt:bytesToB64(salt),hash}))}
 async function verifyBudgetPin(pin){const r=JSON.parse(localStorage.getItem(BUDGET_PIN_KEY)||"null");return !!r&&(await hashPin(pin,b64ToBytes(r.salt)))===r.hash}
 async function setupPasskey(){if(!window.PublicKeyCredential)throw new Error("Passkeys are not supported on this device.");const cred=await navigator.credentials.create({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),rp:{name:"Roggy Lists"},user:{id:crypto.getRandomValues(new Uint8Array(32)),name:"budget-owner",displayName:"Budget Owner"},pubKeyCredParams:[{alg:-7,type:"public-key"},{alg:-257,type:"public-key"}],authenticatorSelection:{authenticatorAttachment:"platform",userVerification:"required",residentKey:"preferred"},timeout:60000,attestation:"none"}});localStorage.setItem(BUDGET_CRED_KEY,bytesToB64(cred.rawId))}
@@ -441,7 +674,7 @@ async function loadBudgetData(){const {data:{session}}=await sb.auth.getSession(
 function budgetGroup(x){const n=(x.name||"").toLowerCase(),cat=(x.category||"").toLowerCase();if(x.entry_type==="goal"||n.includes("roth")||n.includes("401"))return "Savings";if(n.includes("toyota")||n.includes("geico")||cat.includes("transport")||cat.includes("auto")||cat.includes("insurance"))return "Auto";if(n.includes("chatgpt")||cat.includes("subscription"))return "Subscriptions";if(n.includes("rent")||n.includes("utility")||n.includes("internet")||n.includes("mediacom")||n.includes("gym")||cat.includes("housing")||cat.includes("utilities"))return "Living";return "Other"}
 function budgetModel(){const income=budgetEntries.filter(x=>x.entry_type==="income").reduce((s,x)=>s+normalizeBudgetAmount(x),0),items=budgetEntries.filter(x=>x.entry_type!=="income").map(x=>({...x,_value:normalizeBudgetAmount(x),_group:budgetGroup(x)})).filter(x=>x._value>0),allocated=items.reduce((s,x)=>s+x._value,0),left=Math.max(0,income-allocated);return{income,items,allocated,left}}
 function renderBudget(){const m=budgetModel();$("budgetIncome").textContent=money(m.income);$("budgetSpending").textContent=money(m.allocated);$("budgetAvailable").textContent=money(m.left);renderBudgetTable();renderBudgetFlow()}
-function renderBudgetTable(){const m=budgetModel(),order=["Savings","Living","Auto","Subscriptions","Other"];const rows=m.items.sort((a,b)=>order.indexOf(a._group)-order.indexOf(b._group)||b._value-a._value);$("budgetTableBody").innerHTML=rows.length?rows.map(x=>`<tr><td><span class="budget-cat cat-${x._group.toLowerCase()}">${esc(x._group)}</span></td><td>${esc(x.name)}</td><td>${money(x._value)}</td><td>${m.income?(x._value/m.income*100).toFixed(1):"0.0"}%</td></tr>`).join(""):'<tr><td colspan="4">No private budget rows synced yet.</td></tr>'}
+function renderBudgetTable(){const m=budgetModel(),order=["Savings","Living","Auto","Subscriptions","Other"];const rows=m.items.sort((a,b)=>order.indexOf(a._group)-order.indexOf(b._group)||b._value-a._value);$("budgetTableBody").innerHTML=rows.length?rows.map(x=>`<tr><td><span class="budget-cat cat-${x._group.toLowerCase()}">${esc(x._group)}</span></td><td>${esc(x.name)}</td><td>${money(x._value)}</td><td>${m.income?(x._value/m.income*100).toFixed(1):"0.0"}%</td></tr>`).join(""):'<tr><td colspan="4">No private finance rows synced yet.</td></tr>'}
 function renderBudgetFlow(){
  const root=$("budgetFlow");root.innerHTML="";const m=budgetModel();
  if(!m.income){root.innerHTML='<div class="budget-empty">Add an income baseline to build the Sankey diagram.</div>';return}
@@ -531,31 +764,37 @@ $("digestAddForm").addEventListener("submit",async e=>{
 });
 
 function setPage(page){
- const primaryPages=["home","devices","todos","buy"];
- if(primaryPages.includes(page))lastPrimaryPage=page;
- else if(page==="reminders"&&primaryPages.includes(currentPage))shelfReturnPage=currentPage;
+ if(isPrimaryPage(page))lastPrimaryPage=page;
+ else if(page==="reminders"&&isPrimaryPage(currentPage))shelfReturnPage=currentPage;
  currentPage=page;
- window.scrollTo({top:0,behavior:"instant"});document.querySelectorAll(".page-tab").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
- const special=["home","devices","drivers","reminders","todos","budget","digestibles","projects","project-detail","health","vehicle","ai"],isSpecial=special.includes(page);
- $("listsPage").hidden=isSpecial;
+ window.scrollTo({top:0,behavior:"instant"});syncPageNavigation(page);
+ const special=[...PRIMARY_PAGE_IDS.filter(pageId=>pageId!=="buy"),"drivers","reminders","budget","digestibles","projects","project-detail","health","vehicle","ai"],isSpecial=special.includes(page);
+ $("listsPage").hidden=!(["buy","groceries"].includes(page));
  special.forEach(p=>{const el=$(p==="project-detail"?"projectDetailPage":p+"Page");if(el)el.hidden=page!==p});
  $("backupBtn").style.display=isSpecial?"none":"";$("addBtn").style.display="";
- if(page==="home"){ $("pageTitle").textContent="Roggy";$("pageSubtitle").textContent="Your command center.";renderHome(); }
- else if(page==="devices"){ $("pageTitle").textContent="Devices";$("pageSubtitle").textContent="Live smart-home control.";$("addBtn").style.display="none";renderDevicesPage();loadSmartHome().catch(()=>{}) }
+ const primaryDefinition=PRIMARY_PAGE_BY_ID.get(page);
+ if(primaryDefinition){
+  $("pageTitle").textContent=primaryDefinition.title;$("pageSubtitle").textContent=primaryDefinition.subtitle;
+  if(page==="home")renderHome();
+  else if(page==="devices"){$("addBtn").style.display="none";renderDevicesPage();loadSmartHome().catch(()=>{})}
+  else if(page==="todos")loadTodos();
+  else if(page==="mail"){$("addBtn").style.display="none";loadEmailQueue("mail")}
+  else {currentView="active";document.querySelectorAll(".sub-tab").forEach(z=>z.classList.toggle("active",z.dataset.view==="active"));renderLists()}
+ }
  else if(page==="ai"){ $("pageTitle").textContent="Local AI";$("pageSubtitle").textContent="A private conversation with your PC.";$("addBtn").style.display="none"; }
  else if(page==="projects"){ $("pageTitle").textContent="Projects";$("pageSubtitle").textContent="Everything with a finish line.";renderProjects(); }
  else if(page==="health"){ $("pageTitle").textContent="Health";$("pageSubtitle").textContent="Garmin-powered wellness."; $("addBtn").style.display="none"; }
  else if(page==="vehicle"){ $("pageTitle").textContent="Vehicle";$("pageSubtitle").textContent="Maintenance and ownership."; $("addBtn").style.display="none"; }
  else if(page==="drivers"){ $("pageTitle").textContent="Bad Drivers";$("pageSubtitle").textContent="Track observations and compare demographics.";loadDrivers() }
  else if(page==="reminders"){ $("pageTitle").textContent="Reminders";$("pageSubtitle").textContent="What is coming up.";loadReminders() }
- else if(page==="todos"){ $("pageTitle").textContent="Tasks";$("pageSubtitle").textContent="Things that need doing.";loadTodos() }
  else if(page==="digestibles"){ $("pageTitle").textContent="Digestibles";$("pageSubtitle").textContent="Books, movies, and anime worth consuming.";loadDigestibles() }
- else if(page==="budget"){ $("pageTitle").textContent="Budget 🔒";$("pageSubtitle").textContent="Private financial dashboard.";$("addBtn").style.display="none";lockBudget() }
- else {currentView="active";document.querySelectorAll(".sub-tab").forEach(z=>z.classList.toggle("active",z.dataset.view==="active"));renderLists()}
+ else if(page==="budget"){ $("pageTitle").textContent="Finance";$("pageSubtitle").textContent="Private financial dashboard.";$("addBtn").style.display="none";lockBudget() }
+ else if(page==="groceries"){currentView="active";document.querySelectorAll(".sub-tab").forEach(z=>z.classList.toggle("active",z.dataset.view==="active"));renderLists()}
  $("moreToggle").checked=false;
  window.dispatchEvent(new CustomEvent("roggy-page",{detail:{page}}));
 }
-document.querySelectorAll(".page-tab").forEach(b=>b.onclick=()=>setPage(b.dataset.page));
+renderPrimaryTabs();syncPageNavigation(currentPage);
+document.querySelectorAll(".side-drawer .page-tab").forEach(b=>b.onclick=()=>setPage(b.dataset.page));
 $("remindersBackBtn").onclick=()=>setPage(shelfReturnPage||lastPrimaryPage||"home");
 document.querySelectorAll("#listsPage .sub-tab").forEach(b=>b.onclick=()=>{currentView=b.dataset.view;document.querySelectorAll("#listsPage .sub-tab").forEach(z=>z.classList.toggle("active",z===b));renderLists()});
 document.querySelectorAll(".driver-tab").forEach(b=>b.onclick=()=>{driverView=b.dataset.driverView;document.querySelectorAll(".driver-tab").forEach(z=>z.classList.toggle("active",z===b));$("driverOverview").hidden=driverView!=="overview";$("driverObservations").hidden=driverView!=="observations";renderDriverPage()});
@@ -595,9 +834,9 @@ function applyAuthSession(session){
  if(!session&&smartHomeStreamAbort)smartHomeStreamAbort.abort();
  if(!session&&smartHomeStreamRetry){clearTimeout(smartHomeStreamRetry);smartHomeStreamRetry=null}
  smartHomeControlAllowed=hasSession;smartHomeAccessToken=session?.access_token||"";
- if(!session){smartHomeLoaded=false;smartHomeUnavailable=false;smartHomeFailure=null;smartHomeState={devices:[],rooms:[],events:[],diagnostics:null};layneChatMessages=[];renderLayneChat()}
+ if(!session){smartHomeLoaded=false;smartHomeUnavailable=false;smartHomeFailure=null;smartHomeState={devices:[],rooms:[],events:[],diagnostics:null};layneChatMessages=[];laynePendingAction=null;layneSessionId=null;renderLayneChat()}
  setPrivacyGate(session);
- if(authIdentityChanged){reminderSessionVersion++;reminders=[];remindersLoaded=false;monitorEmails=[];monitorEmailMessage=session?"Loading monitored email…":"Sign in to view monitored email.";renderImportantEmails()}
+ if(authIdentityChanged){reminderSessionVersion++;emailQueueSessionVersion++;reminders=[];remindersLoaded=false;monitorEmails=[];monitorEmailMessage=session?"Loading monitored email…":"Sign in to view monitored email.";emailQueues={dashboard:[],finance:[],mail:[]};emailQueuePages={dashboard:{cursor:null,exhausted:false,loading:false,loaded:false},finance:{cursor:null,exhausted:false,loading:false,loaded:false},mail:{cursor:null,exhausted:false,loading:false,loaded:false}};emailQueuesLoaded=false;emailQueueMessages={dashboard:session?"Loading monitored email…":"Sign in to view monitored email.",finance:session?"Loading financial email…":"Sign in to view financial email.",mail:session?"Loading mail…":"Sign in to view mail."};renderImportantEmails();renderEmailQueue("finance");renderEmailQueue("mail");if(session)loadEmailQueues().catch(()=>{})}
  window.dispatchEvent(new CustomEvent("roggy-auth",{detail:{signedIn:hasSession}}));
  if(currentPage==="home"&&(authIdentityChanged||!smartHomeLoaded))renderHome();
  if(currentPage==="devices"&&(authIdentityChanged||!smartHomeLoaded)){renderDevicesPage();if(session)loadSmartHome({silent:true}).catch(()=>{})}
@@ -606,32 +845,32 @@ function applyAuthSession(session){
 async function finishOAuthRedirect(){const p=new URLSearchParams(location.search),code=p.get("code"),err=p.get("error_description")||p.get("error");if(err){$("status").textContent="Sign-in error: "+err;history.replaceState({},document.title,location.pathname);return}if(!code)return;const {data,error}=await sb.auth.exchangeCodeForSession(code);history.replaceState({},document.title,location.pathname);if(error){$("status").textContent="Sign-in error: "+error.message;applyAuthSession(null);return}applyAuthSession(data.session);$("status").textContent=""}
 async function updateAuth(){const {data:{session},error}=await sb.auth.getSession();if(error)showErr(error);if(session&&!isOwnerSession(session)){await sb.auth.signOut({scope:"local"});applyAuthSession(null);return null}applyAuthSession(session);return session}
 $("authBtn").onclick=async()=>{const {data:{session}}=await sb.auth.getSession();if(session){const {error}=await sb.auth.signOut({scope:"local"});if(error)showErr(error);else applyAuthSession(null);return}const {data,error}=await sb.auth.signInWithOAuth({provider:"github",options:{redirectTo:"https://garoggy.github.io/roggy-buy-list/",skipBrowserRedirect:true}});if(error){showErr(error);return}if(data?.url)window.location.assign(data.url);else $("status").textContent="Sign-in error: Supabase did not return an authorization URL."};
-sb.auth.onAuthStateChange((event,session)=>{if(session&&!isOwnerSession(session)){setTimeout(()=>sb.auth.signOut({scope:"local"}),0);applyAuthSession(null);return}applyAuthSession(session);if(!session)return;setTimeout(()=>{loadLists();if(currentPage==="drivers")loadDrivers();if(currentPage==="reminders")loadReminders();if(typeof loadHomeTasks==="function")loadHomeTasks();if(currentPage==="budget"&&budgetUnlocked)loadBudgetData();if(currentPage==="digestibles")loadDigestibles()},0)});
+sb.auth.onAuthStateChange((event,session)=>{if(session&&!isOwnerSession(session)){setTimeout(()=>sb.auth.signOut({scope:"local"}),0);applyAuthSession(null);return}applyAuthSession(session);if(!session)return;setTimeout(()=>{loadLists();loadEmailQueues().catch(()=>{});if(currentPage==="drivers")loadDrivers();if(currentPage==="reminders")loadReminders();if(typeof loadHomeTasks==="function")loadHomeTasks();if(currentPage==="budget"&&budgetUnlocked)loadBudgetData();if(currentPage==="digestibles")loadDigestibles()},0)});
 
 
 
 /* Command center + personal OS v35 */ let homeDateTimer=null;const HOME_DATE_OPTIONS={weekday:"long",month:"long",day:"numeric"};function refreshHomeDate(now=new Date()){const el=$("homeDate");if(el)el.textContent=now.toLocaleDateString(undefined,HOME_DATE_OPTIONS);if(homeDateTimer)clearTimeout(homeDateTimer);const nextLocalMidnight=new Date(now);nextLocalMidnight.setHours(24,0,0,0);homeDateTimer=setTimeout(()=>{refreshHomeDate();if(currentPage==="home")renderHome()},Math.max(1000,nextLocalMidnight-now+50))}function refreshHomeForCurrentDate(){const previousDate=$("homeDate")?.textContent;refreshHomeDate();if(currentPage==="home"&&previousDate!==$("homeDate")?.textContent)renderHome()}
 function renderHome(){
  refreshHomeDate();
- const now=new Date(),tomorrow=new Date(now);tomorrow.setHours(24,0,0,0);
- const allTodays=(reminders||[]).filter(x=>{const d=reminderStart(x),finish=reminderEnd(x);return d<tomorrow&&(finish>localDay(now)||d>=localDay(now))});
- const todays=allTodays.slice(0,4);
+ $("homeDate").textContent=new Date().toLocaleDateString([],{weekday:"long",month:"long",day:"numeric"});
+ const today=reminderTodayKey(),allTodays=(reminders||[]).filter(x=>{const key=reminderDayKey(x);return key===today||(x.source!=="google_calendar"&&key<today)}).sort(reminderCompare),todays=allTodays.slice(0,4);
  const taskCount=(typeof todos!=="undefined"?todos:[]).filter(x=>x.status==="open").length;
  ensureBuiltinProjects();const projectCount=projects.filter(x=>!["Done","Completed"].includes(x.status)).length;
  if($("focusTaskCount"))$("focusTaskCount").textContent=String(taskCount);
  if($("focusTodayCount"))$("focusTodayCount").textContent=String(allTodays.length);
  if($("focusProjectCount"))$("focusProjectCount").textContent=String(projectCount);
- $("homeTimeline").innerHTML='<div class="section-head"><div><span class="eyebrow">TODAY</span><h3>Next up</h3></div><button class="text-action" data-home-jump="reminders">See all</button></div>'+(todays.length?todays.map(x=>'<button class="timeline-row" data-home-jump="reminders"><span>'+esc(x.all_day?"All day":new Date(x.start_at).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}))+'</span><b>'+esc(x.title)+'</b></button>').join(""):'<div class="quiet-state">Nothing demanding your attention right now.</div>');
+ $("homeTimeline").innerHTML='<div class="section-head"><div><span class="eyebrow">TODAY</span><h3>Next up</h3></div><button class="text-action" data-home-jump="reminders">See all</button></div>'+(todays.length?todays.map(x=>'<button class="timeline-row" data-home-jump="reminders"><span>'+esc(reminderTimeRange(x))+'</span><b>'+esc(x.title)+'</b></button>').join(""):'<div class="quiet-state">Nothing demanding your attention right now.</div>');
  renderImportantEmails();
+ if(!emailQueuesLoaded)loadEmailQueues().catch(()=>{});
  renderHomeDeviceStatus();
  if(!smartHomeLoaded)loadSmartHome({silent:true}).catch(()=>{});
  document.querySelectorAll("[data-home-jump]").forEach(b=>b.onclick=()=>setPage(b.dataset.homeJump));
  document.querySelectorAll("[data-focus-jump]").forEach(b=>b.onclick=()=>setPage(b.dataset.focusJump));
  if(!remindersLoaded){remindersLoaded=true;loadReminders().then(()=>{if(currentPage==="home")renderHome()}).catch(()=>{})}
 }
-document.addEventListener("visibilitychange",()=>{if(!document.hidden)refreshHomeForCurrentDate()});window.addEventListener("focus",refreshHomeForCurrentDate);function renderImportantEmails(){
- if(!$("importantEmailList"))return;
- $("importantEmailList").innerHTML=monitorEmails.length?monitorEmails.map(x=>'<a class="important-email" href="https://mail.google.com/mail/u/0/#all/'+encodeURIComponent(x.source_message_id)+'" target="_blank" rel="noopener noreferrer"><span class="email-kind">'+esc(x.category)+'</span><div><b>'+esc(x.subject)+'</b><small>'+esc(x.sender)+' · '+esc(x.summary)+'</small><small>'+esc(x.reason||"")+'</small></div><time>'+esc(new Date(x.timestamp).toLocaleDateString())+'</time></a>').join(""):'<div class="quiet-state">'+esc(monitorEmailMessage)+'</div>';
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)refreshHomeForCurrentDate()});window.addEventListener("focus",refreshHomeForCurrentDate);
+function renderImportantEmails(){
+ renderEmailQueue("dashboard");
 }
 const BUILTIN_PROJECTS={
 "Smart Home":{
@@ -767,57 +1006,77 @@ document.addEventListener("keydown",e=>{
 });
 
 
-/* Primary-page live panorama navigation v80 */
-const PRIMARY_SWIPE_PAGES=["home","devices","todos","buy"];
+/* Primary-page live panorama navigation. PRIMARY_PAGES is the only source of
+   page order/count; all gesture and background math is derived from it. */
+const SWIPE_COMMIT_RATIO=.25,SWIPE_FAST_DISTANCE_RATIO=.14,SWIPE_PARALLAX=.78,SWIPE_EDGE_RESISTANCE=.16,SWIPE_GLIDE_MS=420;
 let swipeStartX=0,swipeStartY=0,swipeLastX=0,swipeTracking=false,swipeAxis=null,swipeNeighbor=null,swipeNeighborPage=null,swipePointerId=null,swipeStartTime=0,swipeLastTime=0,swipeVelocityX=0;
 let swipeVisualCurrent=null,swipeSettleTimer=null;
-function ensureSwipeHUD(){
- if(document.querySelector(".swipe-hud"))return;
- const hud=document.createElement("div");hud.className="swipe-hud";hud.setAttribute("aria-hidden","true");
- hud.innerHTML='<span class="swipe-edge swipe-edge-left">‹</span><div class="swipe-dots">'+PRIMARY_SWIPE_PAGES.map((p,n)=>'<i data-swipe-dot="'+p+'" style="--dot-index:'+n+'"></i>').join("")+'</div><span class="swipe-edge swipe-edge-right">›</span><div class="swipe-progress-track"><b></b></div>';
- const tabs=document.querySelector(".page-tabs");if(tabs)tabs.appendChild(hud);updateSwipeHUD(currentPage);
+function swipeViewport(){
+ const page=primaryPageElement(currentPage),rect=page?.getBoundingClientRect(),root=document.documentElement;
+ return {width:Math.max(1,Math.round(root.clientWidth||document.body?.clientWidth||rect?.width||1)),height:Math.max(1,Math.round(window.visualViewport?.height||root.clientHeight||document.body?.clientHeight||1))};
 }
-function updateSwipeHUD(page=currentPage,progress=0,direction=0){
- const idx=PRIMARY_SWIPE_PAGES.indexOf(page);
- document.querySelectorAll("[data-swipe-dot]").forEach((d,n)=>d.classList.toggle("active",n===idx));
- document.documentElement.style.setProperty("--swipe-progress",Math.max(0,Math.min(1,progress)).toFixed(3));
- document.documentElement.style.setProperty("--swipe-dir",direction);
- document.documentElement.dataset.swipeFrom=page;
- document.documentElement.dataset.swipeDirection=direction>0?"next":direction<0?"prev":"idle";
- document.documentElement.classList.toggle("swipe-ready",progress>=1);
+function panoramaElement(){return document.querySelector(".mountain-panorama")}
+function ensurePanoramaTravel(){
+ const image=panoramaElement();if(!image)return;
+ const viewport=swipeViewport(),height=image.getBoundingClientRect().height||viewport.height*1.18,naturalRatio=image.naturalWidth&&image.naturalHeight?image.naturalWidth/image.naturalHeight:1.8;
+ const pageTravelRatio=Math.min(.8,Math.max(.35,(PRIMARY_PAGES.length-1)*.18)),minimumTravelWidth=viewport.width*(1+pageTravelRatio),naturalWidth=naturalRatio*height;
+ image.style.setProperty("width",Math.max(minimumTravelWidth,naturalWidth).toFixed(1)+"px","important");
 }
-function swipeBlockedTarget(t){return !!t.closest("dialog,input,textarea,select,a,[contenteditable=true],.fab,.layne-chat-fab,.side-drawer")}
-function primaryPageEl(page){
- if(page==="home")return $("homePage");if(page==="devices")return $("devicesPage");if(page==="todos")return $("todosPage");if(page==="buy")return $("listsPage");return null;
+function panoramaMetrics(){
+ const image=panoramaElement(),viewport=swipeViewport();ensurePanoramaTravel();const rect=image?.getBoundingClientRect(),imageWidth=rect?.width||image?.naturalWidth||viewport.width,imageHeight=rect?.height||viewport.height;
+ return {viewportWidth:viewport.width,imageWidth:Math.max(viewport.width,imageWidth),maxOffset:Math.max(0,imageWidth-viewport.width),maxVerticalOffset:Math.max(0,imageHeight-viewport.height)};
 }
-function mountainPagePosition(page=currentPage){
- const idx=PRIMARY_SWIPE_PAGES.indexOf(page);return idx<0?0:idx;
+function mountainPagePosition(page=currentPage){const idx=primaryPageIndex(page);return idx<0?0:idx}
+function mountainPageOffset(page=currentPage){
+ const count=PRIMARY_PAGES.length,metrics=panoramaMetrics();
+ return count<2?0:-(mountainPagePosition(page)/(count-1))*metrics.maxOffset;
 }
 let mountainScrollY=window.scrollY||0;
 function setMountainView(page=currentPage,dragPx=0){
- const idx=mountainPagePosition(page),viewportW=window.innerWidth||1,viewportH=window.innerHeight||1;
- // Use a modest slice of the panorama per page. Drag interpolation exactly matches
- // the eventual page position, so releasing a swipe never makes the image jump.
- const pageStep=viewportW*.28;
- const dragProgress=Math.max(-1.15,Math.min(1.15,dragPx/viewportW));
- const x=-(idx*pageStep)+(dragProgress*pageStep);
- // Vertical movement is intentionally slower than content scrolling.
- const y=-Math.min(Math.max(0,mountainScrollY)*.24,viewportH*.34);
+ const viewport=swipeViewport(),metrics=panoramaMetrics(),idx=primaryPageIndex(page);let x=mountainPageOffset(page);
+ if(idx>=0&&dragPx){
+  const direction=dragPx<0?1:-1,targetIdx=idx+direction;
+  if(targetIdx>=0&&targetIdx<PRIMARY_PAGES.length){
+   const target=PRIMARY_PAGES[targetIdx].id,progress=Math.min(1,Math.abs(dragPx)/viewport.width),parallaxProgress=progress*(SWIPE_PARALLAX+(1-SWIPE_PARALLAX)*progress);
+   x=x+(mountainPageOffset(target)-x)*parallaxProgress;
+  }
+ }
+ x=Math.max(-metrics.maxOffset,Math.min(0,x));
+ const y=-Math.min(Math.max(0,mountainScrollY)*.24,metrics.maxVerticalOffset);
  document.documentElement.style.setProperty("--panorama-x",x.toFixed(1)+"px");
  document.documentElement.style.setProperty("--panorama-y",y.toFixed(1)+"px");
 }
+function ensureSwipeHUD(){
+ if(document.querySelector(".swipe-hud"))return;
+ const hud=document.createElement("div");hud.className="swipe-hud";hud.setAttribute("aria-hidden","true");
+ hud.innerHTML='<span class="swipe-edge swipe-edge-left">‹</span><div class="swipe-dots">'+PRIMARY_PAGES.map((page,index)=>`<i data-swipe-dot="${page.id}" style="--dot-index:${index}" aria-hidden="true"></i>`).join("")+'</div><span class="swipe-edge swipe-edge-right">›</span><div class="swipe-progress-track"><b></b></div>';
+ const tabs=document.querySelector(".page-tabs");if(tabs)tabs.appendChild(hud);updateSwipeHUD(currentPage);
+}
+function updateSwipeHUD(page=currentPage,progress=0,direction=0){
+ const idx=primaryPageIndex(page),activeIdx=idx>=0?idx:primaryPageIndex(lastPrimaryPage);
+ document.querySelectorAll("[data-swipe-dot]").forEach((dot,index)=>dot.classList.toggle("active",index===activeIdx));
+ document.documentElement.style.setProperty("--swipe-progress",Math.max(0,Math.min(1,progress)).toFixed(3));
+ document.documentElement.style.setProperty("--swipe-dir",direction);
+ document.documentElement.dataset.swipeFrom=idx>=0?page:lastPrimaryPage;
+ document.documentElement.dataset.swipeDirection=direction>0?"next":direction<0?"prev":"idle";
+ document.documentElement.dataset.swipeAtStart=activeIdx===0?"true":"false";
+ document.documentElement.dataset.swipeAtEnd=activeIdx===PRIMARY_PAGES.length-1?"true":"false";
+ document.documentElement.classList.toggle("swipe-ready",progress>=1);
+}
+function swipeBlockedTarget(t){return !!t.closest("dialog,input,textarea,select,a,[contenteditable=true],.fab,.layne-chat-fab,.side-drawer")}
 function clearSwipeStyles(){
- [swipeVisualCurrent,primaryPageEl(currentPage),swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating");el.style.removeProperty("--panel-x");el.style.removeProperty("--swipe-opacity");});
+ [swipeVisualCurrent,primaryPageElement(currentPage),swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating","swipe-land-lock");el.style.removeProperty("--panel-x");el.style.removeProperty("--swipe-opacity")});
  if(swipeNeighbor&&swipeNeighborPage!==currentPage)swipeNeighbor.hidden=true;
  swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-swiping","is-settling","swipe-ready");document.documentElement.dataset.swipeDirection="idle";
  updateSwipeHUD(currentPage,0,0);
 }
 function prepareSwipeNeighbor(direction){
- const idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),next=idx+direction;
- if(next<0||next>=PRIMARY_SWIPE_PAGES.length)return false;
- swipeNeighborPage=PRIMARY_SWIPE_PAGES[next];swipeNeighbor=primaryPageEl(swipeNeighborPage);
+ const idx=primaryPageIndex(currentPage),next=idx+direction;
+ if(idx<0||next<0||next>=PRIMARY_PAGES.length)return false;
+ swipeNeighborPage=PRIMARY_PAGES[next].id;swipeNeighbor=primaryPageElement(swipeNeighborPage);
  if(!swipeNeighbor)return false;
- if(swipeNeighborPage==="devices"){renderDevicesPage();loadSmartHome({silent:true}).catch(()=>{})}
+ if(swipeNeighborPage==="home")renderHome();
+ else if(swipeNeighborPage==="devices"){renderDevicesPage();loadSmartHome({silent:true}).catch(()=>{})}
  else if(swipeNeighborPage==="todos")loadTodos();
  else if(swipeNeighborPage==="buy"){currentView="active";renderLists()}
  swipeNeighbor.hidden=false;swipeNeighbor.classList.add("swipe-panel","swipe-neighbor");
@@ -826,93 +1085,63 @@ function prepareSwipeNeighbor(direction){
 function positionSwipePanels(dx){
  const tabs=document.querySelector(".page-tabs"),headerBottom=(tabs?.getBoundingClientRect().bottom||document.querySelector("header")?.getBoundingClientRect().bottom||0)+(parseFloat(getComputedStyle(tabs||document.documentElement).marginBottom)||0);
  document.documentElement.style.setProperty("--swipe-page-top",Math.max(0,headerBottom)+"px");
- const w=window.innerWidth||1,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,current=primaryPageEl(currentPage),progress=Math.min(1,Math.abs(dx)/(w*.25)); swipeVisualCurrent=current;updateSwipeHUD(currentPage,progress,direction);
- if(idx===0&&direction===-1){
-   document.documentElement.classList.add("is-swiping");if(current){current.classList.add("swipe-panel");current.style.setProperty("--panel-x",Math.min(dx,w*.12)+"px")}
-   setMountainView(currentPage,Math.min(dx,w*.12));return;
+ const {width}=swipeViewport(),idx=primaryPageIndex(currentPage),direction=dx<0?1:-1,current=primaryPageElement(currentPage),progress=Math.min(1,Math.abs(dx)/(width*SWIPE_COMMIT_RATIO));
+ if(idx<0||!current)return;
+ swipeVisualCurrent=current;updateSwipeHUD(currentPage,progress,direction);
+ const atEdge=(idx===0&&direction<0)||(idx===PRIMARY_PAGES.length-1&&direction>0);
+ if(atEdge){
+  document.documentElement.classList.add("is-swiping");current.classList.add("swipe-panel");current.style.setProperty("--panel-x",(dx*SWIPE_EDGE_RESISTANCE)+"px");current.style.setProperty("--swipe-opacity","1");setMountainView(currentPage,0);return;
  }
- if(idx===PRIMARY_SWIPE_PAGES.length-1&&direction===1){
-   if(current){current.classList.remove("swipe-panel");current.style.removeProperty("--panel-x")}setMountainView(currentPage,0);return;
- }
- if(!swipeNeighbor||swipeNeighborPage!==PRIMARY_SWIPE_PAGES[idx+direction]){
-   if(swipeNeighbor&&swipeNeighborPage!==currentPage)swipeNeighbor.hidden=true;
-   swipeNeighbor=null;swipeNeighborPage=null;if(!prepareSwipeNeighbor(direction))return;
+ if(!swipeNeighbor||swipeNeighborPage!==PRIMARY_PAGES[idx+direction].id){
+  if(swipeNeighbor&&swipeNeighborPage!==currentPage)swipeNeighbor.hidden=true;
+  swipeNeighbor=null;swipeNeighborPage=null;if(!prepareSwipeNeighbor(direction))return;
  }
  document.documentElement.classList.add("is-swiping");
- if(current){current.classList.add("swipe-panel");current.style.setProperty("--panel-x",dx+"px");current.style.setProperty("--swipe-opacity",(1-Math.min(.08,Math.abs(dx)/w*.08)).toFixed(3))}
- if(swipeNeighbor){swipeNeighbor.style.setProperty("--panel-x",(dx+direction*w)+"px");swipeNeighbor.style.setProperty("--swipe-opacity",(.94+Math.min(.06,Math.abs(dx)/w*.06)).toFixed(3))}
+ current.classList.add("swipe-panel");current.style.setProperty("--panel-x",dx+"px");current.style.setProperty("--swipe-opacity",(1-Math.min(.08,Math.abs(dx)/width*.08)).toFixed(3));
+ if(swipeNeighbor){swipeNeighbor.style.setProperty("--panel-x",(dx+direction*width)+"px");swipeNeighbor.style.setProperty("--swipe-opacity",(.94+Math.min(.06,Math.abs(dx)/width*.06)).toFixed(3))}
  setMountainView(currentPage,dx);
 }
 function settleSwipe(commit,dx){
- const current=primaryPageEl(currentPage),w=window.innerWidth||1,direction=dx<0?1:-1;
- // Finger is up: leave drag mode BEFORE enabling transitions. Drag mode intentionally
- // disables transitions, so keeping it here made every release teleport.
+ const current=primaryPageElement(currentPage),{width}=swipeViewport(),direction=dx<0?1:-1,idx=primaryPageIndex(currentPage),targetPage=idx>=0&&idx+direction>=0&&idx+direction<PRIMARY_PAGES.length?PRIMARY_PAGES[idx+direction].id:null,canCommit=!!(commit&&swipeNeighbor&&swipeNeighborPage===targetPage);
  document.documentElement.classList.remove("is-swiping");document.documentElement.classList.add("is-settling");
  swipeVisualCurrent=current;[current,swipeNeighbor].filter(Boolean).forEach(el=>el.classList.add("swipe-animating"));
- if(commit&&swipeNeighbor){
-   const target=swipeNeighborPage;
-   // Logical navigation commits immediately on finger release so another swipe can
-   // target the next page without waiting for the visual glide to finish.
-   currentPage=target;updateSwipeHUD(target,1,direction);
-   document.querySelectorAll(".page-tab").forEach(b=>b.classList.toggle("active",b.dataset.page===target));
-   window.dispatchEvent(new CustomEvent("roggy-page",{detail:{page:target}}));
-   // Keep the old/new DOM panels intact while their 420ms visual transition finishes.
-   requestAnimationFrame(()=>requestAnimationFrame(()=>{
-     if(current)current.style.setProperty("--panel-x",(-direction*w)+"px");
-     swipeNeighbor.style.setProperty("--panel-x","0px");
-     setMountainView(target,0);
-   }));
-   clearTimeout(swipeSettleTimer);swipeSettleTimer=setTimeout(()=>{
-     const landed=swipeNeighbor;
-     // The temporary incoming panel is fixed during the glide. Before removing that
-     // shell, pin the real page to the exact same viewport position for one paint.
-     // This prevents its normal document-flow top from producing a downward landing hop.
-     if(landed){
-       const r=landed.getBoundingClientRect();
-       document.documentElement.style.setProperty("--swipe-land-top",r.top+"px");
-       landed.classList.add("swipe-land-lock");
-     }
-     if(current&&current!==landed)current.hidden=true;
-     if(landed){landed.classList.remove("swipe-neighbor","swipe-animating");landed.style.removeProperty("--panel-x");landed.style.removeProperty("--swipe-opacity")}
-     swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;
-     document.documentElement.classList.remove("is-settling","is-swiping","swipe-ready");
-     // Update state without setPage()'s scrollTo(0,0), which was causing a second layout jump.
-     document.querySelectorAll(".page-tab").forEach(b=>b.classList.toggle("active",b.dataset.page===target));
-     requestAnimationFrame(()=>requestAnimationFrame(()=>{
-       if(landed){landed.classList.remove("swipe-panel","swipe-land-lock");landed.style.removeProperty("--panel-x")}
-       document.documentElement.style.removeProperty("--swipe-land-top");
-       updateSwipeHUD(target,0,0);setMountainView(target,0);
-     }));
-   },420);
+ if(canCommit){
+  const target=swipeNeighborPage;currentPage=target;lastPrimaryPage=target;syncPageNavigation(target);updateSwipeHUD(target,1,direction);window.dispatchEvent(new CustomEvent("roggy-page",{detail:{page:target}}));
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+   if(current)current.style.setProperty("--panel-x",(-direction*width)+"px");
+   if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x","0px");
+   setMountainView(target,0);
+  }));
+  clearTimeout(swipeSettleTimer);swipeSettleTimer=setTimeout(()=>{
+   const landed=swipeNeighbor;
+   if(landed){const r=landed.getBoundingClientRect();document.documentElement.style.setProperty("--swipe-land-top",r.top+"px");landed.classList.add("swipe-land-lock")}
+   if(current&&current!==landed)current.hidden=true;
+   if(landed){landed.classList.remove("swipe-neighbor","swipe-animating");landed.style.removeProperty("--panel-x");landed.style.removeProperty("--swipe-opacity")}
+   swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-settling","is-swiping","swipe-ready");syncPageNavigation(target);
+   requestAnimationFrame(()=>requestAnimationFrame(()=>{if(landed)landed.classList.remove("swipe-panel","swipe-land-lock");document.documentElement.style.removeProperty("--swipe-land-top");updateSwipeHUD(target,0,0);setMountainView(target,0)}));
+  },SWIPE_GLIDE_MS);
  }else{
-   updateSwipeHUD(currentPage,0,0);
-   requestAnimationFrame(()=>requestAnimationFrame(()=>{
-     if(current)current.style.setProperty("--panel-x","0px");
-     if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x",(direction*w)+"px");
-     setMountainView(currentPage,0);
-   }));
-   clearTimeout(swipeSettleTimer);swipeSettleTimer=setTimeout(clearSwipeStyles,520);
+  updateSwipeHUD(currentPage,0,0);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{if(current)current.style.setProperty("--panel-x","0px");if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x",(direction*width)+"px");setMountainView(currentPage,0)}));
+  clearTimeout(swipeSettleTimer);swipeSettleTimer=setTimeout(clearSwipeStyles,SWIPE_GLIDE_MS+80);
  }
 }
 function finishSwipe(){
  if(!swipeTracking)return;
- const dx=swipeLastX-swipeStartX,idx=PRIMARY_SWIPE_PAGES.indexOf(currentPage),direction=dx<0?1:-1,threshold=(window.innerWidth||1)*.25,fastIntent=Math.abs(swipeVelocityX)>.72&&Math.abs(dx)>(window.innerWidth||1)*.14;
+ const dx=swipeLastX-swipeStartX,{width}=swipeViewport(),idx=primaryPageIndex(currentPage),direction=dx<0?1:-1,threshold=width*SWIPE_COMMIT_RATIO,fastIntent=Math.abs(swipeVelocityX)>.72&&Math.abs(dx)>width*SWIPE_FAST_DISTANCE_RATIO;
  swipeTracking=false;swipePointerId=null;
- if(swipeAxis==="x"&&idx===0&&direction===-1){
-   const open=Math.abs(dx)>=threshold;clearSwipeStyles();setMountainView(currentPage,0);if(open)$("moreToggle").checked=true;
- }else if(swipeAxis==="x"&&idx===PRIMARY_SWIPE_PAGES.length-1&&direction===1){
-   clearSwipeStyles();setMountainView(currentPage,0);
- }else if(swipeAxis==="x")settleSwipe(Math.abs(dx)>=threshold||fastIntent,dx);
- else{clearSwipeStyles();setMountainView(currentPage,0)}
+ if(swipeAxis==="x"){
+  const atEdge=(idx===0&&direction<0)||(idx===PRIMARY_PAGES.length-1&&direction>0),commit=!atEdge&&(Math.abs(dx)>=threshold||fastIntent);
+  settleSwipe(commit,dx);
+ }else{clearSwipeStyles();setMountainView(currentPage,0)}
  swipeAxis=null;
 }
 function beginPrimarySwipe(x,y,target,pointerId=null){
- if(swipeBlockedTarget(target)||!PRIMARY_SWIPE_PAGES.includes(currentPage))return false;
+ if(swipeBlockedTarget(target)||!isPrimaryPage(currentPage))return false;
  if(document.documentElement.classList.contains("is-settling")){
-   clearTimeout(swipeSettleTimer);
-   [swipeVisualCurrent,swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating");el.style.removeProperty("--panel-x")});
-   document.querySelectorAll("#homePage,#devicesPage,#todosPage,#listsPage").forEach(el=>el.hidden=el!==primaryPageEl(currentPage));
-   swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-settling");
+   clearTimeout(swipeSettleTimer);[swipeVisualCurrent,swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating","swipe-land-lock");el.style.removeProperty("--panel-x");el.style.removeProperty("--swipe-opacity")});
+   document.querySelectorAll(".primary-page").forEach(el=>el.hidden=el!==primaryPageElement(currentPage));
+   swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-settling");syncPageNavigation(currentPage);
  }
  clearSwipeStyles();swipeStartX=swipeLastX=x;swipeStartY=y;swipeStartTime=swipeLastTime=performance.now();swipeVelocityX=0;swipeTracking=true;swipeAxis=null;swipePointerId=pointerId;return true;
 }
@@ -923,34 +1152,18 @@ function movePrimarySwipe(x,y){
  if(swipeAxis!=="x")return false;
  const now=performance.now(),dt=Math.max(1,now-swipeLastTime);swipeVelocityX=(swipeVelocityX*.58)+(((x-swipeLastX)/dt)*.42);swipeLastTime=now;swipeLastX=x;positionSwipePanels(dx);return true;
 }
-// Native touch events are more reliable on iOS when a swipe begins over tab/button surfaces.
-document.addEventListener("touchstart",e=>{
- if(e.touches.length!==1)return;
- const t=e.touches[0];beginPrimarySwipe(t.clientX,t.clientY,e.target,"touch");
-},{passive:true});
-document.addEventListener("touchmove",e=>{
- if(!swipeTracking||swipePointerId!=="touch"||e.touches.length!==1)return;
- const t=e.touches[0];if(movePrimarySwipe(t.clientX,t.clientY))e.preventDefault();
-},{passive:false});
+document.addEventListener("touchstart",e=>{if(e.touches.length!==1)return;const t=e.touches[0];beginPrimarySwipe(t.clientX,t.clientY,e.target,"touch")},{passive:true});
+document.addEventListener("touchmove",e=>{if(!swipeTracking||swipePointerId!=="touch"||e.touches.length!==1)return;const t=e.touches[0];if(movePrimarySwipe(t.clientX,t.clientY))e.preventDefault()},{passive:false});
 document.addEventListener("touchend",()=>{if(swipeTracking&&swipePointerId==="touch")finishSwipe()},{passive:true});
 document.addEventListener("touchcancel",()=>{if(swipeTracking&&swipePointerId==="touch"){swipeTracking=false;swipeAxis=null;swipePointerId=null;settleSwipe(false,0)}},{passive:true});
-// Pointer handling remains for desktop mouse/trackpad testing, but touch is handled above.
-document.addEventListener("pointerdown",e=>{
- if(e.pointerType!=="mouse"||e.button!==0)return;
- beginPrimarySwipe(e.clientX,e.clientY,e.target,e.pointerId);
-},{passive:true});
-document.addEventListener("pointermove",e=>{
- if(!swipeTracking||e.pointerType!=="mouse"||e.pointerId!==swipePointerId)return;
- if(movePrimarySwipe(e.clientX,e.clientY))e.preventDefault();
-},{passive:false});
+document.addEventListener("pointerdown",e=>{if(e.pointerType!=="mouse"||e.button!==0)return;beginPrimarySwipe(e.clientX,e.clientY,e.target,e.pointerId)},{passive:true});
+document.addEventListener("pointermove",e=>{if(!swipeTracking||e.pointerType!=="mouse"||e.pointerId!==swipePointerId)return;if(movePrimarySwipe(e.clientX,e.clientY))e.preventDefault()},{passive:false});
 document.addEventListener("pointerup",e=>{if(swipeTracking&&e.pointerType==="mouse"&&e.pointerId===swipePointerId)finishSwipe()},{passive:true});
 document.addEventListener("pointercancel",e=>{if(swipeTracking&&e.pointerType==="mouse"&&e.pointerId===swipePointerId){swipeTracking=false;swipeAxis=null;swipePointerId=null;settleSwipe(false,0)}},{passive:true});
 window.addEventListener("roggy-page",e=>setMountainView(e.detail.page,0));
-ensureSwipeHUD();setMountainView(currentPage,0);
-window.addEventListener("resize",()=>setMountainView(currentPage,0));
+ensureSwipeHUD();syncPageNavigation(currentPage);setMountainView(currentPage,0);
+panoramaElement()?.addEventListener("load",()=>setMountainView(currentPage,0));
+function refreshSwipeGeometry(){if(swipeTracking&&swipeAxis==="x")positionSwipePanels(swipeLastX-swipeStartX);else setMountainView(currentPage,0)}
+window.addEventListener("resize",refreshSwipeGeometry);window.visualViewport?.addEventListener("resize",refreshSwipeGeometry);
 let mountainScrollRAF=0;
-window.addEventListener("scroll",()=>{
- mountainScrollY=window.scrollY||document.documentElement.scrollTop||0;
- if(mountainScrollRAF)return;
- mountainScrollRAF=requestAnimationFrame(()=>{mountainScrollRAF=0;if(!swipeTracking)setMountainView(currentPage,0)});
-},{passive:true});
+window.addEventListener("scroll",()=>{mountainScrollY=window.scrollY||document.documentElement.scrollTop||0;if(mountainScrollRAF)return;mountainScrollRAF=requestAnimationFrame(()=>{mountainScrollRAF=0;if(!swipeTracking)setMountainView(currentPage,0)})},{passive:true});

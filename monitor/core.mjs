@@ -22,7 +22,10 @@ export async function request(url, options = {}, fetcher = fetch) {
       terminal: [400, 401, 403].includes(response.status) });
   }
   if (response.status === 204) return null;
-  try { return await response.json(); } catch { throw new MonitorError('INVALID_RESPONSE'); }
+  try {
+    const body = await response.text();
+    return body.trim() ? JSON.parse(body) : null;
+  } catch { throw new MonitorError('INVALID_RESPONSE'); }
 }
 export function config(env = process.env) {
   for (const key of ['SUPABASE_URL', 'SUPABASE_SECRET_KEY', 'MONITOR_USER_ID']) {
@@ -55,11 +58,32 @@ export class Store {
       if (page.length < 500) return result;
     }
   }
+  async upsertEvents(source, events) {
+    if (!source?.id || !Array.isArray(events) || !events.length) return 0;
+    const rows = events.map(event => ({ ...event, user_id: this.env.MONITOR_USER_ID, source_id: source.id,
+      source_kind: source.kind }));
+    await this.api('monitor_events?on_conflict=user_id,source_id,source_event_id', {
+      method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(rows) });
+    return rows.length;
+  }
+  async recordEmailFeedback({ sourceMessageId, fromRoute = null, toRoute, label = {}, note = null } = {}) {
+    if (!sourceMessageId || !toRoute) throw new MonitorError('EMAIL_FEEDBACK_REQUIRED');
+    return this.api('rpc/record_monitor_email_feedback', { method: 'POST', body: JSON.stringify({
+      p_source_message_id: String(sourceMessageId).slice(0, 200),
+      p_from_route: fromRoute ? String(fromRoute).slice(0, 30) : null,
+      p_to_route: String(toRoute).slice(0, 30), p_label: label && typeof label === 'object' ? label : {},
+      p_note: note == null ? null : String(note).slice(0, 500),
+    }) });
+  }
+  async emailFeedback({ limit = 200 } = {}) {
+    const params = new URLSearchParams({ user_id: `eq.${this.env.MONITOR_USER_ID}`, order: 'created_at.desc', limit: String(Math.min(500, Math.max(1, Number(limit) || 200))) });
+    return this.api(`monitor_email_feedback?${params}`);
+  }
 }
 // Allowlist log fields; callers cannot accidentally serialize payloads/tokens/errors.
 export async function log(event, fields = {}) {
   const row = { timestamp: new Date().toISOString(), event };
-  for (const key of ['job_id', 'source_id', 'attempt', 'records_processed', 'error_code']) {
+  for (const key of ['job_id', 'source_id', 'attempt', 'records_processed', 'events_processed', 'error_code', 'duration_ms']) {
     if (fields[key] !== undefined) row[key] = fields[key];
   }
   const text = JSON.stringify(row);

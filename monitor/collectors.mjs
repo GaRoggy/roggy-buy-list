@@ -5,6 +5,9 @@ import { syncGmail } from './gmail.mjs';
 import { syncGarmin } from './health.mjs';
 import { plaidClient, syncFinance } from './finance.mjs';
 import { syncBrief } from './brief.mjs';
+import { syncGoogleTasks } from './tasks.mjs';
+import { syncGooglePeople } from './people.mjs';
+import { syncDriveMetadata } from './drive.mjs';
 
 export async function collect(source, env, store) {
   if (source.kind === 'brief') return syncBrief(source,env,store);
@@ -13,6 +16,12 @@ export async function collect(source, env, store) {
     const get=await googleClient(env);
     if((await get('gmail/v1/users/me/profile')).emailAddress!==source.external_id)throw new MonitorError('GOOGLE_ACCOUNT_MISMATCH',{terminal:true});
     return syncGmail(source,get,await store.records('email'));
+  }
+  if (source.kind === 'google_tasks' || source.kind === 'google_people' || source.kind === 'google_drive') {
+    const get = await googleClient(env);
+    if (source.kind === 'google_tasks') return syncGoogleTasks(source, get);
+    if (source.kind === 'google_people') return syncGooglePeople(source, get);
+    return syncDriveMetadata(source, get);
   }
   if (source.kind === 'garmin') return syncGarmin();
   if (source.kind === 'finance') {

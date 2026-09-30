@@ -32,13 +32,18 @@ await assert.rejects(db.query('select monitor_commit($1,$2,$3,$4)', [claim2.job.
 assert.equal((await db.query('select cursor from monitor_sources where id=$1',[source.id])).rows[0].cursor.historyId,'1');
 await db.query('select monitor_commit($1,$2,$3,$4)', [claim2.job.id, claim2.job.lease_token, JSON.stringify([record]), '{"historyId":"2"}']);
 assert.equal((await db.query('select * from monitor_records')).rows.length, 1);
+await db.query(`insert into monitor_events(user_id,source_id,source_kind,source_event_id,event_type,title,importance,confidence)
+  values($1,$2,'gmail','event-1','bill_due','Synthetic bill',0.8,0.9)`, [owner, source.id]);
 await db.exec(`set role authenticated; set request.jwt.claim.sub='00000000-0000-4000-8000-000000000002';`);
 assert.equal((await db.query('select * from monitor_records')).rows.length, 0);
+assert.equal((await db.query('select * from monitor_events')).rows.length, 0);
 await assert.rejects(db.query('select monitor_schedule($1)',[owner]));
 await db.exec(`set request.jwt.claim.sub='${owner}';`);
 assert.equal((await db.query('select * from monitor_records')).rows.length,1);
+assert.equal((await db.query('select * from monitor_events')).rows.length,1);
 await db.exec('reset role; set role anon;');
 await assert.rejects(db.query('select * from monitor_records'));
+await assert.rejects(db.query('select * from monitor_events'));
 await db.exec('reset role;');
 // Reminder projection keeps IDs/completion and propagates changes/cancellations.
 const cal=(await db.query(`insert into monitor_sources(user_id,kind,external_id) values($1,'calendar','test-calendar') returning id`,[owner])).rows[0];
