@@ -1,5 +1,6 @@
 import { createBridgeProvider } from './ai/browser/provider.js';
 import { LIMITS, validateRequest } from './ai/shared/protocol.js';
+import { createTranscriptStore, formatTranscriptLine, roomLabel } from './transcript.js';
 
 const el = id => document.getElementById(id);
 const messages = [], history = [];
@@ -26,6 +27,98 @@ const errors = {
 };
 function message(error) { return errors[error?.code] || (error?.name === 'TimeoutError' ? errors.GENERATION_TIMEOUT : 'The AI request failed. Check the bridge and reconnect.'); }
 function status(text, state) { el('aiConnection').textContent = text; el('aiConnection').dataset.state = state; }
+
+const transcriptStore = createTranscriptStore();
+const transcriptTimeZone = window.ROGGY_AI_CONFIG?.transcriptTimeZone || 'America/Chicago';
+let transcriptFilter = 'all', transcriptFollowing = true, transcriptStreamStatus = 'disconnected', transcriptHealthTimer = null, transcriptBound = false;
+
+function transcriptStatus(text, state) {
+  const target = el('liveTranscriptStatus');
+  if (!target) return;
+  target.textContent = text;
+  target.dataset.state = state;
+}
+function transcriptFilterOptions() {
+  const select = el('liveTranscriptFilter');
+  if (!select) return;
+  const entries = transcriptStore.list('all');
+  const microphones = new Map();
+  for (const entry of entries) microphones.set(entry.microphone_id, entry.friendly_name || roomLabel(entry.room) || entry.microphone_id);
+  const values = [...microphones.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const current = transcriptFilter;
+  select.replaceChildren(new Option('All microphones', 'all'), ...values.map(([id, name]) => new Option(name, id)));
+  select.value = values.some(([id]) => id === current) || current === 'all' ? current : 'all';
+  transcriptFilter = select.value;
+}
+function renderTranscript() {
+  const log = el('liveTranscriptLog'), empty = el('liveTranscriptEmpty');
+  if (!log || !empty) return;
+  transcriptFilterOptions();
+  const entries = transcriptStore.list(transcriptFilter);
+  log.replaceChildren(...entries.map(entry => {
+    const row = document.createElement('article');
+    row.className = 'live-transcript-entry';
+    row.textContent = formatTranscriptLine(entry, { timeZone: transcriptTimeZone });
+    return row;
+  }));
+  empty.hidden = entries.length > 0;
+  if (transcriptFollowing) log.scrollTop = log.scrollHeight;
+}
+function applyTranscriptHealth(diagnostics) {
+  const bridge = diagnostics?.agent_bridge || {};
+  const voice = diagnostics?.voice || {};
+  if (bridge.configured_microphones === 0) return transcriptStatus('No microphones connected', 'offline');
+  if (voice.status === 'unavailable' || voice.transcriber_loaded === false || voice.audio_stream_healthy === false) return transcriptStatus('Whisper unavailable', 'offline');
+  if (transcriptStreamStatus !== 'connected') return transcriptStatus('Disconnected', 'offline');
+  transcriptStatus('Listening', 'online');
+}
+async function refreshTranscriptHealth() {
+  if (!signedIn || !window.roggySmartHomeStream?.diagnostics) return;
+  try { applyTranscriptHealth(await window.roggySmartHomeStream.diagnostics()); }
+  catch { transcriptStatus('Disconnected', 'offline'); }
+}
+async function loadTranscriptHistory() {
+  if (!signedIn || !window.roggySmartHomeStream?.history) return;
+  try {
+    const payload = await window.roggySmartHomeStream.history(100);
+    for (const event of (Array.isArray(payload?.events) ? payload.events : [])) {
+      if (event?.type === 'whisper_transcript') transcriptStore.ingest(event);
+    }
+    renderTranscript();
+  } catch { transcriptStatus('Disconnected', 'offline'); }
+}
+function startTranscriptPanel() {
+  if (!transcriptBound) {
+    transcriptBound = true;
+    el('liveTranscriptFilter')?.addEventListener('change', event => { transcriptFilter = event.target.value; renderTranscript(); });
+    el('liveTranscriptLatest')?.addEventListener('click', () => { transcriptFollowing = true; const log = el('liveTranscriptLog'); if (log) log.scrollTop = log.scrollHeight; });
+    el('liveTranscriptLog')?.addEventListener('scroll', event => {
+      const log = event.currentTarget;
+      transcriptFollowing = log.scrollHeight - log.scrollTop - log.clientHeight <= 48;
+    });
+    window.addEventListener('roggy-smart-home-event', event => {
+      if (event.detail?.type !== 'whisper_transcript') return;
+      transcriptStore.ingest(event.detail);
+      renderTranscript();
+    });
+    window.addEventListener('roggy-smart-home-stream-status', event => {
+      transcriptStreamStatus = event.detail?.status || 'disconnected';
+      if (transcriptStreamStatus === 'connected') refreshTranscriptHealth();
+      else if (transcriptStreamStatus === 'connecting') transcriptStatus('Connecting…', 'checking');
+      else transcriptStatus('Disconnected', 'offline');
+    });
+  }
+  if (!signedIn) { transcriptStatus('Disconnected', 'offline'); return; }
+  transcriptStreamStatus = window.roggySmartHomeStream?.status?.() || transcriptStreamStatus;
+  window.roggySmartHomeStream?.connect?.();
+  loadTranscriptHistory();
+  refreshTranscriptHealth();
+  if (!transcriptHealthTimer) transcriptHealthTimer = setInterval(() => { if (!document.hidden && !el('aiPage')?.hidden) refreshTranscriptHealth(); }, 15000);
+}
+function stopTranscriptPanel() {
+  if (transcriptHealthTimer) { clearInterval(transcriptHealthTimer); transcriptHealthTimer = null; }
+  transcriptStore.clear(); renderTranscript(); transcriptStreamStatus = 'disconnected'; transcriptStatus('Disconnected', 'offline');
+}
 function controls() {
   const busy = !!generation;
   el('aiSend').disabled = busy || !signedIn || !online || !el('aiModel').value || !el('aiPrompt').value.trim();
@@ -111,11 +204,12 @@ el('aiStop').onclick = () => generation?.abort();
 el('aiClear').onclick = () => { clearConversation(); if (signedIn) refresh(); };
 el('aiRefresh').onclick = refresh;
 el('aiModel').onchange = () => { try { localStorage.setItem('roggy-ai-model', el('aiModel').value); } catch {} controls(); };
-window.addEventListener('roggy-page', e => { if (e.detail.page === 'ai') refresh(); });
+window.addEventListener('roggy-page', e => { if (e.detail.page === 'ai') { refresh(); startTranscriptPanel(); } });
 function authChanged(session) {
   const authorized = isOwnerSession(session);
-  if (!authorized) { checking?.abort(); checking = null; clearConversation(); online = false; status('Sign in required', 'offline'); }
+  if (!authorized) { checking?.abort(); checking = null; clearConversation(); online = false; status('Sign in required', 'offline'); stopTranscriptPanel(); }
   signedIn = authorized; controls(); if (signedIn && !el('aiPage').hidden) refresh();
+  if (signedIn && !el('aiPage').hidden) startTranscriptPanel();
 }
 window.addEventListener('roggy-auth', e => { if (!e.detail.signedIn) authChanged(null); else setTimeout(() => sb.auth.getSession().then(({data}) => authChanged(data.session)).catch(() => authChanged(null)), 0); });
 sb.auth.getSession().then(({ data }) => authChanged(data.session)).catch(() => authChanged(null));

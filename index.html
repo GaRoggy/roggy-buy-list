@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#6d28d9">
 <title>Roggy Lists</title>
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="styles.css?v=99">
+<link rel="stylesheet" href="styles.css?v=110">
 <link rel="stylesheet" href="todos.css?v=61">
 <link rel="stylesheet" href="polish.css?v=109">
 <link rel="apple-touch-icon" href="icon.svg?v=2">
@@ -114,6 +114,12 @@
         <label for="aiPrompt">Message</label><textarea id="aiPrompt" rows="3" maxlength="12000" placeholder="Ask your local AI…" autocomplete="off" required aria-describedby="aiKeyboard"></textarea>
         <div class="ai-compose-actions"><small id="aiKeyboard">Enter for a new line · Ctrl/⌘ + Enter to send</small><span id="aiGenerating" role="status" hidden>Generating…</span><button id="aiStop" type="button" hidden>Stop</button><button id="aiSend" class="ai-send" type="submit" disabled>Send ↗</button></div>
       </form>
+      <section class="live-transcript-panel" aria-labelledby="liveTranscriptTitle">
+        <div class="live-transcript-heading"><div><span class="eyebrow">LIVE VOICE</span><h3 id="liveTranscriptTitle">What Layne hears</h3></div><span id="liveTranscriptStatus" class="live-transcript-status" data-state="offline" role="status">Disconnected</span></div>
+        <div class="live-transcript-toolbar"><label class="live-transcript-filter" for="liveTranscriptFilter">Microphone<select id="liveTranscriptFilter"><option value="all">All microphones</option></select></label><button type="button" id="liveTranscriptLatest" class="secondary">Jump to latest</button></div>
+        <div id="liveTranscriptLog" class="live-transcript-log" role="log" aria-live="polite" aria-label="Live Whisper transcript"></div>
+        <p id="liveTranscriptEmpty" class="live-transcript-empty">Nothing heard in the last 5 minutes.</p>
+      </section>
     </section>
   </main>
 </section>
@@ -371,10 +377,10 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
-<script src="ai-config.js?v=42"></script>
-<script src="app.js?v=101"></script>
+<script src="ai-config.js?v=43"></script>
+<script src="app.js?v=102"></script>
 <script src="monitor-ui.js?v=53"></script>
 <script src="todos.js?v=65"></script>
-<script type="module" src="ai-ui.js?v=41"></script>
+<script type="module" src="ai-ui.js?v=42"></script>
 <script src="polish.js?v=109"></script>
 </body></html>

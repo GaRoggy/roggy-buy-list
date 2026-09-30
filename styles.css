@@ -1055,3 +1055,18 @@ html:not(.is-swiping) .mountain-panorama{
 .is-swiping .swipe-neighbor,.is-settling .swipe-neighbor{box-shadow:none!important}
 .is-settling .page-tab.active{animation:none!important}
 .swipe-post-settle{transition:transform 110ms cubic-bezier(.20,.80,.20,1)!important}
+
+/* Live finalized Whisper transcript. Entries stay in the browser and the
+   authenticated smart-home event ring only; this is intentionally not an archive. */
+.live-transcript-panel{display:grid;gap:12px;margin-top:22px;padding-top:18px;border-top:1px solid color-mix(in srgb,var(--accent) 14%,transparent)}
+.live-transcript-heading,.live-transcript-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.live-transcript-heading h3{margin:4px 0 0;font-size:17px;line-height:1.1}
+.live-transcript-status{display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-size:11px;font-weight:800;white-space:nowrap}
+.live-transcript-status::before{content:'●';font-size:10px;color:var(--muted)}
+.live-transcript-status[data-state="online"]{color:#166534}.live-transcript-status[data-state="online"]::before{color:#22c55e}
+.live-transcript-status[data-state="checking"]{color:#92400e}.live-transcript-status[data-state="checking"]::before{color:#f59e0b}
+.live-transcript-toolbar{align-items:end}.live-transcript-filter{display:grid;gap:5px;color:var(--muted);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}.live-transcript-filter select{min-width:190px;text-transform:none;letter-spacing:normal}
+.live-transcript-log{height:180px;overflow:auto;padding:4px 2px;border:1px solid color-mix(in srgb,var(--accent) 12%,transparent);border-radius:14px;background:color-mix(in srgb,var(--surface2) 76%,transparent);scroll-behavior:smooth}
+.live-transcript-entry{padding:10px 12px;color:var(--ink);font-size:12px;line-height:1.45;overflow-wrap:anywhere}.live-transcript-entry+ .live-transcript-entry{border-top:1px solid color-mix(in srgb,var(--accent) 9%,transparent)}
+.live-transcript-empty{margin:0;padding:0 3px;color:var(--muted);font-size:11px}.live-transcript-empty[hidden]{display:none}
+@media(max-width:560px){.live-transcript-heading,.live-transcript-toolbar{align-items:stretch;flex-direction:column}.live-transcript-toolbar{gap:8px}.live-transcript-filter select{width:100%;min-width:0}.live-transcript-toolbar button{width:100%}.live-transcript-log{height:210px}.live-transcript-entry{font-size:11px}}
