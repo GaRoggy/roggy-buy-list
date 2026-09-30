@@ -66,7 +66,7 @@ let emailQueuePages={dashboard:{cursor:null,exhausted:false,loading:false,loaded
 let emailQueuesLoaded=false,emailQueueSessionVersion=0;
 let digestibles=[],digestView="books",digestStatusView="queue";
 const SMART_HOME_API=(window.ROGGY_SMART_HOME_API||window.ROGGY_AI_CONFIG?.smartHomeUrl||"").replace(/\/$/,"");
-let smartHomeState={devices:[],rooms:[],events:[],diagnostics:null},smartHomeLoaded=false,smartHomeUnavailable=false,smartHomeFailure=null,smartHomeLoading=null,smartHomeStreamPromise=null,smartHomeStreamAbort=null,smartHomeStreamRetry=null,smartHomeLastEventId="",smartHomeControlAllowed=false,smartHomeAccessToken="",smartHomePendingActions=new Map(),smartHomeActionSequence=0;
+let smartHomeState={devices:[],rooms:[],events:[],diagnostics:null},smartHomeLoaded=false,smartHomeUnavailable=false,smartHomeFailure=null,smartHomeLoading=null,smartHomeStreamPromise=null,smartHomeStreamAbort=null,smartHomeStreamRetry=null,smartHomeLastEventId="",smartHomeStreamStatus="disconnected",smartHomeControlAllowed=false,smartHomeAccessToken="",smartHomePendingActions=new Map(),smartHomeActionSequence=0;
 let layneChatMessages=[],layneChatBusy=false,layneChatError="",laynePendingAction=null,layneSessionId=null;
 
 
@@ -259,14 +259,24 @@ async function sendDeviceAction(deviceId,body){
 }
 function connectSmartHomeStream(){
  if(smartHomeStreamPromise||!smartHomeAccessToken||!SMART_HOME_API)return;
+ smartHomeStreamStatus="connecting";
+ window.dispatchEvent(new CustomEvent("roggy-smart-home-stream-status",{detail:{status:"connecting"}}));
  const controller=new AbortController();smartHomeStreamAbort=controller;
  smartHomeStreamPromise=(async()=>{try{
    const response=await fetch(SMART_HOME_API+"/events/stream",{cache:"no-store",headers:{Accept:"text/event-stream",Authorization:`Bearer ${smartHomeAccessToken}`,...(smartHomeLastEventId?{"Last-Event-ID":smartHomeLastEventId}: {})},signal:controller.signal});
    if(!response.ok||!response.body)throw new Error(`event stream ${response.status}`);
+   smartHomeStreamStatus="connected";
+   window.dispatchEvent(new CustomEvent("roggy-smart-home-stream-status",{detail:{status:"connected"}}));
    const reader=response.body.getReader(),decoder=new TextDecoder();let buffer="";
-   while(!controller.signal.aborted){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const frames=buffer.split(/\r?\n\r?\n/);buffer=frames.pop()||"";for(const frame of frames){const id=frame.match(/^id:\s*(.+)$/m);if(id)smartHomeLastEventId=id[1].trim();const data=frame.split(/\r?\n/).filter(line=>line.startsWith("data:")).map(line=>line.slice(5).trim()).join("\n");if(data)loadSmartHome({silent:true}).catch(()=>{})}}
- }catch(error){if(!controller.signal.aborted&&!smartHomeStreamRetry)smartHomeStreamRetry=setTimeout(()=>{smartHomeStreamRetry=null;connectSmartHomeStream()},15000)}finally{smartHomeStreamPromise=null;smartHomeStreamAbort=null}})();
+   while(!controller.signal.aborted){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const frames=buffer.split(/\r?\n\r?\n/);buffer=frames.pop()||"";for(const frame of frames){const id=frame.match(/^id:\s*(.+)$/m);if(id)smartHomeLastEventId=id[1].trim();const data=frame.split(/\r?\n/).filter(line=>line.startsWith("data:")).map(line=>line.slice(5).trim()).join("\n");if(!data)continue;let eventData=null;try{eventData=JSON.parse(data)}catch{}if(eventData)window.dispatchEvent(new CustomEvent("roggy-smart-home-event",{detail:eventData}));if(eventData?.type!=="whisper_transcript")loadSmartHome({silent:true}).catch(()=>{})}}
+ }catch(error){if(!controller.signal.aborted){smartHomeStreamStatus="disconnected";window.dispatchEvent(new CustomEvent("roggy-smart-home-stream-status",{detail:{status:"disconnected",error:String(error?.message||error)}}));if(!smartHomeStreamRetry)smartHomeStreamRetry=setTimeout(()=>{smartHomeStreamRetry=null;connectSmartHomeStream()},15000)}}finally{smartHomeStreamPromise=null;smartHomeStreamAbort=null}})();
 }
+window.roggySmartHomeStream={
+ connect:connectSmartHomeStream,
+ status:()=>smartHomeStreamStatus,
+ history:(limit=100)=>smartHomeFetch(`/events/history?limit=${Math.max(1,Math.min(100,Number(limit)||100))}`),
+ diagnostics:()=>smartHomeFetch("/diagnostics")
+};
 async function loadSmartHome({silent=false}={}){
  if(smartHomeLoading)return smartHomeLoading;
  smartHomeLoading=(async()=>{try{smartHomeFailure=null;const diagnostics=await smartHomeFetch("/diagnostics");smartHomeState.diagnostics=diagnostics;renderDeviceDiagnostics();const [devices,rooms]=await Promise.all([smartHomeFetch("/devices"),smartHomeFetch("/rooms")]);let history={events:[]};try{history=await smartHomeFetch("/events/history?limit=40")}catch{}smartHomeState={devices:Array.isArray(devices.devices)?devices.devices:[],rooms:Array.isArray(rooms.rooms)?rooms.rooms:[],events:Array.isArray(history.events)?history.events:[],diagnostics};smartHomeLoaded=true;smartHomeUnavailable=false;if($("deviceStatus")&&(!$("deviceStatus").textContent||$("deviceStatus").textContent.startsWith("Smart-home unavailable:")))$("deviceStatus").textContent="";renderHomeDeviceStatus();renderDevicesPage();connectSmartHomeStream();return true}catch(error){smartHomeFailure=smartFailureKind(error);const hasSnapshot=smartHomeLoaded||smartHomeState.devices.length>0||smartHomeState.rooms.length>0;if(hasSnapshot){smartHomeLoaded=true;smartHomeUnavailable=false;if(!silent&&$("deviceStatus"))$("deviceStatus").textContent="Refresh unavailable; showing last known device state."}else{smartHomeLoaded=false;smartHomeUnavailable=true;if(!silent&&$("deviceStatus"))$("deviceStatus").textContent="Smart-home unavailable: "+smartErrorMessage(error)}renderHomeDeviceStatus();renderDevicesPage();connectSmartHomeStream();return false}finally{smartHomeLoading=null}})();
@@ -832,6 +842,7 @@ function applyAuthSession(session){
  session=isOwnerSession(session)?session:null;
  const hadSession=smartHomeControlAllowed,hasSession=!!session,authIdentityChanged=hadSession!==hasSession;
  if(!session&&smartHomeStreamAbort)smartHomeStreamAbort.abort();
+ if(!session)smartHomeStreamStatus="disconnected";
  if(!session&&smartHomeStreamRetry){clearTimeout(smartHomeStreamRetry);smartHomeStreamRetry=null}
  smartHomeControlAllowed=hasSession;smartHomeAccessToken=session?.access_token||"";
  if(!session){smartHomeLoaded=false;smartHomeUnavailable=false;smartHomeFailure=null;smartHomeState={devices:[],rooms:[],events:[],diagnostics:null};layneChatMessages=[];laynePendingAction=null;layneSessionId=null;renderLayneChat()}
