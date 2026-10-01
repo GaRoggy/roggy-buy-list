@@ -43,7 +43,7 @@ function transcriptFilterOptions() {
   if (!select) return;
   const entries = transcriptStore.list('all');
   const microphones = new Map();
-  for (const entry of entries) microphones.set(entry.microphone_id, entry.friendly_name || roomLabel(entry.room) || entry.microphone_id);
+  for (const entry of entries) if (entry.role !== 'assistant' && entry.microphone_id) microphones.set(entry.microphone_id, entry.friendly_name || roomLabel(entry.room) || entry.microphone_id);
   const values = [...microphones.entries()].sort((a, b) => a[1].localeCompare(b[1]));
   const current = transcriptFilter;
   select.replaceChildren(new Option('All microphones', 'all'), ...values.map(([id, name]) => new Option(name, id)));
@@ -82,7 +82,7 @@ async function loadTranscriptHistory() {
   try {
     const payload = await window.roggySmartHomeStream.history(100);
     for (const event of (Array.isArray(payload?.events) ? payload.events : [])) {
-      if (event?.type === 'whisper_transcript') transcriptStore.ingest(event);
+      if (event?.type === 'whisper_transcript' || event?.type === 'layne_voice_response') transcriptStore.ingest(event);
     }
     renderTranscript();
   } catch { transcriptStatus('Disconnected', 'offline'); }
@@ -97,7 +97,8 @@ function startTranscriptPanel() {
       transcriptFollowing = log.scrollHeight - log.scrollTop - log.clientHeight <= 48;
     });
     window.addEventListener('roggy-smart-home-event', event => {
-      if (event.detail?.type !== 'whisper_transcript') return;
+      if (!['whisper_transcript', 'layne_voice_response'].includes(event.detail?.type)) return;
+      if (event.detail?.type === 'whisper_transcript' && event.detail?.final === false) return;
       transcriptStore.ingest(event.detail);
       renderTranscript();
     });
