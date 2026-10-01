@@ -1,6 +1,6 @@
 import { createBridgeProvider } from './ai/browser/provider.js';
 import { LIMITS, validateRequest } from './ai/shared/protocol.js';
-import { createTranscriptStore, formatTranscriptLine, roomLabel } from './transcript.js';
+import { createTranscriptStore, formatTranscriptLine, roomLabel } from './transcript.js?v=2';
 
 const el = id => document.getElementById(id);
 const messages = [], history = [];
