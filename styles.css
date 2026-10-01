@@ -1086,3 +1086,10 @@ html:not(.is-swiping) .mountain-panorama{
 .dough-strategy-card h2{margin:6px 0 14px;font-size:clamp(1.55rem,5vw,2rem)}
 .dough-strategy-card p{margin:0;font-size:1.02rem;line-height:1.72}
 @media(max-width:640px){.dough-card{padding:17px 18px}.dough-strategy-card{padding:20px}.dough-strategy-card p{font-size:1rem;line-height:1.65}}
+
+
+.dough-card-meta{display:flex;align-items:center;gap:14px;flex:0 0 auto}
+.dough-risk,.dough-detail-risk{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line,#ddd);border-radius:999px;padding:7px 10px;font-size:.84rem;font-weight:700;background:rgba(255,255,255,.55)}
+.dough-risk b{font-size:.92rem}
+.dough-detail-risk{margin:0 0 16px}
+@media(max-width:640px){.dough-card-meta{gap:8px}.dough-risk{font-size:.78rem;padding:6px 8px}}
