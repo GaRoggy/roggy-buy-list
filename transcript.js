@@ -1,8 +1,30 @@
 export const TRANSCRIPT_WINDOW_MS = 5 * 60 * 1000;
+const VOICE_DEDUPE_WINDOW_MS = 1800;
 
 function timestampMs(value, fallback) {
   const parsed = Date.parse(String(value || ""));
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizedVoiceText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\blane\b/g, "layne")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^(?:hey\s+|okay\s+|ok\s+)?layne\s+/, "");
+}
+
+function similarVoiceText(a, b) {
+  const left = normalizedVoiceText(a), right = normalizedVoiceText(b);
+  if (!left || !right) return false;
+  if (left === right) return true;
+  const A = new Set(left.split(" ")), B = new Set(right.split(" "));
+  let common = 0;
+  for (const token of A) if (B.has(token)) common++;
+  const union = new Set([...A, ...B]).size || 1;
+  return common / union >= 0.72;
 }
 
 export function createTranscriptStore({ now = () => Date.now(), windowMs = TRANSCRIPT_WINDOW_MS, maxEntries = 200 } = {}) {
@@ -20,20 +42,62 @@ export function createTranscriptStore({ now = () => Date.now(), windowMs = TRANS
     }
   }
 
+  function findDuplicate(raw, text, receivedAt) {
+    const logicalId = String(raw.logical_utterance_id || raw.utterance_group_id || raw.duplicate_of || "").trim();
+    const stamp = timestampMs(raw.timestamp, receivedAt);
+    for (const entry of entries.values()) {
+      if (entry.role === "assistant") continue;
+      if (logicalId && logicalId === entry.logical_utterance_id) return entry;
+      const otherStamp = timestampMs(entry.timestamp, entry.receivedAt);
+      if (Math.abs(stamp - otherStamp) > VOICE_DEDUPE_WINDOW_MS) continue;
+      if (similarVoiceText(text, entry.text)) return entry;
+    }
+    return null;
+  }
+
   return {
     ingest(raw) {
       if (!raw || typeof raw !== "object") return null;
-      const text = String(raw.text ?? raw.transcript ?? "").trim();
-      const microphoneId = String(raw.microphone_id ?? "").trim();
-      if (!text || !microphoneId) return null;
+      const isResponse = raw.type === "layne_voice_response" || raw.role === "assistant";
+      const text = String(
+        isResponse
+          ? (raw.message ?? raw.response ?? raw.text ?? "")
+          : (raw.normalized_transcript ?? raw.text ?? raw.transcript ?? raw.chat_text ?? "")
+      ).trim();
+      if (!text) return null;
+
       const receivedAt = now();
-      const eventId = String(raw.event_id ?? raw.utterance_id ?? `${raw.timestamp ?? receivedAt}:${microphoneId}:${text}`);
+      const microphoneId = String(raw.microphone_id ?? "").trim();
+      const role = isResponse ? "assistant" : "user";
+      const logicalId = String(raw.logical_utterance_id || raw.utterance_group_id || raw.duplicate_of || "").trim();
+
+      if (!isResponse) {
+        const duplicate = findDuplicate(raw, text, receivedAt);
+        if (duplicate) {
+          duplicate.also_heard_by ||= [];
+          if (microphoneId && microphoneId !== duplicate.microphone_id && !duplicate.also_heard_by.includes(microphoneId)) {
+            duplicate.also_heard_by.push(microphoneId);
+          }
+          duplicate.receivedAt = Math.min(duplicate.receivedAt, receivedAt);
+          prune();
+          return duplicate;
+        }
+      }
+
+      const eventId = String(
+        raw.event_id ??
+        raw.transcript_event_id ??
+        raw.utterance_id ??
+        `${raw.timestamp ?? receivedAt}:${role}:${microphoneId || "layne"}:${text}`
+      );
       const existing = entries.get(eventId);
       const entry = {
         ...(existing || {}),
         ...raw,
         event_id: eventId,
+        role,
         microphone_id: microphoneId,
+        logical_utterance_id: logicalId,
         text,
         timestamp: String(raw.timestamp || existing?.timestamp || new Date(receivedAt).toISOString()),
         receivedAt: existing?.receivedAt ?? receivedAt,
@@ -45,7 +109,7 @@ export function createTranscriptStore({ now = () => Date.now(), windowMs = TRANS
     list(filter = "all") {
       prune();
       return [...entries.values()]
-        .filter(entry => filter === "all" || entry.microphone_id === filter)
+        .filter(entry => entry.role === "assistant" || filter === "all" || entry.microphone_id === filter)
         .sort((a, b) => timestampMs(a.timestamp, a.receivedAt) - timestampMs(b.timestamp, b.receivedAt));
     },
     clear() { entries.clear(); },
@@ -73,6 +137,6 @@ export function formatTranscriptTime(value, { timeZone = "America/Chicago" } = {
 
 export function formatTranscriptLine(event, options = {}) {
   const time = formatTranscriptTime(event?.timestamp, options);
-  const name = String(event?.friendly_name || roomLabel(event?.room) || event?.microphone_id || "Unknown microphone");
-  return `${time} ${name}: "${String(event?.text || event?.transcript || "")}"`;
+  const speaker = event?.role === "assistant" ? "Layne" : "Me";
+  return `${time} ${speaker}: "${String(event?.text || "")}"`;
 }
