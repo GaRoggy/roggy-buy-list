@@ -23,7 +23,8 @@ export function createTranscriptStore({ now = () => Date.now(), windowMs = TRANS
   return {
     ingest(raw) {
       if (!raw || typeof raw !== "object") return null;
-      const text = String(raw.text ?? raw.transcript ?? "").trim();
+      const isResponse = raw.type === "layne_voice_response" || raw.event_type === "layne_voice_response";
+      const text = String(isResponse ? (raw.message ?? "") : (raw.text ?? raw.transcript ?? "")).trim();
       const microphoneId = String(raw.microphone_id ?? "").trim();
       if (!text || !microphoneId) return null;
       const receivedAt = now();
@@ -35,6 +36,8 @@ export function createTranscriptStore({ now = () => Date.now(), windowMs = TRANS
         event_id: eventId,
         microphone_id: microphoneId,
         text,
+        kind: isResponse ? "assistant" : "user",
+        role: isResponse ? "assistant" : "user",
         timestamp: String(raw.timestamp || existing?.timestamp || new Date(receivedAt).toISOString()),
         receivedAt: existing?.receivedAt ?? receivedAt,
       };
@@ -73,6 +76,9 @@ export function formatTranscriptTime(value, { timeZone = "America/Chicago" } = {
 
 export function formatTranscriptLine(event, options = {}) {
   const time = formatTranscriptTime(event?.timestamp, options);
+  if (event?.kind === "assistant" || event?.type === "layne_voice_response" || event?.event_type === "layne_voice_response") {
+    return `${time} Layne: "${String(event?.text || event?.message || "")}"`;
+  }
   const name = String(event?.friendly_name || roomLabel(event?.room) || event?.microphone_id || "Unknown microphone");
-  return `${time} ${name}: "${String(event?.text || event?.transcript || "")}"`;
+  return `${time} ME · 🎤 ${name}: "${String(event?.text || event?.transcript || "")}"`;
 }

@@ -5,7 +5,15 @@ import { createTranscriptStore, formatTranscriptLine, formatTranscriptTime } fro
 test('formats a finalized transcript line with local 12-hour time and friendly microphone', () => {
   const event = { timestamp: '2026-09-30T22:55:00.000Z', friendly_name: 'Living Room', room: 'living_room', microphone_id: 'mic-1', text: 'Layne, turn the lights off' };
   assert.equal(formatTranscriptTime(event.timestamp, { timeZone: 'America/Chicago' }), '5:55 PM');
-  assert.equal(formatTranscriptLine(event, { timeZone: 'America/Chicago' }), '5:55 PM Living Room: "Layne, turn the lights off"');
+  assert.equal(formatTranscriptLine(event, { timeZone: 'America/Chicago' }), '5:55 PM ME · 🎤 Living Room: "Layne, turn the lights off"');
+});
+
+test('renders Layne voice responses in the same chronological conversation stream', () => {
+  const store = createTranscriptStore({ now: () => Date.parse('2026-09-30T23:01:00Z') });
+  store.ingest({ event_id: 'speech', timestamp: '2026-09-30T23:00:00Z', microphone_id: 'living-mic', friendly_name: 'Living Room', text: 'Layne, turn on the lights' });
+  store.ingest({ event_id: 'reply', type: 'layne_voice_response', timestamp: '2026-09-30T23:00:01Z', microphone_id: 'living-mic', message: 'Done.' });
+  assert.deepEqual(store.list().map(item => item.kind), ['user', 'assistant']);
+  assert.equal(formatTranscriptLine(store.list()[1]), '6:00 PM Layne: "Done."');
 });
 
 test('keeps multiple microphones separate and supports filtering', () => {

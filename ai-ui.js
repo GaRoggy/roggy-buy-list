@@ -1,6 +1,6 @@
 import { createBridgeProvider } from './ai/browser/provider.js';
 import { LIMITS, validateRequest } from './ai/shared/protocol.js';
-import { createTranscriptStore, formatTranscriptLine, roomLabel } from './transcript.js';
+import { createTranscriptStore, formatTranscriptLine, roomLabel } from './transcript.js?v=2';
 
 const el = id => document.getElementById(id);
 const messages = [], history = [];
@@ -57,7 +57,7 @@ function renderTranscript() {
   const entries = transcriptStore.list(transcriptFilter);
   log.replaceChildren(...entries.map(entry => {
     const row = document.createElement('article');
-    row.className = 'live-transcript-entry';
+    row.className = `live-transcript-entry ${entry.kind === 'assistant' ? 'layne-response' : 'voice-user'}`;
     row.textContent = formatTranscriptLine(entry, { timeZone: transcriptTimeZone });
     return row;
   }));
@@ -82,7 +82,7 @@ async function loadTranscriptHistory() {
   try {
     const payload = await window.roggySmartHomeStream.history(100);
     for (const event of (Array.isArray(payload?.events) ? payload.events : [])) {
-      if (event?.type === 'whisper_transcript') transcriptStore.ingest(event);
+      if (event?.type === 'whisper_transcript' || event?.type === 'layne_voice_response') transcriptStore.ingest(event);
     }
     renderTranscript();
   } catch { transcriptStatus('Disconnected', 'offline'); }
@@ -97,7 +97,7 @@ function startTranscriptPanel() {
       transcriptFollowing = log.scrollHeight - log.scrollTop - log.clientHeight <= 48;
     });
     window.addEventListener('roggy-smart-home-event', event => {
-      if (event.detail?.type !== 'whisper_transcript') return;
+      if (!['whisper_transcript', 'layne_voice_response'].includes(event.detail?.type)) return;
       transcriptStore.ingest(event.detail);
       renderTranscript();
     });

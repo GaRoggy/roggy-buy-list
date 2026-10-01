@@ -35,6 +35,9 @@ function syncPageNavigation(page=currentPage){
   if(button.closest("#primaryPageTabs")){if(active)button.setAttribute("aria-current","page");else button.removeAttribute("aria-current")}
  });
  PRIMARY_PAGES.forEach(definition=>primaryPageElement(definition.id)?.classList.add("primary-page"));
+ const fab=$("layneChatFab"),dialog=$("layneChatDialog"),home=page==="home";
+ if(fab){fab.hidden=!home;fab.setAttribute("aria-hidden",String(!home));fab.tabIndex=home?0:-1}
+ if(!home&&dialog?.open)dialog.close();
 }
 
 const seed={buy:[
@@ -294,7 +297,12 @@ async function submitLayneConfirmation(confirmationId,approve,alreadyBusy=false)
 async function sendLayneChat(){const prompt=$("layneChatPrompt");if(!prompt||layneChatBusy)return;const text=prompt.value.trim();if(!text)return;if(!smartHomeControlAllowed){layneChatError="Sign in to talk to Layne.";renderLayneChat();return}layneChatError="";layneChatMessages.push({role:"user",text});prompt.value="";layneChatBusy=true;renderLayneChat();try{const decision=laynePendingAction?layneConfirmationDecision(text):null;if(decision!==null){await submitLayneConfirmation(laynePendingAction.id||laynePendingAction.confirmation_id,decision,true);return}const body={text};if(layneSessionId)body.context={session_id:layneSessionId};const payload=await smartHomeFetch("/commands",{method:"POST",timeoutMs:185000,headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});layneSessionId=payload?.session_id||layneSessionId;laynePendingAction=payload?.pending_action||null;layneChatMessages.push({role:"assistant",text:layneResponseText(payload),pendingAction:laynePendingAction});await loadSmartHome({silent:true})}catch(exception){layneChatError="Layne could not respond: "+smartErrorMessage(exception)}finally{layneChatBusy=false;renderLayneChat()}}
 function rememberLayneVoiceId(set,id){const value=String(id||"").trim();if(!value||set.has(value))return false;if(set.size>=512){const oldest=set.values().next().value;if(oldest)set.delete(oldest)}set.add(value);return true}
 function appendVoiceUserMessage(event){const eventId=String(event?.event_id||event?.transcript_event_id||"");const text=String(event?.chat_text||"").trim();if(!text||!rememberLayneVoiceId(layneVoiceChatEventIds,eventId))return false;layneChatMessages.push({role:"user",text,source:"voice",friendly_name:event.friendly_name,room:event.room,microphone_id:event.microphone_id,event_id:eventId,timestamp:event.timestamp,original_transcript:event.original_transcript||event.transcript||event.text||""});return true}
-function handleLayneVoiceEvent(event){if(!event||!smartHomeControlAllowed)return;if(event.type==="whisper_transcript"){if(event.final===false||!event.layne_activated||!String(event.chat_text||"").trim())return;if(appendVoiceUserMessage(event)){renderLayneChat();openLayneChat({focus:false})}return}if(event.type!=="layne_voice_response")return;const responseId=String(event.event_id||"");if(!rememberLayneVoiceId(layneVoiceResponseIds,responseId))return;if(!layneChatMessages.some(message=>message.source==="voice"&&message.event_id===String(event.transcript_event_id||""))){appendVoiceUserMessage({event_id:event.transcript_event_id,chat_text:event.chat_text,friendly_name:event.friendly_name,room:event.room,microphone_id:event.microphone_id,timestamp:event.timestamp,original_transcript:event.original_transcript})}if(event.session_id)layneSessionId=event.session_id;laynePendingAction=event.pending_action||null;layneChatMessages.push({role:"assistant",text:String(event.message||"Layne could not respond to that request."),pendingAction:laynePendingAction,source_event_id:event.transcript_event_id});renderLayneChat();openLayneChat({focus:false})}
+function handleLayneVoiceEvent(event){
+ // Voice conversation is rendered by the Local AI live transcript panel.
+ // The typed-chat dialog remains manual-only and must never open from voice.
+ if(!event||!smartHomeControlAllowed)return;
+ if(event.type==="whisper_transcript"||event.type==="layne_voice_response")return;
+}
 window.addEventListener("roggy-smart-home-event",event=>handleLayneVoiceEvent(event.detail));
 $('layneChatHistory')?.addEventListener('click',event=>{const button=event.target.closest('[data-confirmation-id]');if(!button)return;submitLayneConfirmation(button.dataset.confirmationId,button.dataset.confirmationDecision==='true')});
 $("layneChatFab")?.addEventListener("click",openLayneChat);
