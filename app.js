@@ -64,6 +64,10 @@ let emailQueues={dashboard:[],finance:[],mail:[]},emailQueueMessages={dashboard:
 let emailQueuePages={dashboard:{cursor:null,exhausted:false,loading:false,loaded:false},finance:{cursor:null,exhausted:false,loading:false,loaded:false},mail:{cursor:null,exhausted:false,loading:false,loaded:false}};
 let emailQueuesLoaded=false,emailQueueSessionVersion=0;
 let digestibles=[],digestView="books",digestStatusView="queue";
+const DOUGH_IDEAS=Object.freeze([
+ {id:"kdp",name:"KDP",sub:"Amazon books · build once, sell repeatedly",strategy:"Use KDP as a catalog business rather than a one-off book hustle. The system should continuously research narrow consumer niches with real purchase intent, then use reusable product-family templates to manufacture genuinely useful books such as maintenance logs, hobby journals, structured trackers, reference workbooks, and other repeatable formats. Agents handle niche research, content planning, copy, covers, metadata, and quality checks, while deterministic templates handle page layout so every interior stays consistent and printable. Publish a small number of strong titles first, monitor which topics actually earn sales and visibility, then use that data to create adjacent versions of proven winners instead of flooding Amazon with generic AI books. Amazon handles the storefront, printing, payment, and shipping, so the long-term goal is a growing catalog of intellectual inventory that can continue selling without manufacturing each order again."},
+ {id:"etsy",name:"Etsy",sub:"Personalized digital products · automate each order",strategy:"Use Etsy for high-margin personalized digital products sold directly to normal consumers, with the customer providing the unique raw material that makes each order difficult to commoditize: a pet photo, car, house, trip, relationship milestone, hobby achievement, or similar personal input. Build standardized product families with fixed layouts and style choices, then automate the order pipeline from structured intake through image generation or editing, template-based composition, spelling and visual QA, export into the required print sizes, and final delivery. Let Etsy provide organic marketplace discovery instead of depending on paid ads, test several tightly defined products, and expand only the designs that earn clicks and purchases. The advantage is not generic AI art; it is a fast customization factory that can turn personal customer inputs into polished, repeatable products with very little manual work."}
+]);
 const SMART_HOME_API=(window.ROGGY_SMART_HOME_API||window.ROGGY_AI_CONFIG?.smartHomeUrl||"").replace(/\/$/,"");
 let smartHomeState={devices:[],rooms:[],events:[],diagnostics:null},smartHomeLoaded=false,smartHomeUnavailable=false,smartHomeFailure=null,smartHomeLoading=null,smartHomeStreamPromise=null,smartHomeStreamAbort=null,smartHomeStreamRetry=null,smartHomeLastEventId="",smartHomeStreamStatus="disconnected",smartHomeControlAllowed=false,smartHomeAccessToken="",smartHomePendingActions=new Map(),smartHomeActionSequence=0;
 let layneChatMessages=[],layneChatBusy=false,layneChatError="",laynePendingAction=null,layneSessionId=null;
@@ -788,12 +792,25 @@ $("digestAddForm").addEventListener("submit",async e=>{
  $("digestAddDialog").close();$("digestAddForm").reset();if(currentPage==="digestibles")renderDigestibles();
 });
 
+function renderDough(){
+ const overview=$("doughOverview"),detail=$("doughDetail"),root=$("doughList");
+ if(!root)return;
+ overview.hidden=false;detail.hidden=true;
+ root.innerHTML=DOUGH_IDEAS.map(idea=>`<button type="button" class="dough-card" data-dough-id="${idea.id}"><div><span class="eyebrow">SIDE CASH</span><h3>${esc(idea.name)}</h3><p>${esc(idea.sub)}</p></div><span class="dough-chevron">›</span></button>`).join("");
+ root.querySelectorAll("[data-dough-id]").forEach(button=>button.onclick=()=>openDoughIdea(button.dataset.doughId));
+}
+function openDoughIdea(id){
+ const idea=DOUGH_IDEAS.find(item=>item.id===id);if(!idea)return;
+ $("doughOverview").hidden=true;$("doughDetail").hidden=false;
+ $("doughDetailKicker").textContent="STRATEGY";$("doughDetailTitle").textContent=idea.name;$("doughDetailStrategy").textContent=idea.strategy;
+ window.scrollTo({top:0,behavior:"instant"});
+}
 function setPage(page){
  if(isPrimaryPage(page))lastPrimaryPage=page;
  else if(page==="reminders"&&isPrimaryPage(currentPage))shelfReturnPage=currentPage;
  currentPage=page;
  window.scrollTo({top:0,behavior:"instant"});syncPageNavigation(page);
- const special=[...PRIMARY_PAGE_IDS.filter(pageId=>pageId!=="buy"),"mail","drivers","reminders","budget","digestibles","projects","project-detail","health","vehicle","ai"],isSpecial=special.includes(page);
+ const special=[...PRIMARY_PAGE_IDS.filter(pageId=>pageId!=="buy"),"mail","drivers","reminders","budget","digestibles","projects","project-detail","dough","health","vehicle","ai"],isSpecial=special.includes(page);
  $("listsPage").hidden=!(["buy","groceries"].includes(page));
  special.forEach(p=>{const el=$(p==="project-detail"?"projectDetailPage":p+"Page");if(el)el.hidden=page!==p});
  $("backupBtn").style.display=isSpecial?"none":"";$("addBtn").style.display="";
@@ -814,6 +831,7 @@ function setPage(page){
  else if(page==="drivers"){ $("pageTitle").textContent="Bad Drivers";$("pageSubtitle").textContent="Track observations and compare demographics.";loadDrivers() }
  else if(page==="reminders"){ $("pageTitle").textContent="Reminders";$("pageSubtitle").textContent="What is coming up.";loadReminders() }
  else if(page==="digestibles"){ $("pageTitle").textContent="Digestibles";$("pageSubtitle").textContent="Books, movies, and anime worth consuming.";loadDigestibles() }
+ else if(page==="dough"){ $("pageTitle").textContent="Dough";$("pageSubtitle").textContent="Automated side-cash ideas."; $("addBtn").style.display="none";renderDough(); }
  else if(page==="budget"){ $("pageTitle").textContent="Finance";$("pageSubtitle").textContent="Private financial dashboard.";$("addBtn").style.display="none";lockBudget() }
  else if(page==="groceries"){currentView="active";document.querySelectorAll(".sub-tab").forEach(z=>z.classList.toggle("active",z.dataset.view==="active"));renderLists()}
  $("moreToggle").checked=false;
@@ -821,6 +839,7 @@ function setPage(page){
 }
 renderPrimaryTabs();syncPageNavigation(currentPage);
 document.querySelectorAll(".side-drawer .page-tab").forEach(b=>b.onclick=()=>setPage(b.dataset.page));
+$("doughBackBtn").onclick=()=>renderDough();
 $("remindersBackBtn").onclick=()=>setPage(shelfReturnPage||lastPrimaryPage||"home");
 document.querySelectorAll("#listsPage .sub-tab").forEach(b=>b.onclick=()=>{currentView=b.dataset.view;document.querySelectorAll("#listsPage .sub-tab").forEach(z=>z.classList.toggle("active",z===b));renderLists()});
 document.querySelectorAll(".driver-tab").forEach(b=>b.onclick=()=>{driverView=b.dataset.driverView;document.querySelectorAll(".driver-tab").forEach(z=>z.classList.toggle("active",z===b));$("driverOverview").hidden=driverView!=="overview";$("driverObservations").hidden=driverView!=="observations";renderDriverPage()});
