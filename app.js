@@ -14,7 +14,6 @@ const PRIMARY_PAGES=Object.freeze([
  {id:"home",label:"Home",elementId:"homePage",title:"Roggy",subtitle:"Your command center."},
  {id:"devices",label:"Devices",elementId:"devicesPage",title:"Devices",subtitle:"Live smart-home control."},
  {id:"todos",label:"Tasks",elementId:"todosPage",title:"Tasks",subtitle:"Things that need doing."},
- {id:"mail",label:"Mail",elementId:"mailPage",title:"Mail",subtitle:"Possibly important messages."},
  {id:"buy",label:"Buy",elementId:"listsPage",title:"Buy List",subtitle:"Needs first. Luxuries later."}
 ]);
 const PRIMARY_PAGE_IDS=Object.freeze(PRIMARY_PAGES.map(page=>page.id));
@@ -25,7 +24,7 @@ function primaryPageElement(page){const definition=PRIMARY_PAGE_BY_ID.get(page);
 function renderPrimaryTabs(){
  const root=$("primaryPageTabs");if(!root)return;
  root.style.setProperty("--primary-page-count",PRIMARY_PAGES.length);
- root.innerHTML=PRIMARY_PAGES.map(page=>`<button class="page-tab" data-page="${page.id}" type="button">${page.label}${page.id==="mail"?'<span id="mailNavCount" class="mail-nav-count" hidden></span>':""}</button>`).join("");
+ root.innerHTML=PRIMARY_PAGES.map(page=>`<button class="page-tab" data-page="${page.id}" type="button">${page.label}</button>`).join("");
  root.querySelectorAll(".page-tab").forEach(button=>button.onclick=()=>setPage(button.dataset.page));
 }
 function syncPageNavigation(page=currentPage){
@@ -787,7 +786,7 @@ function setPage(page){
  else if(page==="reminders"&&isPrimaryPage(currentPage))shelfReturnPage=currentPage;
  currentPage=page;
  window.scrollTo({top:0,behavior:"instant"});syncPageNavigation(page);
- const special=[...PRIMARY_PAGE_IDS.filter(pageId=>pageId!=="buy"),"drivers","reminders","budget","digestibles","projects","project-detail","health","vehicle","ai"],isSpecial=special.includes(page);
+ const special=[...PRIMARY_PAGE_IDS.filter(pageId=>pageId!=="buy"),"mail","drivers","reminders","budget","digestibles","projects","project-detail","health","vehicle","ai"],isSpecial=special.includes(page);
  $("listsPage").hidden=!(["buy","groceries"].includes(page));
  special.forEach(p=>{const el=$(p==="project-detail"?"projectDetailPage":p+"Page");if(el)el.hidden=page!==p});
  $("backupBtn").style.display=isSpecial?"none":"";$("addBtn").style.display="";
@@ -800,6 +799,7 @@ function setPage(page){
   else if(page==="mail"){$("addBtn").style.display="none";loadEmailQueue("mail")}
   else {currentView="active";document.querySelectorAll(".sub-tab").forEach(z=>z.classList.toggle("active",z.dataset.view==="active"));renderLists()}
  }
+ else if(page==="mail"){ $("pageTitle").textContent="Mail";$("pageSubtitle").textContent="Possibly important messages.";$("addBtn").style.display="none";loadEmailQueue("mail"); }
  else if(page==="ai"){ $("pageTitle").textContent="Local AI";$("pageSubtitle").textContent="A private conversation with your PC.";$("addBtn").style.display="none"; }
  else if(page==="projects"){ $("pageTitle").textContent="Projects";$("pageSubtitle").textContent="Everything with a finish line.";renderProjects(); }
  else if(page==="health"){ $("pageTitle").textContent="Health";$("pageSubtitle").textContent="Garmin-powered wellness."; $("addBtn").style.display="none"; }
