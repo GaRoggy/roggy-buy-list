@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#6d28d9">
 <title>Roggy Lists</title>
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="styles.css?v=111">
+<link rel="stylesheet" href="styles.css?v=112">
 <link rel="stylesheet" href="todos.css?v=61">
 <link rel="stylesheet" href="polish.css?v=109">
 <link rel="apple-touch-icon" href="icon.svg?v=2">
@@ -33,6 +33,7 @@
   <button class="page-tab drawer-page-tab" data-page="drivers" onclick="document.getElementById('moreToggle').checked=false">Bad Drivers</button>
   <button class="page-tab drawer-page-tab" data-page="budget" onclick="document.getElementById('moreToggle').checked=false">Finance</button>
   <button class="page-tab drawer-page-tab" data-page="digestibles" onclick="document.getElementById('moreToggle').checked=false">Digestibles</button>
+  <button class="page-tab drawer-page-tab" data-page="dough" onclick="document.getElementById('moreToggle').checked=false">Dough</button>
   <div class="under-construction-group">
     <div class="under-construction-title">Under Construction</div>
     <button class="drawer-page-tab under-construction-item" type="button" disabled>Health <span>Garmin</span></button>
@@ -96,6 +97,22 @@
 </section>
 
 <section id="projectsPage" hidden><main class="system-main"><div class="system-intro"><span class="eyebrow">PROJECTS</span><h2>Everything with a finish line.</h2><p>Plans, hardware, links and next actions in one place.</p></div><div id="projectList" class="project-grid"></div><button id="newProjectBtn" class="wide-action">＋ New Project</button></main></section>
+<section id="doughPage" hidden>
+  <main class="system-main dough-main">
+    <section id="doughOverview">
+      <div class="system-intro"><span class="eyebrow">SIDE CASH</span><h2>Dough</h2><p>Consumer marketplaces that can be turned into automated product factories.</p></div>
+      <div id="doughList" class="dough-list"></div>
+    </section>
+    <section id="doughDetail" class="dough-detail" hidden>
+      <button id="doughBackBtn" class="project-back" type="button">← Dough</button>
+      <article class="dough-strategy-card">
+        <span id="doughDetailKicker" class="eyebrow">STRATEGY</span>
+        <h2 id="doughDetailTitle"></h2>
+        <p id="doughDetailStrategy"></p>
+      </article>
+    </section>
+  </main>
+</section>
 <section id="projectDetailPage" hidden><main class="system-main project-detail-main"><button id="projectBackBtn" class="project-back">← Projects</button><div id="projectDetailContent"></div></main></section>
 <section id="devicesPage" hidden><main class="system-main device-main"><div class="system-intro"><span class="eyebrow">SMART HOME</span><h2>Devices</h2><p>Live state and controls from Layne’s registered device integrations.</p></div><section id="deviceDiagnostics" class="device-diagnostics" aria-live="polite"></section><section id="deviceRoomSummary" class="device-room-summary"></section><section id="deviceStatus" class="status"></section><section id="deviceRooms" class="device-rooms"></section></main></section>
 <section id="healthPage" hidden><main class="system-main"><div class="system-intro"><span class="eyebrow">GARMIN CONNECT</span><h2>Health</h2><p>Your wellness dashboard is ready for Garmin data.</p></div><div class="metric-grid"><div><span>Sleep</span><b>—</b><small>Connect data</small></div><div><span>Body Battery</span><b>—</b><small>Connect data</small></div><div><span>Resting HR</span><b>—</b><small>Connect data</small></div><div><span>Stress</span><b>—</b><small>Connect data</small></div></div><div class="system-card"><b>Health trends</b><p>Sleep, HRV, stress, activity and workouts will live here with day / week / month views and correlations.</p></div></main></section>
@@ -378,7 +395,7 @@
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
 <script src="ai-config.js?v=43"></script>
-<script src="app.js?v=104"></script>
+<script src="app.js?v=105"></script>
 <script src="monitor-ui.js?v=53"></script>
 <script src="todos.js?v=65"></script>
 <script type="module" src="ai-ui.js?v=44"></script>
