@@ -1,7 +1,6 @@
 import { createBridgeProvider } from './ai/browser/provider.js';
 import { LIMITS, validateRequest } from './ai/shared/protocol.js';
 import { createTranscriptStore, formatTranscriptLine, roomLabel } from './transcript.js?v=2';
-
 const el = id => document.getElementById(id);
 const messages = [], history = [];
 let provider, generation, checking, signedIn = false, online = false, epoch = 0;
@@ -109,6 +108,7 @@ function startTranscriptPanel() {
     });
     window.addEventListener('roggy-smart-home-event', event => {
       if (!['whisper_transcript', 'layne_voice_response'].includes(event.detail?.type)) return;
+      if (event.detail?.type === 'whisper_transcript' && event.detail?.final === false) return;
       transcriptStore.ingest(event.detail);
       renderTranscript();
     });
