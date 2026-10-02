@@ -1,6 +1,7 @@
 import { pages, MonitorError } from './core.mjs';
 import { routeEmail, routeAssessment } from './email-routing.mjs';
 import { semanticAssessmentWithFallback, semanticCacheKey } from './email-semantics.mjs';
+import { extractPurchaseData } from './purchase-matching.mjs';
 
 function plainText(part) {
   if (!part) return '';
@@ -48,6 +49,9 @@ export function classifyEmail(message) {
   const tracking = text.match(/\btracking (?:number|id|#)\s*[:#]?\s*([A-Z0-9][A-Z0-9-]{7,40})\b/i)?.[1] || null;
   const routing = routeEmail({ category, labels: [...labels], text: body, headers, sender: headers.from || '',
     subject, due_date: due, required_action: due ? 'Review the stated deadline.' : null });
+  const purchase = extractPurchaseData({ subject, body, sender: headers.from || '',
+    timestamp: new Date(Number(message.internalDate)).toISOString(), category,
+    monetary_amount: amount ? { amount: amount[2].replaceAll(',', ''), currency: amount[1] } : null });
   return { sender: headers.from || null, subject, timestamp: new Date(Number(message.internalDate)).toISOString(),
     category, summary: (message.snippet || '').slice(0, 500), summary_method: 'provider_snippet',
     required_action: due ? 'Review the stated deadline.' : null, due_date: due,
@@ -67,6 +71,7 @@ export function classifyEmail(message) {
     semantic_cache_key: semanticCacheKey({ source_message_id: message.id, category, labels: [...labels], headers,
       sender: headers.from || '', subject, text: body }),
     labels: [...labels], source_message_id: message.id, thread_id: message.threadId, classifier_version: 3,
+    purchase_related: purchase.purchase_related, purchase,
     extraction_notes: 'Deterministic, conservative extraction. Ambiguous amounts, relative dates and event details remain unknown.' };
 }
 

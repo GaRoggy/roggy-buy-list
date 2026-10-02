@@ -37,6 +37,8 @@ const json = (res, status, data) => { res.writeHead(status, { 'Content-Type': 'a
 const SMART_HOME_PREFIX = '/smart-home';
 const SMART_HOME_PATH = /^\/(?:devices(?:\/[A-Za-z0-9._~%+\-]+(?:\/actions)?)?|rooms(?:\/[A-Za-z0-9._~%+\-]+)?|events\/(?:history|stream))$/;
 const CONFIRMATION_PATH = /^\/confirmations\/[A-Za-z0-9._~%+\-]+$/;
+const CAMERA_PREFIX = '/camera';
+const CAMERA_SNAPSHOT_NAME = /^front_door_[0-9_-]+\.jpg$/;
 function smartHomeRequest(reqUrl, requestMethod = null) {
   const parsed = new URL(reqUrl, 'http://bridge.local');
   if (!parsed.pathname.startsWith(`${SMART_HOME_PREFIX}/`) && parsed.pathname !== SMART_HOME_PREFIX) return null;
@@ -53,6 +55,48 @@ function smartHomeRequest(reqUrl, requestMethod = null) {
   const method = isAction ? 'POST' : 'GET';
   if (parsed.search && path === '/events/stream') return { kind: 'proxy', method, path: `/api${path}`, search: parsed.search };
   return { kind: 'proxy', method, path: `/api${path}`, search: parsed.search, stream: isStream };
+}
+
+function cameraRequest(reqUrl, requestMethod = null) {
+  const parsed = new URL(reqUrl, 'http://bridge.local');
+  if (!parsed.pathname.startsWith(`${CAMERA_PREFIX}/`)) return null;
+  const path = parsed.pathname.slice(CAMERA_PREFIX.length);
+  if (path === '/front-door') {
+    if (requestMethod !== 'GET') throw new AIError('METHOD_NOT_ALLOWED', 405);
+    return { method: 'GET', path: '/internal/camera/front_door', search: parsed.search, json: true, timeoutMs: 15000 };
+  }
+  if (path === '/front-door/events') {
+    if (requestMethod !== 'GET') throw new AIError('METHOD_NOT_ALLOWED', 405);
+    return { method: 'GET', path: '/internal/camera/front_door/events', search: parsed.search, json: true, timeoutMs: 15000 };
+  }
+  if (path === '/front-door/frame') {
+    if (requestMethod !== 'GET') throw new AIError('METHOD_NOT_ALLOWED', 405);
+    return { method: 'GET', path: '/internal/camera/front_door/frame', search: parsed.search, json: false, timeoutMs: 15000 };
+  }
+  if (path === '/front-door/analyze') {
+    if (requestMethod !== 'POST') throw new AIError('METHOD_NOT_ALLOWED', 405);
+    return { method: 'POST', path: '/internal/camera/front_door/analyze', search: parsed.search, json: true, timeoutMs: 180000 };
+  }
+  const match = path.match(/^\/front-door\/image\/([^/]+)$/);
+  if (match) {
+    if (requestMethod !== 'GET') throw new AIError('METHOD_NOT_ALLOWED', 405);
+    let name;
+    try { name = decodeURIComponent(match[1]); } catch { throw new AIError('CAMERA_ROUTE_NOT_FOUND', 404); }
+    if (!CAMERA_SNAPSHOT_NAME.test(name)) throw new AIError('CAMERA_ROUTE_NOT_FOUND', 404);
+    return { method: 'GET', path: `/internal/camera/front_door/snapshots/${encodeURIComponent(name)}`, search: parsed.search, json: false, timeoutMs: 15000 };
+  }
+  throw new AIError('CAMERA_ROUTE_NOT_FOUND', 404);
+}
+
+function sanitizeCameraPayload(value) {
+  if (Array.isArray(value)) return value.map(sanitizeCameraPayload);
+  if (!value || typeof value !== 'object') return value;
+  const clean = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (key === 'snapshot_directory' || key === 'snapshot_path' || key === 'last_snapshot_path') continue;
+    clean[key] = sanitizeCameraPayload(item);
+  }
+  return clean;
 }
 
 async function localAgentToken(cfg) {
@@ -138,6 +182,38 @@ async function proxySmartHome(req, res, cfg, fetcher, signal, route) {
   res.end();
 }
 
+async function proxyCamera(req, res, cfg, fetcher, signal, route) {
+  const token = await localAgentToken(cfg);
+  if (!token) throw new AIError('CAMERA_UNAVAILABLE', 503);
+  const target = new URL(`${route.path}${route.search || ''}`, `${cfg.localAgent}/`);
+  const headers = { Accept: req.headers.accept || (route.json ? 'application/json' : 'image/*'), Authorization: `Bearer ${token}` };
+  const connect = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; connect.abort(); }, route.timeoutMs || 15000);
+  let response;
+  try {
+    response = await fetcher(target.toString(), { method: route.method || 'GET', headers, redirect: 'error', signal: AbortSignal.any([signal, connect.signal]) });
+  } catch (error) {
+    if (signal.aborted) throw signal.reason || error;
+    throw new AIError(timedOut ? 'CAMERA_TIMEOUT' : 'CAMERA_UNAVAILABLE', timedOut ? 504 : 503);
+  } finally { clearTimeout(timer); }
+  if (route.json) {
+    // JSON camera state is deliberately sanitized before it crosses the
+    // bridge; the browser never receives local filesystem paths.
+    const body = await response.json().catch(() => ({}));
+    json(res, response.status, sanitizeCameraPayload(body));
+    return;
+  }
+  const contentType = response.headers.get('content-type') || 'image/jpeg';
+  res.writeHead(response.status, { 'Content-Type': contentType, 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
+  if (!response.body) { res.end(); return; }
+  for await (const chunk of Readable.fromWeb(response.body)) {
+    signal.throwIfAborted();
+    if (!res.write(chunk)) await once(res, 'drain', { signal });
+  }
+  res.end();
+}
+
 export function createBridge(cfg, { fetcher = fetch, ai = createAI(cfg, fetcher), logger = row => console.log(JSON.stringify(row)) } = {}) {
   // Fixed-size global buckets avoid attacker-controlled IP/token maps. Forwarded headers are never trusted.
   const ingress = bucket(120), chats = bucket(10), discovery = bucket(30);
@@ -189,6 +265,11 @@ export function createBridge(cfg, { fetcher = fetch, ai = createAI(cfg, fetcher)
           if (smartHome.stream) clearTimeout(timer);
           await proxySmartHome(req, res, cfg, fetcher, signal, smartHome);
         }
+        return;
+      }
+      const camera = cameraRequest(req.url, req.method);
+      if (camera) {
+        await proxyCamera(req, res, cfg, fetcher, signal, camera);
         return;
       }
       if (req.url === '/api/models' && req.method === 'GET') {

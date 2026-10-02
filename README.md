@@ -3,6 +3,7 @@
 ## Private local AI
 
 The existing PWA now includes **More → Local AI**. It talks to Ollama through a Windows-only bridge that validates the signed-in owner with Supabase, calls Ollama only on `127.0.0.1:11434`, and exposes the bridge privately through Tailscale Serve. It does not add a public endpoint, store conversation history in Supabase, or place privileged keys in browser code. Complete the PC and iPhone setup in [docs/ollama-setup.md](docs/ollama-setup.md).
+Generic Web Push infrastructure is documented in [docs/push-notifications.md](docs/push-notifications.md). It is intentionally not connected to Layne, cameras, microphones, Home Assistant, Alexa, reminders, or list events.
 The existing static PWA remains the frontend. A separate Node 24 Windows process reads authorized providers and writes owner-protected Supabase records. Architecture and the inspected baseline are in [docs/monitor-architecture.md](docs/monitor-architecture.md).
 
 ## Delivery status
@@ -81,6 +82,12 @@ The **Mail** tab is the uncertainty shelf. It is filled only by the backend `rou
 Semantic corrections are append-only rows in `monitor_email_feedback`; they are owner-scoped by RLS and weighted by recency and repeated evidence. A correction is not a universal override. `node --env-file=.env monitor/calibrate-email.mjs --sample` writes a bounded, body-free review set to ignored `.secrets/email-review-sample.json`; add expected labels locally and run `--evaluate` to report route/field precision, recall, confidence buckets, Brier score and expected calibration error. Metrics with fewer than 30 reviewed messages are marked insufficient for calibration decisions.
 
 Existing records can be previewed with `node --env-file=.env monitor/reclassify-email.mjs`. It only uses already stored bounded metadata and is dry-run by default; add `--apply` after reviewing the route counts. It never reclassifies deleted records, fetches raw bodies, or changes Gmail.
+
+### Purchase email matching
+
+Purchase-related Gmail records are also classified into a bounded structured projection. The matcher stores one `purchase_emails` row per Gmail message ID, one `purchase_email_products` row per extracted order line, and many-to-many `purchase_email_matches` rows connecting those lines to Buy-list items whose internal status is `bought`. `purchase_lifecycle_events` preserves order/shipping/delivery/refund history instead of overwriting an earlier message. The database RPC is idempotent for repeated Gmail history deliveries.
+
+Deterministic identifiers, product/category overlap, brand, price, quantity, merchant and timing are scored first. Scores of at least `0.90` are automatic; `0.70` through `0.89` are retained as suggestions; weaker candidates are rejected. Normal matching searches Bought items from the previous 90 days plus older Bought items without a confident match. Existing order number, thread ID or tracking number relationships can re-link older lifecycle messages. Only structured metadata and Gmail references are persisted; raw bodies and credentials remain outside the purchase tables.
 
 ## Canonical events and Layne retrieval
 

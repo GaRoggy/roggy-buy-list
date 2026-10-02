@@ -29,6 +29,26 @@ export async function runJob(store, claim, collector = collect, logger = log) {
           error_code: failure(error).code, duration_ms: Date.now() - started });
       }
     }
+    if (source.kind === 'gmail' && typeof store.processPurchaseEmail === 'function') {
+      let candidates = [];
+      try { candidates = await store.purchaseCandidates(); } catch (error) {
+        await logger('purchase_candidate_load_failed', { job_id: job.id, source_id: source.id, error_code: failure(error).code });
+      }
+      for (const record of result.records || []) {
+        try {
+          const decision = await store.processPurchaseEmail(source, record, candidates);
+          if (decision) await logger('purchase_email_processed', { job_id: job.id, source_id: source.id,
+            gmail_message_id: decision.gmail_message_id, classification: decision.email_type,
+            merchant: decision.merchant, products_count: decision.products_count,
+            candidate_count: decision.candidate_count, matches_created: decision.matches_created,
+            suggestions_created: decision.suggestions_created, auto_matches: decision.auto_matches,
+            suggested_matches: decision.suggested_matches, rejected_candidates: decision.rejected?.length || 0,
+            lifecycle_events: decision.lifecycle_events });
+        } catch (error) {
+          await logger('purchase_email_processing_failed', { job_id: job.id, source_id: source.id, error_code: failure(error).code });
+        }
+      }
+    }
     await logger('job_succeeded', { job_id: job.id, records_processed: count,
       events_processed: eventsProcessed, duration_ms: Date.now() - started });
   } catch (error) {

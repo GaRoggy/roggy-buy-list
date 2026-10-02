@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createTranscriptStore, formatTranscriptLine, formatTranscriptTime } from '../../transcript.js';
 
-test('formats a finalized transcript line with local 12-hour time and friendly microphone', () => {
+test('formats a finalized transcript line as a conversation row without microphone metadata', () => {
   const event = { timestamp: '2026-09-30T22:55:00.000Z', friendly_name: 'Living Room', room: 'living_room', microphone_id: 'mic-1', text: 'Layne, turn the lights off' };
   assert.equal(formatTranscriptTime(event.timestamp, { timeZone: 'America/Chicago' }), '5:55 PM');
-  assert.equal(formatTranscriptLine(event, { timeZone: 'America/Chicago' }), '5:55 PM ME · 🎤 Living Room: "Layne, turn the lights off"');
+  assert.equal(formatTranscriptLine(event, { timeZone: 'America/Chicago' }), '5:55 PM Me: "Layne, turn the lights off"');
 });
 
 test('renders Layne voice responses in the same chronological conversation stream', () => {
@@ -33,6 +33,44 @@ test('deduplicates stable event ids while retaining repeated phrases with differ
   assert.equal(first.event_id, updated.event_id);
   assert.equal(updated.final, true);
   assert.equal(store.list().length, 2);
+});
+
+test('collapses cross-microphone raw events by logical utterance id', () => {
+  const store = createTranscriptStore({ now: () => Date.parse('2026-09-30T23:00:00Z') });
+  store.ingest({ event_id: 'living-raw', logical_utterance_id: 'logical-1', timestamp: '2026-09-30T22:59:00Z', microphone_id: 'living-mic', text: 'Layne, turn off the lights', also_heard_by: ['hallway-mic'] });
+  store.ingest({ event_id: 'hallway-raw', logical_utterance_id: 'logical-1', timestamp: '2026-09-30T22:59:00Z', microphone_id: 'hallway-mic', text: 'Turn off the lights' });
+  assert.equal(store.list().length, 1);
+  assert.equal(store.list()[0].event_id, 'logical:logical-1');
+  assert.equal(store.list()[0].raw_event_id, 'living-raw');
+  assert.deepEqual(store.list()[0].also_heard_by, ['hallway-mic']);
+});
+
+test('collapses near-identical cross-microphone utterances within the short dedupe window', () => {
+  const store = createTranscriptStore({ now: () => Date.parse('2026-09-30T23:00:00Z') });
+  store.ingest({ event_id: 'living-raw', timestamp: '2026-09-30T22:59:00Z', microphone_id: 'living-mic', text: 'Lane, turn off the living room lights.' });
+  store.ingest({ event_id: 'bedroom-raw', timestamp: '2026-09-30T22:59:02Z', microphone_id: 'bedroom-mic', text: 'Layne turn off the living room lights' });
+  assert.equal(store.list().length, 1);
+  assert.deepEqual(store.list()[0].microphone_ids, ['living-mic', 'bedroom-mic']);
+  assert.equal(formatTranscriptLine(store.list()[0]), '5:59 PM Me: "Layne, turn off the living room lights."');
+  assert.equal(store.list('bedroom-mic').length, 1);
+});
+
+test('keeps different same-time speech separate and attaches duplicate Layne responses once', () => {
+  const store = createTranscriptStore({ now: () => Date.parse('2026-09-30T23:00:00Z') });
+  store.ingest({ event_id: 'speech-1', timestamp: '2026-09-30T22:59:00Z', microphone_id: 'living-mic', text: 'Layne, turn off the lights' });
+  store.ingest({ event_id: 'speech-2', timestamp: '2026-09-30T22:59:01Z', microphone_id: 'kitchen-mic', text: 'Layne, what time is it?' });
+  store.ingest({ event_id: 'reply-1', transcript_event_id: 'speech-1', timestamp: '2026-09-30T22:59:03Z', microphone_id: 'living-mic', type: 'layne_voice_response', message: 'Done.' });
+  store.ingest({ event_id: 'reply-2', transcript_event_id: 'speech-1', timestamp: '2026-09-30T22:59:03Z', microphone_id: 'bedroom-mic', type: 'layne_voice_response', message: 'Done.' });
+  assert.deepEqual(store.list().map(item => item.kind), ['user', 'user', 'assistant']);
+  assert.deepEqual(store.list('bedroom-mic').map(item => item.kind), ['assistant']);
+  assert.equal(formatTranscriptLine(store.list()[2]), '5:59 PM Layne: "Done."');
+});
+
+test('normalizes Lane to Layne in visible display while retaining original diagnostics', () => {
+  const store = createTranscriptStore();
+  const entry = store.ingest({ event_id: 'spelling', timestamp: new Date().toISOString(), microphone_id: 'mic', original_transcript: 'Lane turn on the lights', normalized_transcript: 'Lane, turn on the lights', text: 'Lane turn on the lights' });
+  assert.equal(entry.original_transcript, 'Lane turn on the lights');
+  assert.match(formatTranscriptLine(entry), /Me: "Layne, turn on the lights"/);
 });
 
 test('prunes entries older than five minutes and remains bounded', () => {

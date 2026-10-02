@@ -59,3 +59,11 @@ test('history access throttling remains retryable', async () => {
     return { historyId:'new' };
   }), error => error.code === 'HTTP_403' && error.terminal === false && error.retryAfter >= 60);
 });
+
+test('purchase extraction keeps multiple order lines as structured metadata without raw body storage', () => {
+  const row = classifyEmail(message('Amazon order confirmation', [], '1. DEWALT drill bit kit USD 34.99\n2. Toaster USD 46.56'));
+  assert.equal(row.purchase_related, true);
+  assert.equal(row.purchase.email_type, 'order_confirmation');
+  assert.equal(row.purchase.products.length, 2);
+  assert.equal(Object.hasOwn(row, 'body'), false);
+});

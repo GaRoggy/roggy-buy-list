@@ -29,6 +29,19 @@ async function fixture(t, opts = {}) {
     if (url.endsWith('/api/devices')) return result({ devices: [{ device_id: 'fixture_light', friendly_name: 'Fixture Light', room: 'living_room', capabilities: ['power'], availability: 'online', online: true, state: 'on', freshness: 'fresh' }] });
     if (url.endsWith('/api/rooms')) return result({ rooms: [{ room_id: 'living_room', friendly_name: 'Living Room', device_count: 1, online_devices: 1 }] });
     if (url.includes('/api/events/history')) return result({ events: [] });
+    if (url.endsWith('/internal/camera/front_door')) return result({
+      camera_id: 'front_door', camera_name: 'Front Door Cam', snapshot_directory: 'C:\\Codex\\LocalAgent\\data\\camera_snapshots\\front_door',
+      last_snapshot_path: 'C:\\Codex\\LocalAgent\\data\\camera_snapshots\\front_door\\front_door_2026-09-30_01-02-03-000000.jpg',
+      last_analysis: { snapshot_path: 'C:\\Codex\\LocalAgent\\data\\camera_snapshots\\front_door\\front_door_2026-09-30_01-02-03-000000.jpg' },
+    });
+    if (url.endsWith('/internal/camera/front_door/analyze')) return result({
+      camera_id: 'front_door', camera_name: 'Front Door Cam', location: 'front_door',
+      short_description: 'Empty porch scene', full_description: 'No person is clearly visible in the snapshot.',
+      snapshot_path: 'C:\\Codex\\LocalAgent\\data\\camera_snapshots\\front_door\\front_door_2026-09-30_01-02-03-000000.jpg',
+    });
+    if (url.endsWith('/internal/camera/front_door/frame') || url.includes('/internal/camera/front_door/snapshots/')) {
+      return new Response(new Uint8Array([255, 216, 255, 217]), { status: 200, headers: { 'Content-Type': 'image/jpeg' } });
+    }
     if (url.endsWith('/api/commands')) return result({ message: 'Layne command accepted' });
     if (url.endsWith('/api/devices/fixture_light/actions')) return result({ success: true });
     if (opts.offline) throw Error('sensitive Ollama detail');
@@ -128,6 +141,35 @@ test('authenticated smart-home traffic stays behind the owner bridge', async t =
   assert.equal(upstream.options.headers.Authorization, 'Bearer valid');
   assert.equal((await f.request('/smart-home/commands', { text: 'status' })).status, 200);
   assert.equal((await f.request('/smart-home/devices/fixture_light/actions', { action: 'power', value: 'off' })).status, 200);
+});
+test('camera traffic uses the local-agent token and strips filesystem paths', async t => {
+  const f = await fixture(t, { cfg: { localAgentApiToken: 'agent-fixture' } });
+  const state = await f.request('/camera/front-door', null);
+  assert.equal(state.status, 200);
+  const body = await state.json();
+  assert.equal(body.camera_id, 'front_door');
+  assert.equal('snapshot_directory' in body, false);
+  assert.equal('last_snapshot_path' in body, false);
+  assert.equal('snapshot_path' in body.last_analysis, false);
+  const stateCall = f.calls.find(call => call.url.endsWith('/internal/camera/front_door'));
+  assert.equal(stateCall.options.headers.Authorization, 'Bearer agent-fixture');
+  const frame = await f.request('/camera/front-door/frame', null);
+  assert.equal(frame.status, 200);
+  assert.equal(frame.headers.get('content-type'), 'image/jpeg');
+  assert.deepEqual([...new Uint8Array(await frame.arrayBuffer())], [255, 216, 255, 217]);
+  assert.equal((await f.request('/camera/front-door/image/front_door_2026-09-30_01-02-03-000000.jpg', null)).status, 200);
+  assert.equal((await f.request('/camera/front-door/image/%2E%2E%2Fevil.jpg', null)).status, 404);
+  const analysis = await fetch(f.url + '/camera/front-door/analyze', {
+    method: 'POST', headers: { Authorization: 'Bearer valid', Origin: 'https://garoggy.github.io' },
+  });
+  assert.equal(analysis.status, 200);
+  const analysisBody = await analysis.json();
+  assert.equal(analysisBody.short_description, 'Empty porch scene');
+  assert.equal('snapshot_path' in analysisBody, false);
+  const analysisCall = f.calls.find(call => call.url.endsWith('/internal/camera/front_door/analyze'));
+  assert.equal(analysisCall.options.method, 'POST');
+  assert.equal(analysisCall.options.headers.Authorization, 'Bearer agent-fixture');
+  assert.equal((await f.request('/camera/front-door/analyze', null)).status, 405);
 });
 test('offline Ollama and model failure return safe errors', async t => {
   const f = await fixture(t, { offline: true }); const r = await f.request('/api/models', null);

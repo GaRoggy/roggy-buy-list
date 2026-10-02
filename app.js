@@ -66,9 +66,10 @@ let emailQueuePages={dashboard:{cursor:null,exhausted:false,loading:false,loaded
 let emailQueuesLoaded=false,emailQueueSessionVersion=0;
 let digestibles=[],digestView="books",digestStatusView="queue";
 const SMART_HOME_API=(window.ROGGY_SMART_HOME_API||window.ROGGY_AI_CONFIG?.smartHomeUrl||"").replace(/\/$/,"");
+const CAMERA_API=(window.ROGGY_AI_CONFIG?.bridgeUrl||"").replace(/\/$/,"");
 let smartHomeState={devices:[],rooms:[],events:[],diagnostics:null},smartHomeLoaded=false,smartHomeUnavailable=false,smartHomeFailure=null,smartHomeLoading=null,smartHomeStreamPromise=null,smartHomeStreamAbort=null,smartHomeStreamRetry=null,smartHomeLastEventId="",smartHomeStreamStatus="disconnected",smartHomeControlAllowed=false,smartHomeAccessToken="",smartHomePendingActions=new Map(),smartHomeActionSequence=0;
 let layneChatMessages=[],layneChatBusy=false,layneChatError="",laynePendingAction=null,layneSessionId=null;
-const layneVoiceChatEventIds=new Set(),layneVoiceResponseIds=new Set();
+let frontDoorEvents=[],frontDoorView="active",frontDoorLoaded=false,frontDoorLoading=null,frontDoorFrameBusy=false,frontDoorFrameUrls=new Map(),frontDoorDeepLinkKey="",frontDoorDetailImageUrl="",frontDoorState=null,frontDoorStateLoading=null,frontDoorStateAttempted=false,frontDoorAnalyzeBusy=false,frontDoorAnalyzeError="";
 
 
 function esc(s=""){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
@@ -89,6 +90,140 @@ async function smartHomeFetch(path,options={}){
  if(!response.ok)throw Object.assign(new Error(smartErrorMessage({payload})),{payload,status:response.status});
  return payload||{};
 }
+async function cameraBinary(path){
+ if(!CAMERA_API)throw Object.assign(new Error("Camera bridge is not configured"),{code:"bridge_not_configured"});
+ if(!smartHomeAccessToken)throw Object.assign(new Error("Sign in to view the private camera"),{code:"authentication_required",status:401});
+ const response=await fetch(CAMERA_API+path,{cache:"no-store",headers:{Accept:"image/*",Authorization:`Bearer ${smartHomeAccessToken}`}});
+ if(!response.ok)throw Object.assign(new Error(`Camera request failed (${response.status})`),{status:response.status});
+ return response.blob();
+}
+async function cameraJson(path,options={}){
+ if(!CAMERA_API)throw Object.assign(new Error("Camera bridge is not configured"),{code:"bridge_not_configured"});
+ if(!smartHomeAccessToken)throw Object.assign(new Error("Sign in to view the private camera"),{code:"authentication_required",status:401});
+ const {timeoutMs=15000,...requestOptions}=options,controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),timeoutMs);
+ let response;try{response=await fetch(CAMERA_API+path,{cache:"no-store",...requestOptions,headers:{Accept:"application/json",Authorization:`Bearer ${smartHomeAccessToken}`,...(requestOptions.headers||{})},signal:controller.signal})}finally{clearTimeout(timeout)}
+ let payload=null;try{payload=await response.json()}catch{}
+ if(!response.ok)throw Object.assign(new Error(payload?.error||`Camera request failed (${response.status})`),{payload,status:response.status,code:payload?.error||"camera_request_failed"});
+ return payload||{};
+}
+function frontDoorCameraOnline(){return !!frontDoorState&&frontDoorState.listener_connected!==false&&!frontDoorState.last_error}
+function frontDoorDetectionLabel(){if(frontDoorState?.current_person_detected===true)return "Person detected";if(frontDoorState?.current_person_detected===false)return "Clear";return "Unknown"}
+function cameraLocationLabel(value){return canonicalRoomId(value)==="porch"?"Front Door / Porch":smartStateLabel(value||"Front Door / Porch")}
+function frontDoorAnalysis(){return frontDoorState?.last_analysis||null}
+function frontDoorAnalysisTimestamp(){return frontDoorAnalysis()?.analysis_completed_at||frontDoorState?.last_analysis_at||frontDoorState?.last_snapshot_captured_at||null}
+function frontDoorCameraDevice(){
+ if(!frontDoorState)return null;
+ const timestamp=frontDoorAnalysisTimestamp();
+ return {device_id:"front_door_cam",friendly_name:"Front Door Cam",type:"camera",room:"porch",capabilities:["camera","vision","status"],availability:frontDoorCameraOnline()?"online":"offline",online:frontDoorCameraOnline(),state:frontDoorDetectionLabel().toLowerCase().replaceAll(" ","_"),freshness:timestamp&&Date.now()-new Date(timestamp).getTime()<14*86400000?"fresh":"stale",last_seen:timestamp,last_state_changed_at:frontDoorState.last_person_detection_at||timestamp,attributes:{location:"front_door",last_analysis_at:frontDoorState.last_analysis_at,last_event_received:frontDoorState.listener_last_event_at,analysis_description:frontDoorAnalysis()?.short_description||"No analysis available."}};
+}
+function mergeFrontDoorDevice(devices){
+ const camera=frontDoorCameraDevice();if(!camera)return devices;
+ const without=devices.filter(device=>!isFrontDoorCamera(device));
+ return [...without,camera];
+}
+function frontDoorStatusMarkup(prefix="frontDoor"){
+ const analysis=frontDoorAnalysis(),online=frontDoorCameraOnline(),tone=online?"online":"offline";
+ const description=analysis?.short_description||"No analysis available yet.";
+ const stamp=frontDoorAnalysisTimestamp();
+ return `<div class="front-door-summary-grid"><div><span class="eyebrow">STATUS</span><b class="front-door-summary-status ${tone}">${online?"Online":"Offline"}</b></div><div><span class="eyebrow">PERSON</span><b>${esc(frontDoorDetectionLabel())}</b></div><div><span class="eyebrow">LAST ANALYSIS</span><b>${esc(stamp?smartTime(stamp):"—")}</b></div></div><p class="front-door-summary-description">${esc(description)}</p>${analysis?.full_description?`<details class="front-door-full-description"><summary>Full description</summary><p>${esc(analysis.full_description)}</p></details>`:""}`;
+}
+function renderFrontDoorSummary(){
+ const page=$("frontDoorSummary"),homeDescription=$("homeFrontDoorDescription"),homeState=$("homeFrontDoorState"),homeStamp=$("homeFrontDoorAnalysisTime"),live=$("frontDoorLiveStatus"),analyze=$("frontDoorAnalyze"),analyzeStatus=$("frontDoorAnalyzeStatus");
+ if(page)page.innerHTML=smartHomeControlAllowed?(frontDoorState?frontDoorStatusMarkup():"<p class=quiet-state>Loading camera status…</p>"):'<p class="quiet-state">Sign in to view the private camera.</p>';
+ if(homeDescription)homeDescription.textContent=frontDoorAnalysis()?.short_description||"No analysis available yet.";
+ if(homeState)homeState.textContent=frontDoorCameraOnline()?frontDoorDetectionLabel():"Offline";
+ if(homeStamp)homeStamp.textContent=frontDoorAnalysisTimestamp()?`Updated ${smartRelative(frontDoorAnalysisTimestamp())}`:"No analysis yet";
+ if(live&&frontDoorState)live.textContent=frontDoorCameraOnline()?frontDoorDetectionLabel():"Offline";
+ if(analyze){analyze.disabled=!smartHomeControlAllowed||frontDoorAnalyzeBusy||!frontDoorCameraOnline();analyze.textContent=frontDoorAnalyzeBusy?"Analyzing…":"Analyze now"}
+ if(analyzeStatus)analyzeStatus.textContent=frontDoorAnalyzeBusy?"Layne is analyzing one fresh snapshot…":frontDoorAnalyzeError;
+}
+async function loadFrontDoorState({silent=true,force=false}={}){
+ if(frontDoorStateLoading)return frontDoorStateLoading;
+ if(!smartHomeControlAllowed){frontDoorState=null;renderFrontDoorSummary();return false}
+ if(frontDoorStateAttempted&&!force)return !!frontDoorState;
+ frontDoorStateAttempted=true;
+ frontDoorStateLoading=(async()=>{try{frontDoorState=await cameraJson("/camera/front-door");frontDoorAnalyzeError="";renderFrontDoorSummary();return true}catch(error){frontDoorState=null;if(!silent)frontDoorAnalyzeError="Camera status unavailable: "+smartErrorMessage(error);renderFrontDoorSummary();return false}})().finally(()=>{frontDoorStateLoading=null});
+ return frontDoorStateLoading;
+}
+async function analyzeFrontDoor(){
+ if(frontDoorAnalyzeBusy||!smartHomeControlAllowed)return;
+ frontDoorAnalyzeBusy=true;frontDoorAnalyzeError="";renderFrontDoorSummary();
+ try{frontDoorState=await cameraJson("/camera/front-door/analyze",{method:"POST",timeoutMs:185000});await refreshFrontDoorFrame();await loadFrontDoorEvents({runCleanup:false});renderFrontDoorSummary()}
+ catch(error){frontDoorAnalyzeError="Manual analysis failed: "+smartErrorMessage(error);renderFrontDoorSummary()}
+ finally{frontDoorAnalyzeBusy=false;renderFrontDoorSummary()}
+}
+function frontDoorRows(){
+ const cutoff=Date.now()-14*86400000,now=Date.now();
+ return frontDoorEvents.filter(row=>{
+  const captured=new Date(row.captured_at||0).getTime();if(!Number.isFinite(captured)||captured<cutoff)return false;
+  if(frontDoorView==="trash")return !!row.deleted_at&&new Date(row.trash_expires_at||0).getTime()>now;
+  return !row.deleted_at;
+ }).sort((a,b)=>new Date(b.captured_at||0)-new Date(a.captured_at||0));
+}
+function renderFrontDoorEvents(){
+ const root=$("frontDoorEventList"),status=$("frontDoorEventStatus");if(!root)return;
+ document.querySelectorAll(".front-door-view-tab").forEach(button=>button.classList.toggle("active",button.dataset.frontDoorView===frontDoorView));
+ if(!smartHomeControlAllowed){root.innerHTML='<div class="system-card"><b>Sign in to view Front Door events.</b><p>Camera metadata and snapshots stay owner-only.</p></div>';if(status)status.textContent="";return}
+ if(!frontDoorLoaded){root.innerHTML='<div class="system-card"><b>Loading Front Door events…</b></div>';return}
+ const rows=frontDoorRows();
+ root.innerHTML=rows.length?rows.map(row=>`<button type="button" class="front-door-event-card" data-front-door-event="${esc(row.id)}"><b>${esc(row.short_description||"Front door scene")}</b><time>${esc(smartTime(row.captured_at))}</time><small>${esc(row.camera_name||"Front Door Cam")} · ${esc(cameraLocationLabel(row.location))}</small></button>`).join(""):'<div class="system-card"><b>'+ (frontDoorView==="trash"?'Recently Deleted is empty.':'No Front Door events in the last 14 days.')+'</b><p>Meaningful retained camera events will appear here automatically.</p></div>';
+ root.querySelectorAll("[data-front-door-event]").forEach(button=>button.onclick=()=>openFrontDoorDetail(button.dataset.frontDoorEvent));
+ if(status)status.textContent=frontDoorView==="trash"?"Trash expires at the earlier of 7 days after deletion or 14 days after capture.":"Newest events first · images retained for 14 days.";
+ renderFrontDoorSummary();
+}
+async function loadFrontDoorEvents({runCleanup=true}={}){
+ if(frontDoorLoading)return frontDoorLoading;
+ frontDoorLoading=(async()=>{
+  const {data:{session}}=await sb.auth.getSession();
+  if(!isOwnerSession(session)){frontDoorEvents=[];frontDoorLoaded=true;renderFrontDoorEvents();return false}
+  if(runCleanup){const cleanup=await sb.functions.invoke("push-notifications",{body:{action:"cleanup_camera_events"}});void cleanup}
+  const {data,error}=await sb.from("camera_events").select("id,event_key,camera_id,camera_name,location,captured_at,analysis_completed_at,short_description,full_description,summary,snapshot_name,analysis,deleted_at,trash_expires_at").eq("user_id",session.user.id).eq("camera_id","front_door").order("captured_at",{ascending:false}).limit(200);
+  frontDoorLoaded=true;
+  if(error){if($("frontDoorEventStatus"))$("frontDoorEventStatus").textContent="Events unavailable right now.";renderFrontDoorEvents();return false}
+  frontDoorEvents=Array.isArray(data)?data:[];renderFrontDoorEvents();
+  if(frontDoorDeepLinkKey){const match=frontDoorEvents.find(row=>row.event_key===frontDoorDeepLinkKey);frontDoorDeepLinkKey="";if(match)openFrontDoorDetail(match.id)}
+  return true;
+ })().finally(()=>{frontDoorLoading=null});
+ return frontDoorLoading;
+}
+function revokeFrontDoorDetailImage(){if(frontDoorDetailImageUrl){URL.revokeObjectURL(frontDoorDetailImageUrl);frontDoorDetailImageUrl=""}}
+function revokeFrontDoorFrameImages(){frontDoorFrameUrls.forEach(url=>URL.revokeObjectURL(url));frontDoorFrameUrls.clear()}
+function frontDoorEventFacts(row){
+ const analysis=row.analysis&&typeof row.analysis==="object"?row.analysis:{};
+ const people=analysis.people_count??(analysis.person_detected?1:0),person=analysis.person_detected===true?"Detected":analysis.person_detected===false?"Clear":"Unknown";
+ const objects=Array.isArray(analysis.objects_near_door)&&analysis.objects_near_door.length?analysis.objects_near_door.map(item=>typeof item==="string"?item:item?.object).filter(Boolean):Array.isArray(analysis.objects)?analysis.objects.filter(Boolean):[];
+ return `<div class="front-door-detail-facts"><div><span>Person</span><b>${esc(person)}</b></div><div><span>People</span><b>${esc(people)}</b></div><div><span>Activity</span><b>${esc(smartStateLabel(analysis.activity||"unknown"))}</b></div><div><span>Objects</span><b>${esc(objects.length?objects.slice(0,5).join(", "):"None reported")}</b></div><div><span>Confidence</span><b>${esc(smartStateLabel(analysis.confidence||"unknown"))}</b></div></div>`;
+}
+function frontDoorEventDiagnostics(row){
+ const analysis=row.analysis&&typeof row.analysis==="object"?row.analysis:{};
+ const details=[analysis.analysis_status&&`Analysis: ${smartStateLabel(analysis.analysis_status)}`,analysis.scene_quality&&`Scene quality: ${smartStateLabel(analysis.scene_quality)}`,analysis.vision_mode&&`Vision mode: ${smartStateLabel(analysis.vision_mode)}`,analysis.inference_duration_ms!=null&&`Duration: ${Math.round(Number(analysis.inference_duration_ms))} ms`].filter(Boolean);
+ return details.length?`<details class="front-door-detail-diagnostics"><summary>Diagnostics</summary><p>${esc(details.join(" · "))}</p></details>`:"";
+}
+async function openFrontDoorDetail(id){
+ const row=frontDoorEvents.find(item=>String(item.id)===String(id));if(!row)return;
+ const dialog=$("frontDoorDetailDialog"),image=$("frontDoorDetailImage"),imageStatus=$("frontDoorDetailImageStatus"),restore=$("frontDoorDetailRestore"),remove=$("frontDoorDetailDelete");if(!dialog)return;
+ revokeFrontDoorDetailImage();image.hidden=true;imageStatus.hidden=false;imageStatus.textContent="Loading private snapshot…";$('frontDoorDetailTitle').textContent=row.short_description||"Front Door event";$('frontDoorDetailMeta').innerHTML=`<span>${esc(smartTime(row.captured_at))}</span><span>${esc(row.camera_name||"Front Door Cam")}</span><span>${esc(cameraLocationLabel(row.location))}</span>`;$('frontDoorDetailDescription').textContent=row.full_description||row.summary||"No description available.";$('frontDoorDetailFacts').innerHTML=frontDoorEventFacts(row);$('frontDoorDetailDiagnostics').innerHTML=frontDoorEventDiagnostics(row);restore.hidden=!row.deleted_at;remove.hidden=!!row.deleted_at;dialog.dataset.frontDoorEventId=row.id;dialog.showModal();
+ try{const blob=await cameraBinary(`/camera/front-door/image/${encodeURIComponent(row.snapshot_name)}`);frontDoorDetailImageUrl=URL.createObjectURL(blob);image.src=frontDoorDetailImageUrl;image.hidden=false;imageStatus.hidden=true}catch(error){imageStatus.textContent="Snapshot unavailable; the 14-day image retention window may have elapsed.";}
+ restore.onclick=()=>updateFrontDoorDeletion(row,false);remove.onclick=()=>updateFrontDoorDeletion(row,true);
+}
+async function updateFrontDoorDeletion(row,deleted){
+ const {data:{session}}=await sb.auth.getSession();if(!isOwnerSession(session))return;
+ const value=deleted?new Date().toISOString():null;
+ const {error}=await sb.from("camera_events").update({deleted_at:value}).eq("id",row.id).eq("user_id",session.user.id);
+ if(error){$("frontDoorDetailImageStatus").hidden=false;$("frontDoorDetailImageStatus").textContent="Could not update this event.";return}
+ const fresh=frontDoorEvents.find(item=>String(item.id)===String(row.id));if(fresh){fresh.deleted_at=value;fresh.trash_expires_at=deleted?new Date(Math.min(Date.now()+7*86400000,new Date(fresh.captured_at).getTime()+14*86400000)).toISOString():null}
+ $("frontDoorDetailDialog").close();renderFrontDoorEvents();
+}
+async function refreshFrontDoorFrame(){
+ const emptyHome=$("homeFrontDoorFrameEmpty"),emptyPage=$("frontDoorFrameEmpty"),home=$("homeFrontDoorFrame"),page=$("frontDoorFrame"),status=$("homeFrontDoorStatus"),live=$("frontDoorLiveStatus");
+ if(!home&&!page)return;if(!smartHomeControlAllowed){[home,page].filter(Boolean).forEach(image=>{image.hidden=true});[emptyHome,emptyPage].filter(Boolean).forEach(node=>{node.hidden=false;node.textContent="Sign in to view the private camera."});return}
+ if(frontDoorFrameBusy)return;frontDoorFrameBusy=true;
+ try{const blob=await cameraBinary("/camera/front-door/frame"),next=[home,page].filter(Boolean).map(()=>URL.createObjectURL(blob));[home,page].filter(Boolean).forEach((image,index)=>{if(frontDoorFrameUrls.has(image.id))URL.revokeObjectURL(frontDoorFrameUrls.get(image.id));image.src=next[index];frontDoorFrameUrls.set(image.id,next[index]);image.hidden=false});[emptyHome,emptyPage].filter(Boolean).forEach(node=>{node.hidden=true});const stamp=new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit"});if(status)status.textContent=`Private preview updated ${stamp}.`;if(live)live.textContent=`Updated ${stamp}`}
+ catch(error){[home,page].filter(Boolean).forEach(image=>{image.hidden=true});[emptyHome,emptyPage].filter(Boolean).forEach(node=>{node.hidden=false;node.textContent="Camera preview unavailable."});if(status)status.textContent="The secure camera bridge is unavailable.";if(live)live.textContent="Unavailable"}
+ finally{frontDoorFrameBusy=false}
+}
+setInterval(()=>{if(!document.hidden&&smartHomeControlAllowed&&(currentPage==="home"||currentPage==="front-door"))refreshFrontDoorFrame().catch(()=>{})},10000);
+setInterval(()=>{if(!document.hidden&&smartHomeControlAllowed&&currentPage==="front-door"&&!frontDoorLoading)loadFrontDoorEvents({runCleanup:false}).catch(()=>{})},15000);
 function smartFailureKind(error){if(!SMART_HOME_API||error?.code==="bridge_not_configured")return "bridge";if([401,403].includes(error?.status)||["UNAUTHORIZED","FORBIDDEN","authentication_required","authentication_failed"].includes(error?.payload?.error?.code))return "authentication";if(error?.status>=500)return "service";return "network"}
 function diagnosticTone(status){return ["online","authenticated"].includes(status)?"online":status==="degraded"?"stale":"offline"}
 function diagnosticLabel(status){return ["online","authenticated"].includes(status)?"Online":status==="degraded"?"Degraded":status==="unknown"?"Unknown":"Offline"}
@@ -101,7 +236,15 @@ function renderDeviceDiagnostics(){
   ["Layne",diagnostics.layne?.status||"unknown",diagnostics.layne?.reason==="not_configured"?"Health check not configured":"Local agent health"],
   ["Smart-home service",diagnostics.smart_home?.status||(failure==="service"?"offline":"unknown"),diagnostics.smart_home?.reason==="network_error"?"Bridge cannot reach PC service":"PC service / registry"]
  ];
- root.innerHTML=`<div class="device-diagnostics-grid">${rows.map(([name,status,detail])=>`<article class="device-diagnostic-card"><div><span>${esc(name)}</span><small>${esc(detail)}</small></div><b class="device-status-badge ${diagnosticTone(status)}">${diagnosticLabel(status)}</b></article>`).join("")}</div>${failure?`<p class="device-diagnostics-error">API: ${esc(failure==="authentication"?"Authentication failed":failure==="bridge"?"Bridge unavailable":failure==="service"?"Smart-home service unavailable":"Network/API request failed")} · ${esc(smartErrorMessage({code:failure}))}</p>`:""}`;
+ const voice=diagnostics.voice||{}, microphones=Array.isArray(voice.microphones)?voice.microphones:[], whisper=voice.whisper||{};
+ const microphoneRows=microphones.map(microphone=>{
+  const connected=Boolean(microphone.connected), streaming=Boolean(microphone.audio_stream_healthy), vad=Boolean(microphone.vad_loaded);
+  const age=microphone.last_audio_age_seconds==null?"—":`${Math.max(0,Math.round(Number(microphone.last_audio_age_seconds)*1000))} ms ago`;
+  const state=connected?(streaming?"Connected":"Connected · stalled"):"Disconnected";
+  return `<article class="device-diagnostic-card"><div><span>${esc(microphone.friendly_name||microphone.microphone_id||"Microphone")}</span><small>${esc(microphone.room||"unassigned")} · ${esc(microphone.microphone_id||"")}</small></div><b class="device-status-badge ${diagnosticTone(streaming?"online":connected?"degraded":"offline")}">${esc(state)}</b><small>Streaming: ${streaming?"yes":"no"} · VAD: ${vad?"ready":"not ready"} · Last packet: ${esc(age)}</small></article>`;
+ }).join("");
+ const whisperMarkup=`<section class="device-diagnostics-voice"><div class="section-head"><div><span class="eyebrow">VOICE INPUTS</span><h3>Microphone lanes</h3></div><small>${esc(voice.connected_microphone_count??0)}/${esc(voice.microphone_count??microphones.length)} connected</small></div>${microphoneRows||'<p class="quiet-state">No microphone lanes reported.</p>'}<div class="device-diagnostics-whisper"><span>WHISPER</span><b>${esc(whisper.model||"large-v3")}</b><small>${whisper.ready===false?"Unavailable":"Ready"} · Active jobs: ${esc(whisper.active_jobs??0)} · Queue: ${esc(whisper.queue??0)}</small></div></section>`;
+ root.innerHTML=`<div class="device-diagnostics-grid">${rows.map(([name,status,detail])=>`<article class="device-diagnostic-card"><div><span>${esc(name)}</span><small>${esc(detail)}</small></div><b class="device-status-badge ${diagnosticTone(status)}">${diagnosticLabel(status)}</b></article>`).join("")}</div>${whisperMarkup}${failure?`<p class="device-diagnostics-error">API: ${esc(failure==="authentication"?"Authentication failed":failure==="bridge"?"Bridge unavailable":failure==="service"?"Smart-home service unavailable":"Network/API request failed")} · ${esc(smartErrorMessage({code:failure}))}</p>`:""}`;
 }
 function deviceTypeLabel(device){return smartStateLabel(device?.type||"device")}
 function deviceBrightness(device){const value=device?.attributes?.brightness;return Number.isFinite(Number(value))?Math.max(0,Math.min(100,Math.round(Number(value)))):null}
@@ -126,6 +269,7 @@ function deviceStatusLine(device){
  if(capabilities.some(x=>["audio_input","microphone_status","status","health"].includes(x)))return `Online · ${smartStateLabel(device.state)}`;
  return state==="unknown"?"Online":smartStateLabel(device.state);
 }
+function isFrontDoorCamera(device){return device?.device_id==="front_door_cam"||String(device?.type||"").toLowerCase()==="camera"&&canonicalRoomId(device?.room)==="porch"}
 function capabilityLabel(capability){return smartStateLabel(capability)}
 function presenceLastDetected(device){const attrs=device?.attributes||{};return attrs.last_detected_at||attrs.last_detected||attrs.last_state_change||attrs.last_event_received||device?.last_seen}
 function unknownCapabilityMarkup(device){
@@ -155,13 +299,47 @@ function deviceControlsMarkup(device){
 }
 function deviceCardMarkup(device){
  const tone=deviceStatusTone(device),id=esc(device.device_id);
- return `<article class="device-card ${tone!=="online"?"device-offline":""}" id="device-card-${id}" data-device-card="${id}"><div class="device-card-head"><div><h3>${esc(device.friendly_name||device.device_id)}</h3><p>${esc(deviceTypeLabel(device))} · ${esc(smartStateLabel(device.room||"unassigned"))}</p></div><span class="device-status-badge ${tone}">${tone==="online"?"Online":tone==="stale"?"Stale":"Offline"}</span></div><div class="device-current-state"><span>Current state</span><b>${esc(deviceStatusLine(device))}</b></div><div class="device-controls">${deviceControlsMarkup(device)}</div><div class="device-updated">${esc(deviceFreshnessLine(device))}</div></article>`;
+ if(isFrontDoorCamera(device))return `<article class="device-card camera-device-card ${tone!=="online"?"device-offline":""}" id="device-card-${id}" data-device-card="${id}"><button type="button" class="camera-device-open" data-camera-open="front-door"><div class="device-card-head"><div><h3>Front Door Cam</h3><p>Camera · Front Door / Porch</p></div><span class="device-status-badge ${tone}">${tone==="online"?"Online":tone==="stale"?"Stale":"Offline"}</span></div><div class="device-current-state"><span>Person status</span><b>${esc(deviceStatusLine(device))}</b></div><div class="device-updated">${esc(device.attributes?.analysis_description||deviceFreshnessLine(device))}</div><span class="camera-device-link">Open camera shelf →</span></button></article>`;
+ return `<article class="device-card ${tone!=="online"?"device-offline":""}" id="device-card-${id}" data-device-card="${id}"><div class="device-card-head"><div><h3>${esc(device.friendly_name||device.device_id)}</h3><p>${esc(deviceTypeLabel(device))} · ${esc(smartStateLabel(deviceRoomId(device)))}</p></div><span class="device-status-badge ${tone}">${tone==="online"?"Online":tone==="stale"?"Stale":"Offline"}</span></div><div class="device-current-state"><span>Current state</span><b>${esc(deviceStatusLine(device))}</b></div><div class="device-controls">${deviceControlsMarkup(device)}</div><div class="device-updated">${esc(deviceFreshnessLine(device))}</div></article>`;
 }
-function roomDevices(room){return room?.devices?.length?room.devices:smartHomeState.devices.filter(device=>(device.room||"unassigned")===(room.room_id||"unassigned"))}
+function canonicalRoomId(value){
+ const raw=typeof value==="object"&&value?value.room_id||value.area_id||value.id||value.name:value;
+ const normalized=String(raw??"").trim().toLowerCase().replace(/[ -]+/g,"_");
+ if(!normalized||normalized==="unassigned"||normalized==="unknown"||normalized==="none")return "";
+ const aliases={livingroom:"living_room",living_room:"living_room",bedroom:"bedroom",kitchen:"kitchen",hall:"hallway",hallway:"hallway",corridor:"hallway",diningroom:"dining_room",dining_room:"dining_room",bathroom:"bathroom",porch:"porch",front_door:"porch",frontdoor:"porch"};
+ return aliases[normalized]||(/^[a-z0-9]+(?:_[a-z0-9]+)*$/.test(normalized)?normalized:"");
+}
+function roomIdFromFriendlyName(value){
+ const text=String(value||"").toLowerCase();
+ for(const [roomId,aliases] of Object.entries({living_room:["living room","livingroom"],bedroom:["bedroom"],kitchen:["kitchen"],hallway:["hallway","hall"],dining_room:["dining room","diningroom"],bathroom:["bathroom"],porch:["porch","front door","frontdoor"]}))if(aliases.some(alias=>text.includes(alias)))return roomId;
+ return "";
+}
+function roomDisplayName(room){return room?.room_id==="porch"?"Front Door / Porch":room?.friendly_name||smartStateLabel(room?.room_id||"Unassigned")}
+function roomMembershipIndex(){
+ const memberships=new Map();
+ for(const room of (smartHomeState.rooms||[])){
+  const roomId=canonicalRoomId(room?.room_id||room?.area_id||room?.id||room?.name);if(!roomId)continue;
+  for(const reference of (Array.isArray(room?.devices)?room.devices:[])){
+   const deviceId=typeof reference==="string"?reference:reference?.device_id;
+   if(deviceId&&!memberships.has(String(deviceId)))memberships.set(String(deviceId),roomId);
+  }
+ }
+ return memberships;
+}
+function deviceRoomId(device,memberships=roomMembershipIndex()){
+ const membership=memberships.get(String(device?.device_id||""));if(membership)return membership;
+ for(const value of [device?.room,device?.room_id,device?.registry_room,device?.area_id,device?.area,device?.attributes?.room,device?.metadata?.room,device?.config?.room]){const roomId=canonicalRoomId(value);if(roomId)return roomId;}
+ return roomIdFromFriendlyName(device?.friendly_name||device?.canonical_name)||"unassigned";
+}
+function roomDevices(room){return Array.isArray(room?.devices)?room.devices:smartHomeState.devices.filter(device=>deviceRoomId(device)===(room.room_id||"unassigned"))}
 function smartHomeRooms(){
- const byId=new Map((smartHomeState.rooms||[]).map(room=>[room.room_id,{...room,devices:[]}]))
- smartHomeState.devices.forEach(device=>{const roomId=device.room||"unassigned";if(!byId.has(roomId))byId.set(roomId,{room_id:roomId,friendly_name:smartStateLabel(roomId),devices:[]});byId.get(roomId).devices.push(device)});
- return [...byId.values()].map(room=>({...room,devices:room.devices.length?room.devices:roomDevices(room)})).sort((a,b)=>roomAttentionScore(b)-roomAttentionScore(a));
+ const memberships=roomMembershipIndex(),byId=new Map();
+ for(const source of (smartHomeState.rooms||[])){
+  const roomId=canonicalRoomId(source?.room_id||source?.area_id||source?.id||source?.name);if(!roomId)continue;
+  byId.set(roomId,{...source,room_id:roomId,friendly_name:source.friendly_name||source.name||smartStateLabel(roomId),devices:[]});
+ }
+ smartHomeState.devices.forEach(device=>{const roomId=deviceRoomId(device,memberships);if(!byId.has(roomId))byId.set(roomId,{room_id:roomId,friendly_name:roomId==="unassigned"?"Unassigned":smartStateLabel(roomId),devices:[]});byId.get(roomId).devices.push(device)});
+ return [...byId.values()].map(room=>({...room,devices:room.devices||[]})).filter(room=>room.devices.length||room.room_id!=="unassigned").sort((a,b)=>roomAttentionScore(b)-roomAttentionScore(a));
 }
 function roomPresenceLabel(room){const devices=roomDevices(room),sensors=devices.filter(device=>device.capabilities?.includes("presence")),valid=sensors.filter(device=>deviceUsable(device)&&String(device.state||"").toLowerCase()!=="unknown");if(!sensors.length)return "Presence unavailable";if(!valid.length)return sensors.some(device=>deviceOnline(device))?"Presence stale":"Offline";return valid.some(device=>["occupied","present","detected","motion"].includes(String(device.state||"").toLowerCase()))?"Occupied":"Clear"}
 function roomLightLabel(room){const lights=roomDevices(room).filter(device=>device.capabilities?.includes("power")),active=lights.filter(device=>deviceUsable(device)&&devicePowerState(device)==="on"),brightness=active.map(deviceBrightness).filter(value=>value!=null);if(!lights.length)return "Lights: —";if(!active.length)return "Lights: Off";if(active.length===1&&brightness.length===1)return `Lights: On · ${brightness[0]}%`;return `Lights: ${active.length} on`}
@@ -171,7 +349,7 @@ function roomHealthLine(room){const devices=roomDevices(room),offline=devices.fi
 function deviceActivityText(event){const device=smartHomeState.devices.find(item=>item.device_id===event.device_id),name=device?.friendly_name||event.device_id||"Smart home";if(event.type==="command.request")return "Layne command received";if(event.type==="device.online")return `${name} came online`;if(event.type==="device.offline")return `${name} went offline`;if(event.type==="device.state_changed")return `${name} · ${smartStateLabel(event.new)}`;return "Smart-home update"}
 function recentSmartHomeEvents(){return (smartHomeState.events||[]).filter(event=>event.type?.startsWith("device.")||event.type==="command.request").slice().sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp)).slice(0,5)}
 function focusDevice(deviceId){setPage("devices");setTimeout(()=>{const card=document.querySelector(`[data-device-card="${CSS.escape(deviceId)}"]`);if(card){card.scrollIntoView({behavior:"smooth",block:"center"});card.classList.add("device-highlight");setTimeout(()=>card.classList.remove("device-highlight"),1600)}},50)}
-function bindHomeDeviceLinks(){document.querySelectorAll("[data-device-jump]").forEach(button=>button.onclick=()=>focusDevice(button.dataset.deviceJump));document.querySelectorAll("[data-room-jump]").forEach(button=>button.onclick=()=>{setPage("devices");setTimeout(()=>document.getElementById(`smart-room-${CSS.escape(button.dataset.roomJump)}`)?.scrollIntoView({behavior:"smooth",block:"start"}),50)})}
+function bindHomeDeviceLinks(){document.querySelectorAll("[data-device-jump]").forEach(button=>button.onclick=()=>focusDevice(button.dataset.deviceJump));document.querySelectorAll("[data-camera-open]").forEach(button=>button.onclick=()=>setPage("front-door"));document.querySelectorAll("[data-room-jump]").forEach(button=>button.onclick=()=>{setPage("devices");setTimeout(()=>document.getElementById(`smart-room-${CSS.escape(button.dataset.roomJump)}`)?.scrollIntoView({behavior:"smooth",block:"start"}),50)})}
 function snapshotDevice(device){return device?{...device,attributes:{...(device.attributes||{})}}:null}
 function beginDeviceAction(deviceId,body){
  const device=smartHomeState.devices.find(item=>item.device_id===deviceId),previous=snapshotDevice(device);if(!previous)return {previous:null,version:0};
@@ -222,20 +400,24 @@ async function sendRoomPower(roomId,value){
 }
 function renderHomeDeviceStatus(){
  const root=$("homeDeviceStatus");if(!root)return;
+ if(smartHomeControlAllowed&&!frontDoorState&&!frontDoorStateLoading)loadFrontDoorState({silent:true}).then(()=>{smartHomeState.devices=mergeFrontDoorDevice(smartHomeState.devices);renderHomeDeviceStatus();renderDevicesPage()}).catch(()=>{});
+ smartHomeState.devices=mergeFrontDoorDevice(smartHomeState.devices);
  smartHomeState.devices=smartHomeState.devices.map(pendingDeviceState);
  if(smartHomeUnavailable){root.innerHTML=`<div class="quiet-state"><b>Smart Home</b><br>${esc(smartFailureKind(smartHomeFailure)==="authentication"?"Authentication failed.":"Bridge or smart-home service unavailable.")}</div>`;return}
  if(!smartHomeLoaded){root.innerHTML='<div class="quiet-state">Loading device status…</div>';return}
  if(!smartHomeState.devices.length){root.innerHTML='<div class="quiet-state">No devices configured.</div>';return}
  root.innerHTML=smartHomeState.devices.map(device=>`<button type="button" class="home-device-row" data-home-jump="devices"><span class="home-device-dot ${deviceOnline(device)?"online":"offline"}></span><b>${esc(device.friendly_name||device.device_id)}</b><span>${esc(deviceStatusLine(device))}</span></button>`).join("");
  const rooms=smartHomeRooms(),events=recentSmartHomeEvents();
- const roomMarkup=rooms.map(room=>{const lights=roomDevices(room).filter(device=>device.capabilities?.includes("power")&&deviceUsable(device));return `<article class="home-room-card"><button type="button" class="home-room-open" data-room-jump="${esc(room.room_id)}"><div><span class="eyebrow">ROOM</span><b>${esc(room.friendly_name||room.room_id)}</b></div><strong>${esc(roomPresenceLabel(room))}</strong><span>${esc(roomLightLabel(room))}</span>${roomMicrophoneLabel(room)?`<span>${esc(roomMicrophoneLabel(room))}</span>`:""}<small>${esc(room.online_devices??roomDevices(room).filter(device=>deviceOnline(device)).length)}/${esc(room.device_count??roomDevices(room).length)} devices online · ${esc(roomHealthLine(room))}</small></button>${lights.length?`<div class="home-room-quick"><span>Quick lights</span><button type="button" data-room-action="on" data-room-id="${esc(room.room_id)}">On</button><button type="button" data-room-action="off" data-room-id="${esc(room.room_id)}">Off</button></div>`:""}</article>`}).join("");
- const rows=smartHomeState.devices.slice().sort((a,b)=>(!deviceOnline(b)?1:!deviceOnline(a)?-1:!deviceFresh(b)?1:!deviceFresh(a)?-1:0)).map(device=>`<button type="button" class="home-device-row" data-device-jump="${esc(device.device_id)}"><span class="home-device-dot ${deviceStatusTone(device)}"></span><b>${esc(device.friendly_name||device.device_id)}</b><span>${esc(deviceStatusLine(device))}<small>${esc(deviceFreshnessLine(device))}</small></span></button>`).join("");
+ const homeDeviceRow=device=>isFrontDoorCamera(device)?`<button type="button" class="home-device-row" data-camera-open="front-door"><span class="home-device-dot ${deviceStatusTone(device)}"></span><b>Front Door Cam</b><span>${esc(deviceStatusLine(device))}<small>${esc(device.attributes?.analysis_description||deviceFreshnessLine(device))}</small></span></button>`:`<button type="button" class="home-device-row" data-device-jump="${esc(device.device_id)}"><span class="home-device-dot ${deviceStatusTone(device)}"></span><b>${esc(device.friendly_name||device.device_id)}</b><span>${esc(deviceStatusLine(device))}<small>${esc(deviceFreshnessLine(device))}</small></span></button>`;
+ const roomMarkup=rooms.map(room=>{const devices=roomDevices(room).slice().sort((a,b)=>(!deviceOnline(b)?1:!deviceOnline(a)?-1:!deviceFresh(b)?1:!deviceFresh(a)?-1:0)),lights=devices.filter(device=>device.capabilities?.includes("power")&&deviceUsable(device));return `<article class="home-room-card"><button type="button" class="home-room-open" data-room-jump="${esc(room.room_id)}"><div><span class="eyebrow">ROOM</span><b>${esc(roomDisplayName(room))}</b></div><strong>${esc(roomPresenceLabel(room))}</strong><span>${esc(roomLightLabel(room))}</span>${roomMicrophoneLabel(room)?`<span>${esc(roomMicrophoneLabel(room))}</span>`:""}<small>${esc(room.online_devices??devices.filter(device=>deviceOnline(device)).length)}/${esc(room.device_count??devices.length)} devices online · ${esc(roomHealthLine(room))}</small></button><div class="home-device-list">${devices.map(homeDeviceRow).join("")}</div>${lights.length?`<div class="home-room-quick"><span>Quick lights</span><button type="button" data-room-action="on" data-room-id="${esc(room.room_id)}">On</button><button type="button" data-room-action="off" data-room-id="${esc(room.room_id)}">Off</button></div>`:""}</article>`}).join("");
  const activity=events.length?`<div class="home-activity"><div class="home-subhead"><span>RECENT ACTIVITY</span><small>Latest ${events.length}</small></div>${events.map(event=>`<div class="home-activity-row"><time>${esc(smartClock(event.timestamp))}</time><span>${esc(deviceActivityText(event))}</span></div>`).join("")}</div>`:"";
- root.innerHTML=`<div class="home-room-summary-grid">${roomMarkup}</div><div class="home-device-list">${rows}</div>${activity}`;
+ root.innerHTML=`<div class="home-room-summary-grid">${roomMarkup}</div>${activity}`;
  bindHomeDeviceLinks();document.querySelectorAll("[data-room-action]").forEach(button=>button.onclick=()=>sendRoomPower(button.dataset.roomId,button.dataset.roomAction));
 }
 function renderDevicesPage(){
  const summary=$("deviceRoomSummary"),rooms=$("deviceRooms");if(!summary||!rooms)return;
+ if(smartHomeControlAllowed&&!frontDoorState&&!frontDoorStateLoading)loadFrontDoorState({silent:true}).then(()=>{smartHomeState.devices=mergeFrontDoorDevice(smartHomeState.devices);renderHomeDeviceStatus();renderDevicesPage()}).catch(()=>{});
+ smartHomeState.devices=mergeFrontDoorDevice(smartHomeState.devices);
  smartHomeState.devices=smartHomeState.devices.map(pendingDeviceState);
  renderDeviceDiagnostics();
  const hasSnapshot=smartHomeLoaded||smartHomeState.devices.length>0||smartHomeState.rooms.length>0;
@@ -243,12 +425,13 @@ function renderDevicesPage(){
  if(!hasSnapshot){summary.innerHTML="";rooms.innerHTML='<div class="system-card"><b>Loading device status…</b></div>';return}
  if(!smartHomeState.devices.length){summary.innerHTML="";rooms.innerHTML='<div class="system-card"><b>No devices configured</b><p>Add a device to Layne’s registry and it will appear here automatically.</p></div>';return}
  const grouped=smartHomeRooms();
- summary.innerHTML=grouped.map(room=>`<button type="button" class="device-room-summary-card" data-room-jump="${esc(room.room_id)}"><span>${esc(room.friendly_name||room.room_id)}</span><b>${room.online_devices??roomDevices(room).filter(device=>deviceOnline(device)).length}/${room.device_count??roomDevices(room).length}</b><small>online · ${esc(roomHealthLine(room))}</small></button>`).join("");
- rooms.innerHTML=grouped.map(room=>{const roomState=roomPresenceLabel(room);return `<section class="device-room" id="smart-room-${esc(room.room_id)}" data-room-section="${esc(room.room_id)}"><div class="device-room-head"><div><span class="eyebrow">ROOM</span><h3>${esc(room.friendly_name||room.room_id)}</h3></div><span class="room-presence-badge ${roomState==="Offline"||roomState.includes("stale")?"offline":""}">${esc(roomState)}</span></div><div class="device-grid">${roomDevices(room).slice().sort((a,b)=>(deviceStatusTone(a)==="online"?1:-1)-(deviceStatusTone(b)==="online"?1:-1)).map(device=>deviceCardMarkup(device)).join("")}</div></section>`}).join("");
+ summary.innerHTML=grouped.map(room=>`<button type="button" class="device-room-summary-card" data-room-jump="${esc(room.room_id)}"><span>${esc(roomDisplayName(room))}</span><b>${room.online_devices??roomDevices(room).filter(device=>deviceOnline(device)).length}/${room.device_count??roomDevices(room).length}</b><small>online · ${esc(roomHealthLine(room))}</small></button>`).join("");
+ rooms.innerHTML=grouped.map(room=>{const roomState=roomPresenceLabel(room);return `<section class="device-room" id="smart-room-${esc(room.room_id)}" data-room-section="${esc(room.room_id)}"><div class="device-room-head"><div><span class="eyebrow">ROOM</span><h3>${esc(roomDisplayName(room))}</h3></div><span class="room-presence-badge ${roomState==="Offline"||roomState.includes("stale")?"offline":""}">${esc(roomState)}</span></div><div class="device-grid">${roomDevices(room).slice().sort((a,b)=>(deviceStatusTone(a)==="online"?1:-1)-(deviceStatusTone(b)==="online"?1:-1)).map(device=>deviceCardMarkup(device)).join("")}</div></section>`}).join("");
  bindDeviceControls();
  bindHomeDeviceLinks();
 }
 function bindDeviceControls(){
+ document.querySelectorAll("[data-camera-open]").forEach(button=>button.onclick=()=>setPage("front-door"));
  document.querySelectorAll("[data-device-action=power]").forEach(button=>button.onclick=()=>sendDeviceAction(button.dataset.deviceId,{action:"power",value:button.dataset.deviceValue}));
  document.querySelectorAll("[data-device-action=brightness]").forEach(input=>{input.oninput=()=>{const output=document.querySelector(`[data-device-brightness-output="${CSS.escape(input.dataset.deviceId)}"]`);if(output)output.textContent=input.value+"%"};input.onchange=()=>sendDeviceAction(input.dataset.deviceId,{action:"brightness",value:Number(input.value)})});
 }
@@ -287,13 +470,10 @@ setInterval(()=>{if(!document.hidden&&(currentPage==="home"||currentPage==="devi
 function layneResponseText(payload){if(typeof payload==="string")return payload;if(payload?.message)return String(payload.message);if(payload?.answer)return String(payload.answer);if(typeof payload?.result==="string")return payload.result;if(payload?.result?.message)return String(payload.result.message);return "Layne returned a response without text."}
 function layneConfirmationDecision(text){const normalized=String(text||"").trim().toLowerCase().replace(/[.!?,;:]+$/g,"");if(/^(yes|yeah|yep|do it|confirm|go ahead|okay|ok)$/.test(normalized))return true;if(/^(no|nope|cancel|never mind|nevermind|don't|dont|stop)$/.test(normalized))return false;return null}
 function laynePendingMarkup(action){if(!action?.id&&!action?.confirmation_id)return "";const id=esc(action.id||action.confirmation_id),preview=esc(String(action.preview||"this action").replace(/[.?]+$/,""));return `<div class="layne-confirmation-card" data-pending-action="${id}"><p>Layne wants to:</p><strong>${preview}</strong><div class="layne-confirmation-actions"><button type="button" class="secondary" data-confirmation-id="${id}" data-confirmation-decision="false">Cancel</button><button type="button" class="primary" data-confirmation-id="${id}" data-confirmation-decision="true">Confirm</button></div></div>`}
-function layneVoiceSourceLabel(message){return String(message?.friendly_name||message?.room||message?.microphone_id||"Voice").replace(/[_-]+/g," ").replace(/\b\w/g,character=>character.toUpperCase()).trim()||"Voice"}
-function renderLayneChat(){const history=$("layneChatHistory"),error=$("layneChatError"),send=$("layneChatSend"),status=$("layneChatStatus");if(!history)return;history.innerHTML=layneChatMessages.map(message=>{const label=message.source==="voice"?`ME · 🎤 ${layneVoiceSourceLabel(message)}`:message.role===`user`?"You":"Layne";return `<div class="layne-chat-message ${message.role===`user`?"user":"assistant"}"><b>${esc(label)}</b><p>${esc(message.text)}</p>${message.pendingAction?laynePendingMarkup(message.pendingAction):""}</div>`}).join("");history.scrollTop=history.scrollHeight;if(send)send.disabled=layneChatBusy||!smartHomeControlAllowed;if(status)status.textContent=layneChatBusy?"Layne is thinking…":"";if(error)error.textContent=layneChatError}
+function renderLayneChat(){const history=$("layneChatHistory"),error=$("layneChatError"),send=$("layneChatSend"),status=$("layneChatStatus");if(!history)return;history.innerHTML=layneChatMessages.map(message=>{const label=message.role===`user`?"You":"Layne";return `<div class="layne-chat-message ${message.role===`user`?"user":"assistant"}"><b>${esc(label)}</b><p>${esc(message.text)}</p>${message.pendingAction?laynePendingMarkup(message.pendingAction):""}</div>`}).join("");history.scrollTop=history.scrollHeight;if(send)send.disabled=layneChatBusy||!smartHomeControlAllowed;if(status)status.textContent=layneChatBusy?"Layne is thinking…":"";if(error)error.textContent=layneChatError}
 function openLayneChat({focus=true}={}){const dialog=$("layneChatDialog");if(!dialog)return;if(!smartHomeControlAllowed){$("layneChatError").textContent="Sign in to talk to Layne.";return}renderLayneChat();if(!dialog.open)dialog.showModal();if(focus)setTimeout(()=>$("layneChatPrompt")?.focus(),40)}
 async function submitLayneConfirmation(confirmationId,approve,alreadyBusy=false){if((layneChatBusy&&!alreadyBusy)||!confirmationId)return;const active=laynePendingAction;if(!active||String(active.id||active.confirmation_id)!==String(confirmationId)){layneChatError="That confirmation is no longer active.";renderLayneChat();return}layneChatBusy=true;layneChatError="";renderLayneChat();try{const payload=await smartHomeFetch(`/confirmations/${encodeURIComponent(confirmationId)}`,{method:"POST",timeoutMs:30000,headers:{"Content-Type":"application/json"},body:JSON.stringify({approve})});laynePendingAction=null;layneChatMessages.push({role:"assistant",text:approve?(payload?.ok?"Done — the confirmed action completed.":layneResponseText(payload)):"Cancelled."});await loadSmartHome({silent:true})}catch(exception){layneChatError="Layne could not complete that confirmation: "+smartErrorMessage(exception)}finally{layneChatBusy=false;renderLayneChat()}}
 async function sendLayneChat(){const prompt=$("layneChatPrompt");if(!prompt||layneChatBusy)return;const text=prompt.value.trim();if(!text)return;if(!smartHomeControlAllowed){layneChatError="Sign in to talk to Layne.";renderLayneChat();return}layneChatError="";layneChatMessages.push({role:"user",text});prompt.value="";layneChatBusy=true;renderLayneChat();try{const decision=laynePendingAction?layneConfirmationDecision(text):null;if(decision!==null){await submitLayneConfirmation(laynePendingAction.id||laynePendingAction.confirmation_id,decision,true);return}const body={text};if(layneSessionId)body.context={session_id:layneSessionId};const payload=await smartHomeFetch("/commands",{method:"POST",timeoutMs:185000,headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});layneSessionId=payload?.session_id||layneSessionId;laynePendingAction=payload?.pending_action||null;layneChatMessages.push({role:"assistant",text:layneResponseText(payload),pendingAction:laynePendingAction});await loadSmartHome({silent:true})}catch(exception){layneChatError="Layne could not respond: "+smartErrorMessage(exception)}finally{layneChatBusy=false;renderLayneChat()}}
-function rememberLayneVoiceId(set,id){const value=String(id||"").trim();if(!value||set.has(value))return false;if(set.size>=512){const oldest=set.values().next().value;if(oldest)set.delete(oldest)}set.add(value);return true}
-function appendVoiceUserMessage(event){const eventId=String(event?.event_id||event?.transcript_event_id||"");const text=String(event?.chat_text||"").trim();if(!text||!rememberLayneVoiceId(layneVoiceChatEventIds,eventId))return false;layneChatMessages.push({role:"user",text,source:"voice",friendly_name:event.friendly_name,room:event.room,microphone_id:event.microphone_id,event_id:eventId,timestamp:event.timestamp,original_transcript:event.original_transcript||event.transcript||event.text||""});return true}
 function handleLayneVoiceEvent(event){
  // Voice conversation is rendered by the Local AI live transcript panel.
  // The typed-chat dialog remains manual-only and must never open from voice.
@@ -310,21 +490,27 @@ syncLayneChatFab(currentPage);
 $("layneChatForm")?.addEventListener("submit",event=>{event.preventDefault();sendLayneChat()});
 $("layneChatPrompt")?.addEventListener("keydown",event=>{if(event.key==="Enter"&&!event.shiftKey){event.preventDefault();sendLayneChat()}});
 function loadLocal(){try{const x=JSON.parse(localStorage.getItem(KEY));if(x?.buy&&x?.groceries)return x}catch{}return structuredClone(seed)}
+function listStatus(value){const normalized=String(value||"").trim().toLowerCase().replace(/\s+/g,"_");return normalized==="bought"?"bought":normalized==="ready_to_buy"?"ready_to_buy":"looking"}
+function listStatusLabel(value){return {looking:"Looking",ready_to_buy:"Ready to Buy",bought:"Bought"}[listStatus(value)]||"Looking"}
 
 async function loadLists(){
   const {data:rows,error}=await sb.from("list_items").select("*").order("created_at",{ascending:true});
   if(error){data=loadLocal();showErr(error);renderLists();return}
   data={buy:[],groceries:[]};
-  for(const r of rows)data[r.list_type].push({id:r.id,item:r.item,category:r.category||"",priority:r.priority||"Need",quantity:r.quantity||"",status:r.status,notes:r.notes||"",option1:r.option1||"",price1:r.price1,link1:r.link1||"",option2:r.option2||"",price2:r.price2,link2:r.link2||"",option3:r.option3||"",price3:r.price3,link3:r.link3||"",deleted:!!r.deleted_at,deletedAt:r.deleted_at||null,created:r.created_at});
+  for(const r of rows)data[r.list_type].push({id:r.id,item:r.item,category:r.category||"",priority:r.priority||"Need",quantity:r.quantity||"",status:listStatus(r.status),boughtAt:r.bought_at||null,notes:r.notes||"",option1:r.option1||"",price1:r.price1,link1:r.link1||"",option2:r.option2||"",price2:r.price2,link2:r.link2||"",option3:r.option3||"",price3:r.price3,link3:r.link3||"",deleted:!!r.deleted_at,deletedAt:r.deleted_at||null,created:r.created_at});
   localStorage.setItem(KEY,JSON.stringify(data));renderLists();
 }
 async function saveItem(x){
+  x.status=listStatus(x.status);
+  x.boughtAt=x.status==="bought"?(x.boughtAt||new Date().toISOString()):null;
   localStorage.setItem(KEY,JSON.stringify(data));
-  const {error}=await sb.from("list_items").update({item:x.item,category:x.category||null,priority:x.priority||null,quantity:x.quantity||null,status:x.status,notes:x.notes||null,deleted_at:x.deleted?(x.deletedAt||new Date().toISOString()):null}).eq("id",x.id);
+  const {error}=await sb.from("list_items").update({item:x.item,category:x.category||null,priority:x.priority||null,quantity:x.quantity||null,status:x.status,bought_at:x.boughtAt||null,notes:x.notes||null,deleted_at:x.deleted?(x.deletedAt||new Date().toISOString()):null}).eq("id",x.id);
   if(error)throw error;
 }
 async function insertItem(x){
-  const {data:rows,error}=await sb.from("list_items").insert({list_type:currentPage,item:x.item,category:x.category||null,priority:x.priority||null,quantity:x.quantity||null,status:x.status,notes:x.notes||null}).select();
+  x.status=listStatus(x.status);
+  x.boughtAt=x.status==="bought"?(x.boughtAt||new Date().toISOString()):null;
+  const {data:rows,error}=await sb.from("list_items").insert({list_type:currentPage,item:x.item,category:x.category||null,priority:x.priority||null,quantity:x.quantity||null,status:x.status,bought_at:x.boughtAt||null,notes:x.notes||null}).select();
   if(error)throw error;if(rows?.[0])x.id=rows[0].id;localStorage.setItem(KEY,JSON.stringify(data));
 }
 
@@ -339,7 +525,7 @@ function renderLists(){
   $("summary").style.display=currentView==="deleted"?"none":"";
   $("addBtn").style.display=currentView==="deleted"?"none":"";
   $("priorityFilters").style.display=currentPage==="groceries"?"none":"";
-  const active=arr.filter(x=>!x.deleted),bought=active.filter(x=>x.status==="Bought").length,ready=active.filter(x=>x.status==="Ready to Buy").length;
+  const active=arr.filter(x=>!x.deleted),bought=active.filter(x=>listStatus(x.status)==="bought").length,ready=active.filter(x=>listStatus(x.status)==="ready_to_buy").length;
   $("summary").innerHTML=`<div><b>${active.length-bought}</b><span>active</span></div><div><b>${ready}</b><span>ready</span></div><div><b>${bought}</b><span>bought</span></div>`;
   const q=$("search").value.toLowerCase(),rank={Need:0,Want:1,Eventually:2};
   let shown=arr.filter(x=>currentView==="deleted"?x.deleted:!x.deleted);if(currentView==="deleted"&&currentPage==="buy")shown.sort((a,b)=>new Date(b.deletedAt||b.created||0)-new Date(a.deletedAt||a.created||0))
@@ -349,14 +535,14 @@ function renderLists(){
   $("list").innerHTML="";
   if(!shown.length){$("list").innerHTML='<div class="card empty">Nothing here yet.</div>';return}
   shown.forEach(x=>{
-    const c=document.createElement("article");c.className="card "+(x.status==="Bought"?"bought":"");
+    const c=document.createElement("article");c.className="card "+(listStatus(x.status)==="bought"?"bought":"");
     if(currentView==="deleted"){
       c.innerHTML=`<div class="deleted-row"><div><div class="item-name">${esc(x.item)}</div><div class="meta"><span>${esc(x.category||"Other")}</span>${currentPage==="buy"&&x.deletedAt?`<span>Bought ${new Date(x.deletedAt).toLocaleDateString([],{month:"short",day:"numeric",year:"numeric"})}</span>`:""}</div></div><button class="restorebtn" aria-label="Restore item" title="Restore item"><span class="restore-icon" aria-hidden="true">↶</span></button></div>`;
-      c.querySelector(".restorebtn").onclick=()=>{x.deleted=false;x.deletedAt=null;x.status="Looking";saveItem(x).catch(showErr);renderLists()};$("list").appendChild(c);return;
+      c.querySelector(".restorebtn").onclick=()=>{x.deleted=false;x.deletedAt=null;x.status="looking";saveItem(x).catch(showErr);renderLists()};$("list").appendChild(c);return;
     }
-    c.innerHTML=`<div class="card-summary"><button class="removebtn icon-action remove-left">✕</button><div class="summary-main"><div class="item-name">${esc(x.item)}${x.quantity&&x.quantity!=="1"?` <small>×${esc(x.quantity)}</small>`:""}</div><div class="meta"><span>${esc(x.category||"Other")}</span><span>${esc(x.status)}</span></div></div><div class="card-controls">${currentPage==="buy"?`<button class="prioritybtn icon-action" data-dir="up">↑</button><span class="badge ${esc(x.priority)}">${esc(x.priority)}</span><button class="prioritybtn icon-action" data-dir="down">↓</button>`:""}<span class="chevron">⌄</span></div></div><div class="card-details collapsed"><div class="quick"><button class="statusbtn ${x.status==="Looking"?"selected":""}" data-s="Looking">Looking</button><button class="statusbtn ${x.status==="Ready to Buy"?"selected":""}" data-s="Ready to Buy">Ready</button><button class="statusbtn ${x.status==="Bought"?"selected":""}" data-s="Bought">✓ Bought</button></div>${x.notes?`<div class="detail-notes">${esc(x.notes)}</div>`:""}${currentPage==="buy"?renderResearch(x):""}<div class="bottom-actions"><button class="editbtn">Edit details</button><button class="deletebtn danger-action" type="button">Delete</button></div></div>`;
+    c.innerHTML=`<div class="card-summary"><button class="removebtn icon-action remove-left">✕</button><div class="summary-main"><div class="item-name">${esc(x.item)}${x.quantity&&x.quantity!=="1"?` <small>×${esc(x.quantity)}</small>`:""}</div><div class="meta"><span>${esc(x.category||"Other")}</span><span>${esc(listStatusLabel(x.status))}</span></div></div><div class="card-controls">${currentPage==="buy"?`<button class="prioritybtn icon-action" data-dir="up">↑</button><span class="badge ${esc(x.priority)}">${esc(x.priority)}</span><button class="prioritybtn icon-action" data-dir="down">↓</button>`:""}<span class="chevron">⌄</span></div></div><div class="card-details collapsed"><div class="quick"><button class="statusbtn ${listStatus(x.status)==="looking"?"selected":""}" data-s="looking">Looking</button><button class="statusbtn ${listStatus(x.status)==="ready_to_buy"?"selected":""}" data-s="ready_to_buy">Ready</button><button class="statusbtn ${listStatus(x.status)==="bought"?"selected":""}" data-s="bought">✓ Bought</button></div>${x.notes?`<div class="detail-notes">${esc(x.notes)}</div>`:""}${currentPage==="buy"?renderResearch(x):""}<div class="bottom-actions"><button class="editbtn">Edit details</button><button class="deletebtn danger-action" type="button">Delete</button></div></div>`;
     c.querySelector(".card-summary").onclick=e=>{if(e.target.closest("button"))return;c.querySelector(".card-details").classList.toggle("collapsed");c.classList.toggle("expanded")};
-    c.querySelector(".removebtn").onclick=()=>{if(currentPage==="buy")x.status="Bought";x.deleted=true;x.deletedAt=new Date().toISOString();saveItem(x).catch(showErr);renderLists()};
+    c.querySelector(".removebtn").onclick=()=>{if(currentPage==="buy")x.status="bought";x.deleted=true;x.deletedAt=new Date().toISOString();saveItem(x).catch(showErr);renderLists()};
     c.querySelectorAll(".statusbtn").forEach(b=>b.onclick=()=>{x.status=b.dataset.s;saveItem(x).catch(showErr);renderLists()});
     c.querySelectorAll(".prioritybtn").forEach(b=>b.onclick=()=>changePriority(x,b.dataset.dir));
     c.querySelector(".editbtn").onclick=()=>openEdit(x);c.querySelector(".deletebtn").onclick=async()=>{if(!confirm(`Delete "${x.item}" permanently? This will not move it to ${currentPage==="buy"?"Bought":"Recently Deleted"}.`))return;const {error}=await sb.from("list_items").delete().eq("id",x.id);if(error){showErr(error);return}data[currentPage]=data[currentPage].filter(i=>i.id!==x.id);localStorage.setItem(KEY,JSON.stringify(data));renderLists()};$("list").appendChild(c);
@@ -379,7 +565,7 @@ function setItemDestination(dest){
  $("dialogTitle").textContent=dest==="buy"?"Add purchase":"Add grocery";
 }
 function closeItemDialog(){$("itemDialog").close()}
-function openEdit(x){$("dialogTitle").textContent="Edit item";$("itemId").value=x.id;$("item").value=x.item;$("category").value=x.category||"";$("priority").value=x.priority||"Need";$("quantity").value=x.quantity||"";$("itemStatus").value=x.status||"Looking";$("notes").value=x.notes||"";$("itemDestinationWrap").hidden=true;$("itemDestination").value=currentPage;$("itemDialog").showModal()}
+function openEdit(x){$("dialogTitle").textContent="Edit item";$("itemId").value=x.id;$("item").value=x.item;$("category").value=x.category||"";$("priority").value=x.priority||"Need";$("quantity").value=x.quantity||"";$("itemStatus").value=listStatusLabel(x.status);$("notes").value=x.notes||"";$("itemDestinationWrap").hidden=true;$("itemDestination").value=currentPage;$("itemDialog").showModal()}
 function openAddItem(){$("itemId").value="";$("itemForm").reset();$("priority").value="Need";$("itemDestinationWrap").hidden=false;setItemDestination(currentPage==="buy"?"buy":"groceries");$("itemDialog").showModal();setTimeout(()=>$("item").focus(),50)}
 document.querySelectorAll(".destination-choice").forEach(b=>b.onclick=()=>setItemDestination(b.dataset.destination));
 $("itemDialogClose").onclick=closeItemDialog;$("itemDialogCancel").onclick=closeItemDialog;
@@ -387,7 +573,7 @@ $("itemDialogClose").onclick=closeItemDialog;$("itemDialogCancel").onclick=close
 $("itemForm").addEventListener("submit",e=>{
   e.preventDefault();const id=$("itemId").value,target=id?currentPage:$("itemDestination").value;let x=id?data[target].find(v=>v.id===id):null;
   if(!x){x={id:crypto.randomUUID(),deleted:false,created:new Date().toISOString().slice(0,10)};data[target].push(x)}
-  Object.assign(x,{item:$("item").value.trim(),category:$("category").value.trim(),priority:$("priority").value,quantity:$("quantity").value.trim(),status:$("itemStatus").value,notes:$("notes").value.trim()});
+  Object.assign(x,{item:$("item").value.trim(),category:$("category").value.trim(),priority:$("priority").value,quantity:$("quantity").value.trim(),status:listStatus($("itemStatus").value),notes:$("notes").value.trim()});
   const previousPage=currentPage;currentPage=target;(id?saveItem(x):insertItem(x)).catch(showErr);$("itemDialog").close();currentPage=previousPage;renderLists();
 });
 
@@ -677,9 +863,13 @@ async function completeManualReminder(id){
   if(error){if(button){button.disabled=false;button.textContent="Could not complete"}return}$("reminderDetailDialog").close();reminders=reminders.filter(x=>String(x.id)!==String(id));renderReminders();
 }
 document.querySelectorAll(".reminder-tab").forEach(b=>b.onclick=()=>{reminderView=b.dataset.reminderView;document.querySelectorAll(".reminder-tab").forEach(z=>z.classList.toggle("active",z===b));renderReminders()});
+document.querySelectorAll(".front-door-view-tab").forEach(b=>b.onclick=()=>{frontDoorView=b.dataset.frontDoorView;renderFrontDoorEvents()});
+$("frontDoorAnalyze")?.addEventListener("click",analyzeFrontDoor);
 document.addEventListener("click",e=>{const card=e.target.closest(".reminder-card[data-reminder-id]");if(card)openReminderDetail(card.dataset.reminderId)});
 $("closeReminderDetail").onclick=()=>$("reminderDetailDialog").close();
 $("reminderDetailDialog").addEventListener("click",e=>{if(e.target===$("reminderDetailDialog"))$("reminderDetailDialog").close()});
+$("closeFrontDoorDetail").onclick=()=>{$("frontDoorDetailDialog").close();revokeFrontDoorDetailImage()};
+$("frontDoorDetailDialog").addEventListener("click",e=>{if(e.target===$("frontDoorDetailDialog")){$("frontDoorDetailDialog").close();revokeFrontDoorDetailImage()}});
 
 
 const BUDGET_PIN_KEY="roggy-budget-pin-v1",BUDGET_CRED_KEY="roggy-budget-credential-v1";let budgetUnlocked=false,budgetTimer=null,budgetEntries=[],budgetMode="monthly";
@@ -792,7 +982,7 @@ function setPage(page){
  else if(page==="reminders"&&isPrimaryPage(currentPage))shelfReturnPage=currentPage;
  currentPage=page;
  window.scrollTo({top:0,behavior:"instant"});syncPageNavigation(page);
- const special=[...PRIMARY_PAGE_IDS.filter(pageId=>pageId!=="buy"),"mail","drivers","reminders","budget","digestibles","projects","project-detail","health","vehicle","ai"],isSpecial=special.includes(page);
+ const special=[...PRIMARY_PAGE_IDS.filter(pageId=>pageId!=="buy"),"mail","drivers","reminders","budget","digestibles","front-door","projects","project-detail","health","vehicle","ai"],isSpecial=special.includes(page);
  $("listsPage").hidden=!(["buy","groceries"].includes(page));
  special.forEach(p=>{const el=$(p==="project-detail"?"projectDetailPage":p+"Page");if(el)el.hidden=page!==p});
  $("backupBtn").style.display=isSpecial?"none":"";$("addBtn").style.display="";
@@ -813,6 +1003,7 @@ function setPage(page){
  else if(page==="drivers"){ $("pageTitle").textContent="Bad Drivers";$("pageSubtitle").textContent="Track observations and compare demographics.";loadDrivers() }
  else if(page==="reminders"){ $("pageTitle").textContent="Reminders";$("pageSubtitle").textContent="What is coming up.";loadReminders() }
  else if(page==="digestibles"){ $("pageTitle").textContent="Digestibles";$("pageSubtitle").textContent="Books, movies, and anime worth consuming.";loadDigestibles() }
+ else if(page==="front-door"){ $("pageTitle").textContent="Front Door";$("pageSubtitle").textContent="Private camera shelf.";$("addBtn").style.display="none";loadFrontDoorState({silent:false,force:true}).catch(()=>{});loadFrontDoorEvents().catch(()=>{});refreshFrontDoorFrame().catch(()=>{}) }
  else if(page==="budget"){ $("pageTitle").textContent="Finance";$("pageSubtitle").textContent="Private financial dashboard.";$("addBtn").style.display="none";lockBudget() }
  else if(page==="groceries"){currentView="active";document.querySelectorAll(".sub-tab").forEach(z=>z.classList.toggle("active",z.dataset.view==="active"));renderLists()}
  $("moreToggle").checked=false;
@@ -860,12 +1051,13 @@ function applyAuthSession(session){
  if(!session)smartHomeStreamStatus="disconnected";
  if(!session&&smartHomeStreamRetry){clearTimeout(smartHomeStreamRetry);smartHomeStreamRetry=null}
  smartHomeControlAllowed=hasSession;smartHomeAccessToken=session?.access_token||"";
- if(!session){smartHomeLoaded=false;smartHomeUnavailable=false;smartHomeFailure=null;smartHomeState={devices:[],rooms:[],events:[],diagnostics:null};layneChatMessages=[];laynePendingAction=null;layneSessionId=null;layneVoiceChatEventIds.clear();layneVoiceResponseIds.clear();renderLayneChat()}
+ if(!session){smartHomeLoaded=false;smartHomeUnavailable=false;smartHomeFailure=null;smartHomeState={devices:[],rooms:[],events:[],diagnostics:null};frontDoorEvents=[];frontDoorLoaded=false;frontDoorState=null;frontDoorStateAttempted=false;frontDoorAnalyzeError="";revokeFrontDoorFrameImages();renderFrontDoorEvents();renderFrontDoorSummary();layneChatMessages=[];laynePendingAction=null;layneSessionId=null;renderLayneChat()}
  setPrivacyGate(session);
  if(authIdentityChanged){reminderSessionVersion++;emailQueueSessionVersion++;reminders=[];remindersLoaded=false;monitorEmails=[];monitorEmailMessage=session?"Loading monitored email…":"Sign in to view monitored email.";emailQueues={dashboard:[],finance:[],mail:[]};emailQueuePages={dashboard:{cursor:null,exhausted:false,loading:false,loaded:false},finance:{cursor:null,exhausted:false,loading:false,loaded:false},mail:{cursor:null,exhausted:false,loading:false,loaded:false}};emailQueuesLoaded=false;emailQueueMessages={dashboard:session?"Loading monitored email…":"Sign in to view monitored email.",finance:session?"Loading financial email…":"Sign in to view financial email.",mail:session?"Loading mail…":"Sign in to view mail."};renderImportantEmails();renderEmailQueue("finance");renderEmailQueue("mail");if(session)loadEmailQueues().catch(()=>{})}
  window.dispatchEvent(new CustomEvent("roggy-auth",{detail:{signedIn:hasSession}}));
  if(currentPage==="home"&&(authIdentityChanged||!smartHomeLoaded))renderHome();
  if(currentPage==="devices"&&(authIdentityChanged||!smartHomeLoaded)){renderDevicesPage();if(session)loadSmartHome({silent:true}).catch(()=>{})}
+ if(currentPage==="front-door"&&(authIdentityChanged||!frontDoorLoaded)){renderFrontDoorEvents();renderFrontDoorSummary();if(session){loadFrontDoorState({silent:false}).catch(()=>{});loadFrontDoorEvents().catch(()=>{})}}
  $("authBtn").textContent=session?"Sign out":"Sign in";$("authBtn").title=session?.user?.email||"Sign in with GitHub"
 }
 async function finishOAuthRedirect(){const p=new URLSearchParams(location.search),code=p.get("code"),err=p.get("error_description")||p.get("error");if(err){$("status").textContent="Sign-in error: "+err;history.replaceState({},document.title,location.pathname);return}if(!code)return;const {data,error}=await sb.auth.exchangeCodeForSession(code);history.replaceState({},document.title,location.pathname);if(error){$("status").textContent="Sign-in error: "+error.message;applyAuthSession(null);return}applyAuthSession(data.session);$("status").textContent=""}
@@ -890,6 +1082,7 @@ function renderHome(){
  if(!emailQueuesLoaded)loadEmailQueues().catch(()=>{});
  renderHomeDeviceStatus();
  if(!smartHomeLoaded)loadSmartHome({silent:true}).catch(()=>{});
+ refreshFrontDoorFrame().catch(()=>{});
  document.querySelectorAll("[data-home-jump]").forEach(b=>b.onclick=()=>setPage(b.dataset.homeJump));
  document.querySelectorAll("[data-focus-jump]").forEach(b=>b.onclick=()=>setPage(b.dataset.focusJump));
  if(!remindersLoaded){remindersLoaded=true;loadReminders().then(()=>{if(currentPage==="home")renderHome()}).catch(()=>{})}
@@ -1019,7 +1212,7 @@ document.querySelectorAll(".mode-choice").forEach(b=>b.onclick=()=>{localStorage
 $("settingsShelfBtn").onclick=()=>{$("moreToggle").checked=false;$("settingsToggle").checked=true};
 
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");
-updateAuth().then(async session=>{if(isOwnerSession(session)){await loadLists();if(typeof loadHomeTasks==="function")await loadHomeTasks()}if(currentPage==="reminders")setPage("home")});
+updateAuth().then(async session=>{if(isOwnerSession(session)){await loadLists();if(typeof loadHomeTasks==="function")await loadHomeTasks();const params=new URLSearchParams(location.search);if(params.get("page")==="front-door"){frontDoorDeepLinkKey=params.get("event")||params.get("event_key")||"";setPage("front-door")}}if(currentPage==="reminders")setPage("home")});
 
 /* UX pass v72 */
 document.addEventListener("keydown",e=>{

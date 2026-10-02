@@ -33,6 +33,7 @@
   <button class="page-tab drawer-page-tab" data-page="drivers" onclick="document.getElementById('moreToggle').checked=false">Bad Drivers</button>
   <button class="page-tab drawer-page-tab" data-page="budget" onclick="document.getElementById('moreToggle').checked=false">Finance</button>
   <button class="page-tab drawer-page-tab" data-page="digestibles" onclick="document.getElementById('moreToggle').checked=false">Digestibles</button>
+  <button class="page-tab drawer-page-tab" data-page="front-door" onclick="document.getElementById('moreToggle').checked=false">Front Door</button>
   <div class="under-construction-group">
     <div class="under-construction-title">Under Construction</div>
     <button class="drawer-page-tab under-construction-item" type="button" disabled>Health <span>Garmin</span></button>
@@ -80,6 +81,16 @@
     </div>
     <p>Changes text, controls, spacing, cards, and the rest of the interface together.</p>
   </section>
+  <section class="setting-group push-setting-group">
+    <h3>Notifications</h3>
+    <p id="pushStatus" role="status">Checking notification support…</p>
+    <div class="mode-options push-actions">
+      <button id="pushEnable" type="button">Enable Notifications</button>
+      <button id="pushTest" type="button" hidden>Send Test Notification</button>
+      <button id="pushDisable" type="button" hidden>Disable on This Device</button>
+    </div>
+    <small id="pushSupportNote"></small>
+  </section>
 </aside>
 
 <section id="homePage">
@@ -92,8 +103,11 @@
       <section id="homeTimeline" class="home-timeline"></section>
     </section><section class="home-section device-status-section"><div class="section-head"><div><span class="eyebrow">SMART HOME</span><h3>Devices</h3></div><button class="text-action" data-home-jump="devices">Open shelf</button></div><div id="homeDeviceStatus" class="home-device-status"></div></section>
     <section class="home-section email-section"><div class="section-head"><div><span class="eyebrow">EMAIL</span><h3>Action Required</h3></div><span class="mail-filter-badge">Last 21 days</span></div><div id="importantEmailList" class="important-email-list"></div></section>
+    <section class="home-section front-door-home-section"><div class="section-head"><div><span class="eyebrow">FRONT DOOR CAM</span><h3>Camera status</h3></div><button class="text-action" data-home-jump="front-door">Open shelf</button></div><div class="front-door-dashboard-card"><div class="front-door-dashboard-copy"><b id="homeFrontDoorState">—</b><p id="homeFrontDoorDescription">Loading camera status…</p><small id="homeFrontDoorAnalysisTime">—</small></div><div class="front-door-frame-wrap compact"><img id="homeFrontDoorFrame" class="front-door-frame" alt="Front Door camera live view" hidden><div id="homeFrontDoorFrameEmpty" class="quiet-state">Sign in to view the private camera.</div></div></div><p id="homeFrontDoorStatus" class="front-door-status" role="status"></p></section>
   </main>
 </section>
+
+<section id="frontDoorPage" hidden><main class="system-main front-door-main"><div class="system-intro"><span class="eyebrow">FRONT DOOR CAM</span><h2>Private camera shelf</h2><p>Live preview and retained event history from Layne’s existing local camera pipeline. Snapshots remain owner-only and expire after 14 days.</p></div><section class="front-door-live-card"><div class="section-head"><div><span class="eyebrow">CAMERA STATUS</span><h3>Front Door / Porch</h3></div><button id="frontDoorAnalyze" type="button" class="primary">Analyze now</button></div><div id="frontDoorSummary" class="front-door-summary"><p class="quiet-state">Loading camera status…</p></div><p id="frontDoorAnalyzeStatus" class="status" role="status"></p><div class="section-head front-door-preview-head"><div><span class="eyebrow">LIVE PREVIEW</span><h3>Current frame</h3></div><span id="frontDoorLiveStatus" class="front-door-live-status" role="status">—</span></div><div class="front-door-frame-wrap"><img id="frontDoorFrame" class="front-door-frame" alt="Front Door camera live view" hidden><div id="frontDoorFrameEmpty" class="quiet-state">Camera preview unavailable.</div></div></section><div class="front-door-event-toolbar"><div><span class="eyebrow">EVENT HISTORY</span><h3>Retained Front Door events</h3></div><div class="front-door-view-tabs"><button type="button" class="front-door-view-tab active" data-front-door-view="active">Recent</button><button type="button" class="front-door-view-tab" data-front-door-view="trash">Recently Deleted</button></div></div><p id="frontDoorEventStatus" class="status" role="status"></p><section id="frontDoorEventList" class="front-door-event-list"></section></main></section>
 
 <section id="projectsPage" hidden><main class="system-main"><div class="system-intro"><span class="eyebrow">PROJECTS</span><h2>Everything with a finish line.</h2><p>Plans, hardware, links and next actions in one place.</p></div><div id="projectList" class="project-grid"></div><button id="newProjectBtn" class="wide-action">＋ New Project</button></main></section>
 <section id="projectDetailPage" hidden><main class="system-main project-detail-main"><button id="projectBackBtn" class="project-back">← Projects</button><div id="projectDetailContent"></div></main></section>
@@ -371,6 +385,7 @@
 <dialog id="driverDetailDialog"><div class="detail-dialog"><div class="dialog-head"><h2>Observation</h2><button id="closeDriverDetail" class="plain">✕</button></div><div id="driverDetail"></div></div></dialog>
 
 <dialog id="reminderDetailDialog"><div class="detail-dialog reminder-detail-dialog"><div class="dialog-head"><div><span id="reminderDetailKicker" class="dialog-kicker">REMINDER</span><h2 id="reminderDetailTitle">Reminder</h2></div><button id="closeReminderDetail" class="plain" type="button" aria-label="Close reminder details">✕</button></div><div id="reminderDetail"></div></div></dialog>
+<dialog id="frontDoorDetailDialog"><div class="detail-dialog front-door-detail-dialog"><div class="dialog-head"><div><span class="dialog-kicker">FRONT DOOR EVENT</span><h2 id="frontDoorDetailTitle">Front Door event</h2></div><button id="closeFrontDoorDetail" class="plain" type="button" aria-label="Close Front Door event details">✕</button></div><img id="frontDoorDetailImage" class="front-door-detail-image" alt="Front Door event snapshot" hidden><p id="frontDoorDetailImageStatus" class="quiet-state">Loading private snapshot…</p><div id="frontDoorDetailMeta" class="front-door-detail-meta"></div><p id="frontDoorDetailDescription" class="front-door-detail-description"></p><div id="frontDoorDetailFacts"></div><div id="frontDoorDetailDiagnostics"></div><div class="front-door-detail-actions"><button id="frontDoorDetailRestore" type="button" class="secondary" hidden>Restore event</button><button id="frontDoorDetailDelete" type="button" class="danger">Move to Recently Deleted</button></div></div></dialog>
 
 <input id="importFile" type="file" accept="application/json" hidden>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -378,7 +393,8 @@
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
 <script src="ai-config.js?v=43"></script>
-<script src="app.js?v=104"></script>
+<script src="app.js?v=105"></script>
+<script src="push-notifications.js?v=1"></script>
 <script src="monitor-ui.js?v=53"></script>
 <script src="todos.js?v=65"></script>
 <script type="module" src="ai-ui.js?v=43"></script>

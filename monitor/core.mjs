@@ -1,4 +1,5 @@
 import { appendFile, mkdir } from 'node:fs/promises';
+import { generatePurchaseMatches, normalizeProductName, productFingerprint, PURCHASE_MATCHING_CONFIG } from './purchase-matching.mjs';
 
 export class MonitorError extends Error {
   constructor(code, { terminal = false, retryAfter = 0, status = 0 } = {}) {
@@ -79,11 +80,73 @@ export class Store {
     const params = new URLSearchParams({ user_id: `eq.${this.env.MONITOR_USER_ID}`, order: 'created_at.desc', limit: String(Math.min(500, Math.max(1, Number(limit) || 200))) });
     return this.api(`monitor_email_feedback?${params}`);
   }
+  async purchaseCandidates({ limit = PURCHASE_MATCHING_CONFIG.maxCandidates, receivedAt = new Date() } = {}) {
+    const cutoff = new Date(new Date(receivedAt).getTime() - PURCHASE_MATCHING_CONFIG.boughtWindowDays * 86400000).toISOString();
+    const params = new URLSearchParams({
+      user_id: `eq.${this.env.MONITOR_USER_ID}`, list_type: 'eq.buy', status: 'eq.bought',
+      select: 'id,item,category,quantity,status,bought_at,deleted_at,created_at,updated_at,target_price',
+      or: `(bought_at.gte.${cutoff},updated_at.gte.${cutoff})`,
+      order: 'bought_at.desc.nullslast,updated_at.desc', limit: String(Math.min(2000, Math.max(1, Number(limit) || 1000))),
+    });
+    const [recent, unresolved] = await Promise.all([
+      this.api(`list_items?${params}`),
+      this.rpc('purchase_unresolved_candidates', { p_user_id: this.env.MONITOR_USER_ID, p_cutoff: cutoff }),
+    ]);
+    const rows = [...(Array.isArray(recent) ? recent : []), ...(Array.isArray(unresolved) ? unresolved : [])];
+    return [...new Map(rows.filter(row => row?.id).map(row => [String(row.id), row])).values()].slice(0, Math.min(2000, Math.max(1, Number(limit) || 1000)));
+  }
+  async purchaseHistory(purchase = {}) {
+    const result = await this.rpc('purchase_related_items', {
+      p_user_id: this.env.MONITOR_USER_ID,
+      p_order_number: purchase.order_number || null,
+      p_thread_id: purchase.thread_id || null,
+      p_tracking_number: purchase.tracking_number || null,
+    });
+    return Array.isArray(result) ? result : [];
+  }
+  async processPurchaseEmail(source, record, candidates = null) {
+    const payload = record?.payload || {};
+    const purchase = payload.purchase;
+    if (record?.status === 'deleted' || record?.status === 'needs_review' || !purchase?.purchase_related) return null;
+    const availableCandidates = candidates || await this.purchaseCandidates({ receivedAt: payload.timestamp });
+    const history = await this.purchaseHistory({ ...purchase, thread_id: payload.thread_id, tracking_number: purchase.tracking_number });
+    const historyCandidates = history.filter(row => row?.buy_item_id && row?.item).map(row => ({
+      id: row.buy_item_id, item: row.item, category: row.category, quantity: row.quantity,
+      status: row.status, bought_at: row.bought_at, updated_at: row.updated_at,
+    }));
+    const candidateRows = [...new Map([...availableCandidates, ...historyCandidates]
+      .filter(row => row?.id).map(row => [String(row.id), row])).values()];
+    const decision = generatePurchaseMatches({ purchase: { ...purchase, subject: payload.subject || purchase.email_type || '' },
+      candidates: candidateRows, history, receivedAt: payload.timestamp, config: PURCHASE_MATCHING_CONFIG });
+    const products = (purchase.products || []).map((product, index) => ({ ...product,
+      line_index: product.line_index ?? index,
+      normalized_product_name: product.normalized_product_name || normalizeProductName(product.product_name),
+      product_fingerprint: productFingerprint(product, index),
+    }));
+    const matches = decision.matches.map(match => ({ ...match, product_fingerprint: products[match.product_index]?.product_fingerprint || match.product_fingerprint }));
+    const lifecycleType = ({ order_confirmation: 'order_confirmed', receipt: 'order_confirmed', shipping_confirmation: 'shipped',
+      out_for_delivery: 'out_for_delivery', delivered: 'delivered', pickup_ready: 'delivered', delayed: 'delayed',
+      backordered: 'backordered', cancelled: 'cancelled', refund: 'refunded', return_started: 'return_started',
+      returned: 'returned', payment_confirmation: 'payment_confirmation' })[purchase.email_type] || null;
+    const lifecycle = lifecycleType ? matches.map(match => ({ buy_item_id: match.buy_item_id,
+      product_fingerprint: match.product_fingerprint, event_type: lifecycleType, event_at: payload.timestamp,
+      details: { confidence: match.confidence, evidence: match.match_reason?.evidence || [] } })) : [];
+    const result = await this.rpc('process_purchase_email', {
+      p_user_id: this.env.MONITOR_USER_ID, p_source_id: source.id, p_monitor_record_id: record.id || null,
+      p_email: payload, p_products: products, p_matches: matches, p_lifecycle: lifecycle,
+    });
+    return { ...decision, ...result, gmail_message_id: payload.source_message_id || record.external_id,
+      merchant: purchase.merchant || null, email_type: purchase.email_type || null,
+      products_count: products.length, auto_matches: matches.filter(match => match.match_status === 'auto').length,
+      suggested_matches: matches.filter(match => match.match_status === 'suggested').length };
+  }
 }
 // Allowlist log fields; callers cannot accidentally serialize payloads/tokens/errors.
 export async function log(event, fields = {}) {
   const row = { timestamp: new Date().toISOString(), event };
-  for (const key of ['job_id', 'source_id', 'attempt', 'records_processed', 'events_processed', 'error_code', 'duration_ms']) {
+  for (const key of ['job_id', 'source_id', 'attempt', 'records_processed', 'events_processed', 'error_code', 'duration_ms',
+    'gmail_message_id', 'classification', 'merchant', 'products_count', 'candidate_count', 'matches_created',
+    'suggestions_created', 'auto_matches', 'suggested_matches', 'rejected_candidates', 'lifecycle_events']) {
     if (fields[key] !== undefined) row[key] = fields[key];
   }
   const text = JSON.stringify(row);

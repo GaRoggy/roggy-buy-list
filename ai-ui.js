@@ -31,6 +31,7 @@ function status(text, state) { el('aiConnection').textContent = text; el('aiConn
 const transcriptStore = createTranscriptStore();
 const transcriptTimeZone = window.ROGGY_AI_CONFIG?.transcriptTimeZone || 'America/Chicago';
 let transcriptFilter = 'all', transcriptFollowing = true, transcriptStreamStatus = 'disconnected', transcriptHealthTimer = null, transcriptBound = false;
+const microphoneCatalog = new Map();
 
 function transcriptStatus(text, state) {
   const target = el('liveTranscriptStatus');
@@ -42,8 +43,11 @@ function transcriptFilterOptions() {
   const select = el('liveTranscriptFilter');
   if (!select) return;
   const entries = transcriptStore.list('all');
-  const microphones = new Map();
-  for (const entry of entries) microphones.set(entry.microphone_id, entry.friendly_name || roomLabel(entry.room) || entry.microphone_id);
+  const microphones = new Map(microphoneCatalog);
+  for (const entry of entries) {
+    const ids = entry.microphone_ids || (entry.microphone_id ? [entry.microphone_id] : []);
+    for (const microphoneId of ids) microphones.set(microphoneId, entry.friendly_name || roomLabel(entry.room) || microphoneId);
+  }
   const values = [...microphones.entries()].sort((a, b) => a[1].localeCompare(b[1]));
   const current = transcriptFilter;
   select.replaceChildren(new Option('All microphones', 'all'), ...values.map(([id, name]) => new Option(name, id)));
@@ -67,10 +71,17 @@ function renderTranscript() {
 function applyTranscriptHealth(diagnostics) {
   const bridge = diagnostics?.agent_bridge || {};
   const voice = diagnostics?.voice || {};
+  for (const microphone of (Array.isArray(voice.microphones) ? voice.microphones : [])) {
+    if (microphone?.microphone_id) microphoneCatalog.set(
+      microphone.microphone_id,
+      microphone.friendly_name || roomLabel(microphone.room) || microphone.microphone_id,
+    );
+  }
+  transcriptFilterOptions();
   if (bridge.configured_microphones === 0) return transcriptStatus('No microphones connected', 'offline');
-  if (voice.status === 'unavailable' || voice.transcriber_loaded === false || voice.audio_stream_healthy === false) return transcriptStatus('Whisper unavailable', 'offline');
+  if (voice.status === 'unavailable' || voice.transcriber_loaded === false || (voice.whisper && voice.whisper.ready === false)) return transcriptStatus('Whisper unavailable', 'offline');
   if (transcriptStreamStatus !== 'connected') return transcriptStatus('Disconnected', 'offline');
-  transcriptStatus('Listening', 'online');
+  transcriptStatus(voice.all_audio_streams_healthy === false ? 'Listening · microphone reconnecting' : 'Listening', voice.all_audio_streams_healthy === false ? 'checking' : 'online');
 }
 async function refreshTranscriptHealth() {
   if (!signedIn || !window.roggySmartHomeStream?.diagnostics) return;

@@ -11,6 +11,10 @@ create function auth.uid() returns uuid language sql as $$ select nullif(current
 grant usage on schema auth to authenticated;
 create table public.reminders(id uuid primary key default gen_random_uuid(),title text not null,start_at timestamptz not null,
 end_at timestamptz,all_day boolean not null default false,source text not null default 'manual',external_id text unique,completed boolean not null default false,created_at timestamptz default now());
+create table public.list_items(id uuid primary key default gen_random_uuid(),list_type text not null,item text not null,
+category text,priority text,quantity text,status text not null default 'Looking',notes text,target_price numeric,
+deleted_at timestamptz,created_at timestamptz not null default now(),updated_at timestamptz not null default now(),
+user_id uuid not null references auth.users(id));
 create table public.budget_entries(user_id uuid);
 insert into auth.users values('00000000-0000-4000-8000-000000000001'),('00000000-0000-4000-8000-000000000002');
 insert into public.budget_entries values('00000000-0000-4000-8000-000000000001');`);
