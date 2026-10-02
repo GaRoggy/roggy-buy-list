@@ -1140,3 +1140,26 @@ html[data-mode="dark"] .dough-detail-risk{
   border-color:rgba(216,180,254,.28);
 }
 html[data-mode="dark"] .dough-chevron{color:#d8b4fe;opacity:.9}
+
+
+/* Scrollable navigation drawer v115 */
+.side-drawer{
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  overscroll-behavior-y:contain;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
+  scrollbar-gutter:stable;
+}
+.side-drawer .drawer-head{
+  position:sticky;
+  top:calc(-18px - env(safe-area-inset-top));
+  z-index:2;
+  background:inherit;
+}
+@media(min-width:900px){
+  .side-drawer{
+    height:auto;
+    max-height:calc(100dvh - 116px);
+  }
+}
