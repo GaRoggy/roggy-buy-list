@@ -89,7 +89,7 @@ const SMART_HOME_API=(window.ROGGY_SMART_HOME_API||window.ROGGY_AI_CONFIG?.smart
 const CAMERA_API=(window.ROGGY_AI_CONFIG?.bridgeUrl||"").replace(/\/$/,"");
 let smartHomeState={devices:[],rooms:[],events:[],diagnostics:null},smartHomeLoaded=false,smartHomeUnavailable=false,smartHomeFailure=null,smartHomeLoading=null,smartHomeStreamPromise=null,smartHomeStreamAbort=null,smartHomeStreamRetry=null,smartHomeLastEventId="",smartHomeStreamStatus="disconnected",smartHomeControlAllowed=false,smartHomeAccessToken="",smartHomePendingActions=new Map(),smartHomeActionSequence=0;
 let layneChatMessages=[],layneChatBusy=false,layneChatError="",laynePendingAction=null,layneSessionId=null;
-let frontDoorEvents=[],frontDoorView="active",frontDoorLoaded=false,frontDoorLoading=null,frontDoorFrameBusy=false,frontDoorFrameUrls=new Map(),frontDoorDeepLinkKey="",frontDoorDetailImageUrl="",frontDoorState=null,frontDoorStateLoading=null,frontDoorStateAttempted=false,frontDoorAnalyzeBusy=false,frontDoorAnalyzeError="";
+let frontDoorEvents=[],frontDoorView="active",frontDoorLoaded=false,frontDoorLoading=null,frontDoorLoadError="",frontDoorFrameBusy=false,frontDoorFrameUrls=new Map(),frontDoorThumbnailUrls=new Map(),frontDoorThumbnailToken=0,frontDoorDeepLinkKey="",frontDoorDetailImageUrl="",frontDoorState=null,frontDoorStateLoading=null,frontDoorStateAttempted=false,frontDoorAnalyzeBusy=false,frontDoorAnalyzeError="";
 
 
 function esc(s=""){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
@@ -182,29 +182,76 @@ function frontDoorRows(){
   return !row.deleted_at;
  }).sort((a,b)=>new Date(b.captured_at||0)-new Date(a.captured_at||0));
 }
+function frontDoorSnapshotName(value){
+ const name=String(value||"").split(/[/\\]/).pop()||"";
+ return /^front_door_[0-9_-]+\\.jpg$/.test(name)?name:"";
+}
+function frontDoorLocalRows(payload){
+ const events=Array.isArray(payload?.events)?payload.events:[];
+ return events.map(event=>{
+  const data=event?.data&&typeof event.data==="object"?event.data:{};
+  const snapshotName=frontDoorSnapshotName(data.snapshot_name||data.snapshot_path);
+  const capturedAt=data.timestamp||event.timestamp;
+  if(!snapshotName||!capturedAt)return null;
+  return {id:`local-camera:${snapshotName}`,event_key:snapshotName,camera_id:"front_door",camera_name:String(data.camera_name||"Front Door Cam"),location:String(data.location||"front_door"),captured_at:capturedAt,analysis_completed_at:data.analysis_completed_at||null,short_description:String(data.short_description||"Front door scene"),full_description:String(data.full_description||data.summary||"No description available."),summary:String(data.summary||data.full_description||"No description available."),snapshot_name:snapshotName,analysis:data,deleted_at:null,trash_expires_at:null,source:"local_runtime"};
+ }).filter(Boolean);
+}
+function frontDoorThumbnailPlaceholder(row,message){
+ return `<span class="front-door-event-thumb-placeholder">${esc(message|| (row.snapshot_name?"Loading snapshot…":"Snapshot unavailable"))}</span>`;
+}
+function revokeFrontDoorThumbnailImages(){frontDoorThumbnailUrls.forEach(url=>URL.revokeObjectURL(url));frontDoorThumbnailUrls.clear();frontDoorThumbnailToken++}
+async function hydrateFrontDoorThumbnails(rows,token){
+ await Promise.all(rows.filter(row=>row.snapshot_name).map(async row=>{
+  try{
+   const blob=await cameraBinary(`/camera/front-door/image/${encodeURIComponent(row.snapshot_name)}`),url=URL.createObjectURL(blob);
+   if(token!==frontDoorThumbnailToken){URL.revokeObjectURL(url);return}
+   const target=[...document.querySelectorAll("[data-front-door-thumbnail]")].find(node=>node.dataset.frontDoorThumbnail===String(row.id));
+   if(!target){URL.revokeObjectURL(url);return}
+   const image=new Image();image.className="front-door-event-thumb-image";image.alt=`${row.short_description||"Front Door event"} snapshot`;image.onload=()=>{};image.onerror=()=>{URL.revokeObjectURL(url);frontDoorThumbnailUrls.delete(String(row.id));target.innerHTML=frontDoorThumbnailPlaceholder(row,"Snapshot unavailable")};image.src=url;
+   frontDoorThumbnailUrls.set(String(row.id),url);target.replaceChildren(image);
+  }catch{
+   if(token!==frontDoorThumbnailToken)return;
+   const target=[...document.querySelectorAll("[data-front-door-thumbnail]")].find(node=>node.dataset.frontDoorThumbnail===String(row.id));
+   if(target)target.innerHTML=frontDoorThumbnailPlaceholder(row,"Snapshot unavailable");
+  }
+ }));
+}
 function renderFrontDoorEvents(){
  const root=$("frontDoorEventList"),status=$("frontDoorEventStatus");if(!root)return;
  document.querySelectorAll(".front-door-view-tab").forEach(button=>button.classList.toggle("active",button.dataset.frontDoorView===frontDoorView));
+ revokeFrontDoorThumbnailImages();
  if(!smartHomeControlAllowed){root.innerHTML='<div class="system-card"><b>Sign in to view Front Door events.</b><p>Camera metadata and snapshots stay owner-only.</p></div>';if(status)status.textContent="";return}
  if(!frontDoorLoaded){root.innerHTML='<div class="system-card"><b>Loading Front Door events…</b></div>';return}
+ if(frontDoorLoadError&&!frontDoorEvents.length){root.innerHTML=`<div class="system-card front-door-event-error"><b>Front Door events are unavailable.</b><p>${esc(frontDoorLoadError)}</p><button type="button" class="secondary" data-front-door-retry>Try again</button></div>`;root.querySelector("[data-front-door-retry]").onclick=()=>{frontDoorLoaded=false;frontDoorLoadError="";renderFrontDoorEvents();loadFrontDoorEvents({runCleanup:false}).catch(()=>{})};if(status)status.textContent="";renderFrontDoorSummary();return}
  const rows=frontDoorRows();
- root.innerHTML=rows.length?rows.map(row=>`<button type="button" class="front-door-event-card" data-front-door-event="${esc(row.id)}"><b>${esc(row.short_description||"Front door scene")}</b><time>${esc(smartTime(row.captured_at))}</time><small>${esc(row.camera_name||"Front Door Cam")} · ${esc(cameraLocationLabel(row.location))}</small></button>`).join(""):'<div class="system-card"><b>'+ (frontDoorView==="trash"?'Recently Deleted is empty.':'No Front Door events in the last 14 days.')+'</b><p>Meaningful retained camera events will appear here automatically.</p></div>';
+ const thumbnailToken=frontDoorThumbnailToken;
+ root.innerHTML=rows.length?rows.map(row=>`<button type="button" class="front-door-event-card" data-front-door-event="${esc(row.id)}"><span class="front-door-event-thumb" data-front-door-thumbnail="${esc(row.id)}">${frontDoorThumbnailPlaceholder(row)}</span><span class="front-door-event-copy"><b>${esc(row.short_description||"Front door scene")}</b><small>${esc(row.camera_name||"Front Door Cam")} · ${esc(cameraLocationLabel(row.location))}</small></span><time>${esc(smartTime(row.captured_at))}</time></button>`).join(""):'<div class="system-card"><b>'+ (frontDoorView==="trash"?'Recently Deleted is empty.':'No Front Door events in the last 14 days.')+'</b><p>Meaningful retained camera events will appear here automatically.</p></div>';
  root.querySelectorAll("[data-front-door-event]").forEach(button=>button.onclick=()=>openFrontDoorDetail(button.dataset.frontDoorEvent));
- if(status)status.textContent=frontDoorView==="trash"?"Trash expires at the earlier of 7 days after deletion or 14 days after capture.":"Newest events first · images retained for 14 days.";
+ if(status)status.textContent=frontDoorLoadError?"Cloud history unavailable; showing the local camera event stream.":frontDoorView==="trash"?"Trash expires at the earlier of 7 days after deletion or 14 days after capture.":"Newest events first · images retained for 14 days.";
+ if(rows.length)hydrateFrontDoorThumbnails(rows,thumbnailToken).catch(()=>{});
  renderFrontDoorSummary();
 }
 async function loadFrontDoorEvents({runCleanup=true}={}){
  if(frontDoorLoading)return frontDoorLoading;
  frontDoorLoading=(async()=>{
-  const {data:{session}}=await sb.auth.getSession();
-  if(!isOwnerSession(session)){frontDoorEvents=[];frontDoorLoaded=true;renderFrontDoorEvents();return false}
-  if(runCleanup){const cleanup=await sb.functions.invoke("push-notifications",{body:{action:"cleanup_camera_events"}});void cleanup}
-  const {data,error}=await sb.from("camera_events").select("id,event_key,camera_id,camera_name,location,captured_at,analysis_completed_at,short_description,full_description,summary,snapshot_name,analysis,deleted_at,trash_expires_at").eq("user_id",session.user.id).eq("camera_id","front_door").order("captured_at",{ascending:false}).limit(200);
-  frontDoorLoaded=true;
-  if(error){if($("frontDoorEventStatus"))$("frontDoorEventStatus").textContent="Events unavailable right now.";renderFrontDoorEvents();return false}
-  frontDoorEvents=Array.isArray(data)?data:[];renderFrontDoorEvents();
-  if(frontDoorDeepLinkKey){const match=frontDoorEvents.find(row=>row.event_key===frontDoorDeepLinkKey);frontDoorDeepLinkKey="";if(match)openFrontDoorDetail(match.id)}
-  return true;
+  try{
+   const {data:{session}}=await sb.auth.getSession();
+   if(!isOwnerSession(session)){frontDoorEvents=[];frontDoorLoadError="";frontDoorLoaded=true;renderFrontDoorEvents();return false}
+   frontDoorLoadError="";
+   if(runCleanup)sb.functions.invoke("push-notifications",{body:{action:"cleanup_camera_events"}}).catch(error=>console.warn("camera_event_cleanup_failed",error?.message||"unknown"));
+   const {data,error}=await sb.from("camera_events").select("id,event_key,camera_id,camera_name,location,captured_at,analysis_completed_at,short_description,full_description,summary,snapshot_name,analysis,deleted_at,trash_expires_at").eq("user_id",session.user.id).eq("camera_id","front_door").order("captured_at",{ascending:false}).limit(200);
+   let cloudRows=Array.isArray(data)?data:[];
+   if(error)frontDoorLoadError="Cloud event history could not be reached.";
+   try{
+    const localPayload=await cameraJson("/camera/front-door/events");
+    const localRows=frontDoorLocalRows(localPayload);
+    const known=new Set(cloudRows.map(row=>row.event_key));
+    cloudRows=[...cloudRows,...localRows.filter(row=>!known.has(row.event_key))];
+   }catch(error){if(!cloudRows.length&&!frontDoorLoadError)frontDoorLoadError=`Camera event service unavailable: ${smartErrorMessage(error)}`}
+   frontDoorEvents=cloudRows;frontDoorLoaded=true;renderFrontDoorEvents();
+   if(frontDoorDeepLinkKey){const match=frontDoorEvents.find(row=>row.event_key===frontDoorDeepLinkKey);frontDoorDeepLinkKey="";if(match)openFrontDoorDetail(match.id)}
+   return !error;
+  }catch(error){frontDoorEvents=[];frontDoorLoadError=smartErrorMessage(error)||"The camera event service could not be reached.";frontDoorLoaded=true;renderFrontDoorEvents();return false}
  })().finally(()=>{frontDoorLoading=null});
  return frontDoorLoading;
 }
@@ -226,9 +273,11 @@ async function openFrontDoorDetail(id){
  const dialog=$("frontDoorDetailDialog"),image=$("frontDoorDetailImage"),imageStatus=$("frontDoorDetailImageStatus"),restore=$("frontDoorDetailRestore"),remove=$("frontDoorDetailDelete");if(!dialog)return;
  revokeFrontDoorDetailImage();image.hidden=true;imageStatus.hidden=false;imageStatus.textContent="Loading private snapshot…";$('frontDoorDetailTitle').textContent=row.short_description||"Front Door event";$('frontDoorDetailMeta').innerHTML=`<span>${esc(smartTime(row.captured_at))}</span><span>${esc(row.camera_name||"Front Door Cam")}</span><span>${esc(cameraLocationLabel(row.location))}</span>`;$('frontDoorDetailDescription').textContent=row.full_description||row.summary||"No description available.";$('frontDoorDetailFacts').innerHTML=frontDoorEventFacts(row);$('frontDoorDetailDiagnostics').innerHTML=frontDoorEventDiagnostics(row);restore.hidden=!row.deleted_at;remove.hidden=!!row.deleted_at;dialog.dataset.frontDoorEventId=row.id;dialog.showModal();
  try{const blob=await cameraBinary(`/camera/front-door/image/${encodeURIComponent(row.snapshot_name)}`);frontDoorDetailImageUrl=URL.createObjectURL(blob);image.src=frontDoorDetailImageUrl;image.hidden=false;imageStatus.hidden=true}catch(error){imageStatus.textContent="Snapshot unavailable; the 14-day image retention window may have elapsed.";}
+ if(row.source==="local_runtime"){restore.hidden=true;remove.hidden=true}
  restore.onclick=()=>updateFrontDoorDeletion(row,false);remove.onclick=()=>updateFrontDoorDeletion(row,true);
 }
 async function updateFrontDoorDeletion(row,deleted){
+ if(row.source==="local_runtime")return;
  const {data:{session}}=await sb.auth.getSession();if(!isOwnerSession(session))return;
  const value=deleted?new Date().toISOString():null;
  const {error}=await sb.from("camera_events").update({deleted_at:value}).eq("id",row.id).eq("user_id",session.user.id);
@@ -1023,7 +1072,7 @@ function setPage(page){
  window.scrollTo({top:0,behavior:"instant"});syncPageNavigation(page);
  const special=[...PRIMARY_PAGE_IDS.filter(pageId=>pageId!=="buy"),"mail","drivers","reminders","budget","digestibles","front-door","network","dough","projects","project-detail","health","vehicle","ai"],isSpecial=special.includes(page);
  $("listsPage").hidden=!(["buy","groceries"].includes(page));
- special.forEach(p=>{const el=$(p==="project-detail"?"projectDetailPage":p+"Page");if(el)el.hidden=page!==p});
+ special.forEach(p=>{const el=$(p==="project-detail"?"projectDetailPage":p==="front-door"?"frontDoorPage":p+"Page");if(el)el.hidden=page!==p});
  $("backupBtn").style.display=isSpecial?"none":"";$("addBtn").style.display="";
  const primaryDefinition=PRIMARY_PAGE_BY_ID.get(page);
  if(primaryDefinition){
