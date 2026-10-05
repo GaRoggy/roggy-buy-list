@@ -184,7 +184,7 @@ function frontDoorRows(){
 }
 function frontDoorSnapshotName(value){
  const name=String(value||"").split(/[/\\]/).pop()||"";
- return /^front_door_[0-9_-]+\\.jpg$/.test(name)?name:"";
+ return /^front_door_[0-9_-]+\.jpg$/.test(name)?name:"";
 }
 function frontDoorLocalRows(payload){
  const events=Array.isArray(payload?.events)?payload.events:[];
