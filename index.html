@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="todos.css?v=61">
 <link rel="stylesheet" href="polish.css?v=109">
 <link rel="stylesheet" href="network.css?v=1">
+<link rel="stylesheet" href="pc-health.css?v=1">
 <link rel="apple-touch-icon" href="icon.svg?v=2">
 </head>
 <body>
@@ -36,6 +37,7 @@
   <button class="page-tab drawer-page-tab" data-page="digestibles" onclick="document.getElementById('moreToggle').checked=false">Digestibles</button>
   <button class="page-tab drawer-page-tab" data-page="front-door" onclick="document.getElementById('moreToggle').checked=false">Front Door</button>
   <button class="page-tab drawer-page-tab" data-page="network" onclick="document.getElementById('moreToggle').checked=false">Network</button>
+  <button class="page-tab drawer-page-tab" data-page="pc-health" onclick="document.getElementById('moreToggle').checked=false">PC Health</button>
   <button class="page-tab drawer-page-tab" data-page="dough" onclick="document.getElementById('moreToggle').checked=false">Dough</button>
   <div class="under-construction-group">
     <div class="under-construction-title">Under Construction</div>
@@ -102,6 +104,7 @@
     <section class="today-hero compact-command"><div><span class="eyebrow">COMMAND CENTER</span><p id="homeDate"></p></div></section>
     <section class="home-focus-strip"><button type="button" data-focus-jump="todos"><span>Tasks</span><b id="focusTaskCount">—</b><small>open</small></button><button type="button" data-focus-jump="reminders"><span>Today</span><b id="focusTodayCount">—</b><small>events</small></button><button type="button" data-focus-jump="projects"><span>Projects</span><b id="focusProjectCount">—</b><small>active</small></button></section>
     <section id="homeNetworkSection" class="home-section network-home-section" aria-labelledby="homeNetworkTitle"><button id="homeNetworkCard" class="network-home-card" type="button"><span class="network-status-dot" data-state="unknown" aria-hidden="true"></span><span class="network-home-copy"><span class="eyebrow">NETWORK</span><b id="homeNetworkTitle">Internet</b><small id="homeNetworkMessage">Checking current health…</small></span><span class="network-home-metric" id="homeNetworkMetric">—</span><span class="network-chevron" aria-hidden="true">›</span></button></section>
+    <section id="homePcHealthSection" class="home-section pc-health-home-section" aria-labelledby="homePcHealthTitle"><button id="homePcHealthCard" class="pc-health-home-card" type="button"><span class="pc-health-status-dot" data-state="unknown" aria-hidden="true"></span><span class="pc-health-home-copy"><span class="eyebrow">PC HEALTH</span><b id="homePcHealthTitle">PC</b><small id="homePcHealthMessage">Checking current health…</small></span><span class="pc-health-home-metric" id="homePcHealthMetric">—</span><span class="network-chevron" aria-hidden="true">›</span></button></section>
     <section class="home-primary-grid">
       <section id="homeHighTodos" class="home-section high-todos-section" hidden><div class="section-head"><div><span class="eyebrow">HIGH PRIORITY</span><h3>Tasks</h3></div><button id="homeHighTodosAll" class="text-action" type="button">See all</button></div><div id="homeHighTodoList" class="home-high-todo-list"></div></section>
       <section id="homeTimeline" class="home-timeline"></section>
@@ -148,6 +151,22 @@
     <section id="networkGamingCard" class="network-panel"></section>
     <section class="network-panel network-layne-panel"><div><span class="eyebrow">ASK LAYNE</span><h3>Make sense of the pattern</h3><p>Ask a text-only question using the same local NetworkWatch evidence.</p></div><div class="network-layne-links"><button type="button" data-network-prompt="How has my internet been today?">How has my internet been today?</button><button type="button" data-network-prompt="Why was my internet bad around 8 PM?">Why was my internet bad around 8 PM?</button><button type="button" data-network-prompt="Was my network bad during my game?">Was my network bad during my game?</button></div></section>
     <p id="networkPageStatus" class="status" role="status"></p>
+  </main>
+</section>
+<section id="pc-healthPage" hidden>
+  <main class="system-main pc-health-main">
+    <div class="system-intro"><span class="eyebrow">LOCAL MACHINE</span><h2>PC Health</h2><p>Read-only resource evidence for Layne and the work happening on this PC.</p></div>
+    <section id="pcHealthStatusCard" class="pc-health-status-card" aria-live="polite"></section>
+    <section id="pcHealthHeavyWork" class="pc-health-heavy-work" aria-live="polite"></section>
+    <section id="pcHealthMetrics" class="pc-health-metric-grid" aria-label="Current PC health metrics"></section>
+    <section class="pc-health-panel pc-health-chart-panel">
+      <div class="section-head"><div><span class="eyebrow">LAST 30 MINUTES</span><h3 id="pcHealthChartTitle">CPU trend</h3></div><label class="pc-health-chart-control" for="pcHealthMetricSelect">Metric<select id="pcHealthMetricSelect"><option value="cpuPercent">CPU</option><option value="ramPercent">RAM</option><option value="gpuPercent">GPU</option><option value="vramPercent">VRAM</option><option value="diskActivePercent">Disk</option></select></label></div>
+      <div id="pcHealthChartWrap" class="pc-health-chart-wrap"><canvas id="pcHealthChart" aria-label="PC health trend chart"></canvas><p id="pcHealthChartEmpty" class="quiet-state" hidden>No trend samples yet.</p></div>
+      <p id="pcHealthChartNote" class="pc-health-chart-note"></p>
+    </section>
+    <section class="pc-health-panel"><div class="section-head"><div><span class="eyebrow">LAYNE / CODEX</span><h3>Important Processes</h3></div></div><div id="pcHealthProcesses" class="pc-health-process-list"></div></section>
+    <section class="pc-health-panel"><div class="section-head"><div><span class="eyebrow">ACTIVITY</span><h3>Notable Events</h3></div><span id="pcHealthEventCount" class="pc-health-count">—</span></div><div id="pcHealthEvents" class="pc-health-event-list"></div></section>
+    <p id="pcHealthPageStatus" class="status" role="status"></p>
   </main>
 </section>
 <section id="healthPage" hidden><main class="system-main"><div class="system-intro"><span class="eyebrow">GARMIN CONNECT</span><h2>Health</h2><p>Your wellness dashboard is ready for Garmin data.</p></div><div class="metric-grid"><div><span>Sleep</span><b>—</b><small>Connect data</small></div><div><span>Body Battery</span><b>—</b><small>Connect data</small></div><div><span>Resting HR</span><b>—</b><small>Connect data</small></div><div><span>Stress</span><b>—</b><small>Connect data</small></div></div><div class="system-card"><b>Health trends</b><p>Sleep, HRV, stress, activity and workouts will live here with day / week / month views and correlations.</p></div></main></section>
@@ -433,11 +452,12 @@
 <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
 <script src="ai-config.js?v=45"></script>
 <script>window.ROGGY_AI_CONFIG=window.ROGGY_AI_CONFIG||Object.freeze({"bridgeUrl":"https://desktop-movehp4.tail990d14.ts.net","smartHomeUrl":"https://desktop-movehp4.tail990d14.ts.net/smart-home","transcriptTimeZone":"America/Chicago"});</script>
-<script src="app.js?v=119"></script>
+<script src="app.js?v=120"></script>
 <script src="push-notifications.js?v=1"></script>
 <script src="monitor-ui.js?v=53"></script>
 <script src="todos.js?v=65"></script>
 <script type="module" src="network.js?v=1"></script>
+<script type="module" src="pc-health.js?v=1"></script>
 <script type="module" src="ai-ui.js?v=44"></script>
 <script src="polish.js?v=109"></script>
 </body></html>

@@ -1070,9 +1070,9 @@ function setPage(page){
  else if(page==="reminders"&&isPrimaryPage(currentPage))shelfReturnPage=currentPage;
  currentPage=page;
  window.scrollTo({top:0,behavior:"instant"});syncPageNavigation(page);
- const special=[...PRIMARY_PAGE_IDS.filter(pageId=>pageId!=="buy"),"mail","drivers","reminders","budget","digestibles","front-door","network","dough","projects","project-detail","health","vehicle","ai"],isSpecial=special.includes(page);
+ const special=[...PRIMARY_PAGE_IDS.filter(pageId=>pageId!=="buy"),"mail","drivers","reminders","budget","digestibles","front-door","network","pc-health","dough","projects","project-detail","health","vehicle","ai"],isSpecial=special.includes(page);
  $("listsPage").hidden=!(["buy","groceries"].includes(page));
- special.forEach(p=>{const el=$(p==="project-detail"?"projectDetailPage":p==="front-door"?"frontDoorPage":p+"Page");if(el)el.hidden=page!==p});
+ special.forEach(p=>{const el=$(p==="project-detail"?"projectDetailPage":p==="front-door"?"frontDoorPage":p==="pc-health"?"pc-healthPage":p+"Page");if(el)el.hidden=page!==p});
  $("backupBtn").style.display=isSpecial?"none":"";$("addBtn").style.display="";
  const primaryDefinition=PRIMARY_PAGE_BY_ID.get(page);
  if(primaryDefinition){
@@ -1094,6 +1094,7 @@ function setPage(page){
  else if(page==="dough"){ $("pageTitle").textContent="Dough";$("pageSubtitle").textContent="Consumer marketplaces that can be turned into automated product factories.";$("addBtn").style.display="none";renderDough() }
  else if(page==="front-door"){ $("pageTitle").textContent="Front Door";$("pageSubtitle").textContent="Private camera shelf.";$("addBtn").style.display="none";loadFrontDoorState({silent:false,force:true}).catch(()=>{});loadFrontDoorEvents().catch(()=>{});refreshFrontDoorFrame().catch(()=>{}) }
  else if(page==="network"){ $("pageTitle").textContent="Network";$("pageSubtitle").textContent="Current health and recent reliability.";$("addBtn").style.display="none";window.renderNetworkPage?.() }
+ else if(page==="pc-health"){ $("pageTitle").textContent="PC Health";$("pageSubtitle").textContent="Read-only resource evidence.";$("addBtn").style.display="none";window.renderPcHealthPage?.() }
  else if(page==="budget"){ $("pageTitle").textContent="Finance";$("pageSubtitle").textContent="Private financial dashboard.";$("addBtn").style.display="none";lockBudget() }
  else if(page==="groceries"){currentView="active";document.querySelectorAll(".sub-tab").forEach(z=>z.classList.toggle("active",z.dataset.view==="active"));renderLists()}
  $("moreToggle").checked=false;
