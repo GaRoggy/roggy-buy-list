@@ -129,7 +129,12 @@ function sanitizeCameraPayload(value) {
   if (!value || typeof value !== 'object') return value;
   const clean = {};
   for (const [key, item] of Object.entries(value)) {
-    if (key === 'snapshot_directory' || key === 'snapshot_path' || key === 'last_snapshot_path') continue;
+    if (key === 'snapshot_directory') continue;
+    if (key === 'snapshot_path' || key === 'last_snapshot_path') {
+      const snapshotName = String(item || '').split(/[\\/]/).pop() || '';
+      if (CAMERA_SNAPSHOT_NAME.test(snapshotName)) clean.snapshot_name = snapshotName;
+      continue;
+    }
     clean[key] = sanitizeCameraPayload(item);
   }
   return clean;
