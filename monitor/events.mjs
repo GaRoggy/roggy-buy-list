@@ -48,6 +48,7 @@ const EMAIL_DOMAINS = {
 };
 
 function base(record, source, now) {
+  const payload = record.payload && typeof record.payload === 'object' ? record.payload : {};
   return {
     source_id: source.id,
     source_kind: source.kind,
@@ -56,6 +57,16 @@ function base(record, source, now) {
     occurred_at: timestamp(record.occurred_at),
     detected_at: now.toISOString(),
     status: record.status === 'deleted' ? 'deleted' : 'active',
+    category: source.kind === 'calendar' ? 'calendar' : source.kind === 'gmail' ? 'communication' : source.kind || 'system',
+    severity: 'info',
+    room_id: clip(payload.room_id || payload.room, 128),
+    device_id: clip(payload.device_id, 160),
+    related_entity: clip(payload.related_entity, 160),
+    dedupe_key: `${source.kind}:${record.external_id}`.slice(0, 160),
+    incident_id: clip(payload.incident_id, 160),
+    started_at: timestamp(payload.started_at),
+    resolved_at: timestamp(payload.resolved_at),
+    duration_seconds: Number.isFinite(Number(payload.duration_seconds)) ? Math.max(0, Number(payload.duration_seconds)) : null,
     suggested_actions: [],
     entities: [],
     domains: [],
@@ -97,7 +108,8 @@ function normalizeEmail(record, source, now) {
     .map(Number).filter(Number.isFinite);
   const confidence = confidenceValues.length ? Math.max(0, Math.min(1, Math.min(...confidenceValues)))
     : (payload.summary_method === 'provider_snippet' ? 0.9 : 0.75);
-  return { ...event, event_type: EMAIL_TYPES[category] || 'email', title, summary,
+  return { ...event, event_type: EMAIL_TYPES[category] || 'email', category: payload.purchase?.purchase_related ? 'purchase' : (category === 'security' ? 'security' : 'communication'),
+    severity: actionRequired ? 'warning' : 'info', title, summary,
     importance,
     confidence,
     action_required: actionRequired || Boolean(payload.needs_reply),
@@ -127,7 +139,7 @@ function normalizeCalendar(record, source, now) {
   const summary = clip(payload.description, MAX_SUMMARY);
   const actionRequired = /\b(deadline|due|interview|flight|exam|presentation|appointment)\b/i.test(title);
   const domains = /\b(flight|hotel|travel|airport|boarding)\b/i.test(title) ? ['travel'] : ['calendar'];
-  return { ...event, event_type: 'calendar_event', title, summary, occurred_at: timestamp(payload.start, event.occurred_at),
+  return { ...event, event_type: 'calendar_event', category: 'calendar', severity: actionRequired ? 'warning' : 'info', title, summary, occurred_at: timestamp(payload.start, event.occurred_at),
     importance: actionRequired ? 0.72 : 0.55, confidence: 0.95, action_required: actionRequired,
     suggested_actions: actionRequired ? [{ type: 'review_calendar_event', description: 'Review the upcoming event.' }] : [],
     domains, tags: ['calendar'], metadata: {
@@ -144,7 +156,7 @@ export function normalizeSmartHome(event, source = { id: 'smart-home', kind: 'sm
   const summary = clip(input.summary || input.reason || input.new_state, MAX_SUMMARY);
   return { ...base({ external_id: input.event_id || input.id || `${type}:${input.timestamp || now.toISOString()}`,
       occurred_at: input.timestamp, status: input.deleted ? 'deleted' : 'processed' }, source, now),
-    event_type: type, title, summary, importance: offline ? 0.82 : 0.50,
+    event_type: type, category: offline ? 'device' : 'smart_home', severity: offline ? 'error' : 'info', title, summary, importance: offline ? 0.82 : 0.50,
     confidence: 0.9, action_required: offline,
     suggested_actions: offline ? [{ type: 'check_device', description: 'Check the device connection.' }] : [],
     entities: input.device_id ? [{ type: 'device', name: clip(input.device_id, 160) }] : [],
@@ -166,7 +178,7 @@ function normalizeGeneric(record, source, now) {
 function normalizeGoogleTask(record, source, now) {
   const event = base(record, source, now), p = record.payload && typeof record.payload === 'object' ? record.payload : {};
   const deleted = record.status === 'deleted';
-  return { ...event, event_type: deleted ? 'google_task_deleted' : 'task', title: clip(p.title, MAX_TITLE),
+  return { ...event, event_type: deleted ? 'google_task_deleted' : 'task', category: 'task', severity: !p.completed && !deleted ? 'notice' : 'info', title: clip(p.title, MAX_TITLE),
     summary: clip(p.notes, MAX_SUMMARY), occurred_at: timestamp(p.due, event.occurred_at),
     importance: p.completed ? 0.2 : 0.58, confidence: 0.98, action_required: !p.completed && !deleted,
     suggested_actions: !p.completed && !deleted ? [{ type: 'review_task', description: 'Review this task.' }] : [],

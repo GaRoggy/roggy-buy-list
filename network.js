@@ -21,6 +21,8 @@ let historyRequest = 0;
 
 function friendlyError(error) {
   if (error?.code === "AUTHENTICATION_REQUIRED") return "Sign in to view private network health.";
+  const detail = error?.error_detail || error?.error;
+  if (detail?.message) return detail.message;
   if (error?.code === "NETWORK_UNAVAILABLE" || error?.code === "NETWORK_TIMEOUT") return "NetworkWatch is temporarily unavailable.";
   return "Network health is temporarily unavailable.";
 }
@@ -39,7 +41,9 @@ async function networkFetch(path) {
   try {
     const response = await fetch(`${BRIDGE}${path}`, { method: "GET", cache: "no-store", headers: { Accept: "application/json", Authorization: `Bearer ${token}` }, signal: controller.signal });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw Object.assign(new Error(payload.error || "request failed"), { code: payload.error || "NETWORK_UNAVAILABLE", status: response.status });
+    const detail = payload?.error_detail || (payload?.error && typeof payload.error === "object" ? payload.error : null);
+    const code = detail?.error_code || detail?.code || (typeof payload?.error === "string" ? payload.error : "NETWORK_UNAVAILABLE");
+    if (!response.ok) throw Object.assign(new Error(detail?.message || code || "request failed"), { code, status: response.status, error_detail: detail, error: payload?.error });
     return payload;
   } catch (error) {
     if (error?.name === "AbortError") throw Object.assign(new Error("request timed out"), { code: "NETWORK_TIMEOUT" });

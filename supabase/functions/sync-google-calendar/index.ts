@@ -3,7 +3,31 @@ type Json = Record<string, unknown>;
 class SyncError extends Error {
   code: string;
   status: number;
-  constructor(code: string, status = 500) { super(code); this.code = code; this.status = status; }
+  operation: string | null;
+  cause: string | null;
+  retryable: boolean;
+  details: Record<string, unknown>;
+  constructor(code: string, status = 500, options: {
+    message?: string; operation?: string; cause?: unknown; retryable?: boolean;
+    details?: Record<string, unknown>;
+  } = {}) {
+    super(options.message || code.replaceAll('_', ' ').toLowerCase());
+    this.code = code; this.status = status; this.operation = options.operation || null;
+    this.cause = bounded(options.cause, 512);
+    this.retryable = options.retryable ?? (status === 408 || status === 429 || status >= 500);
+    this.details = options.details || {};
+  }
+  toJSON(requestId: string | null = null) {
+    return { error_code: this.code, code: this.code, subsystem: 'calendar_sync', operation: this.operation,
+      message: this.message, cause: this.cause, status_code: this.status, target: null,
+      retryable: this.retryable, timestamp: new Date().toISOString(), correlation_id: requestId,
+      details: this.details };
+  }
+}
+function bounded(value: unknown, limit = 1024): string | null {
+  if (value === undefined || value === null) return null;
+  const text = String(value).replace(/\s+/g, ' ').trim();
+  return text.length <= limit ? text : `${text.slice(0, limit - 14).trimEnd()}… [truncated]`;
 }
 
 const DAY = 86400000;
@@ -18,7 +42,9 @@ function env(name: string): string {
 }
 
 function safeError(error: unknown): SyncError {
-  return error instanceof SyncError ? error : new SyncError('UNEXPECTED_ERROR');
+  return error instanceof SyncError ? error : new SyncError('UNEXPECTED_ERROR', 500, {
+    operation: 'calendar_sync.request', cause: error instanceof Error ? error.name : 'UnknownError',
+  });
 }
 
 const supabaseUrl = () => env('SUPABASE_URL');
@@ -35,8 +61,18 @@ async function supabase(path: string, options: RequestInit = {}): Promise<unknow
         'content-type': 'application/json', ...(options.headers || {})
       }
     });
-  } catch { throw new SyncError('SUPABASE_NETWORK_ERROR'); }
-  if (!response.ok) throw new SyncError(`SUPABASE_HTTP_${response.status}`, response.status);
+  } catch (error) {
+    const timeout = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+    throw new SyncError(timeout ? 'SUPABASE_TIMEOUT' : 'SUPABASE_NETWORK_ERROR', timeout ? 504 : 503, {
+      operation: 'supabase.rest', cause: error instanceof Error ? error.name : 'FetchError', retryable: true,
+    });
+  }
+  if (!response.ok) {
+    const detail = bounded(await response.text().catch(() => ''), 512);
+    throw new SyncError(`SUPABASE_HTTP_${response.status}`, response.status, {
+      operation: 'supabase.rest', cause: detail, retryable: response.status === 429 || response.status >= 500,
+    });
+  }
   if (response.status === 204) return null;
   try { return await response.json(); } catch { return null; }
 }
@@ -56,8 +92,16 @@ async function googleToken(): Promise<string> {
         refresh_token: env('GOOGLE_REFRESH_TOKEN'), grant_type: 'refresh_token'
       })
     });
-  } catch { throw new SyncError('GOOGLE_TOKEN_NETWORK_ERROR'); }
-  if (!response.ok) throw new SyncError(response.status === 400 ? 'GOOGLE_REFRESH_TOKEN_INVALID' : `GOOGLE_TOKEN_HTTP_${response.status}`, response.status);
+  } catch (error) {
+    const timeout = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+    throw new SyncError(timeout ? 'GOOGLE_TOKEN_TIMEOUT' : 'GOOGLE_TOKEN_NETWORK_ERROR', timeout ? 504 : 503, {
+      operation: 'google.oauth.token', cause: error instanceof Error ? error.name : 'FetchError', retryable: true,
+    });
+  }
+  if (!response.ok) throw new SyncError(response.status === 400 ? 'GOOGLE_REFRESH_TOKEN_INVALID' : `GOOGLE_TOKEN_HTTP_${response.status}`, response.status, {
+    operation: 'google.oauth.token', cause: bounded(await response.text().catch(() => ''), 512),
+    retryable: response.status === 429 || response.status >= 500,
+  });
   let body: any;
   try { body = await response.json(); } catch { throw new SyncError('GOOGLE_TOKEN_INVALID_RESPONSE'); }
   if (typeof body.access_token !== 'string' || !body.access_token) throw new SyncError('GOOGLE_ACCESS_TOKEN_MISSING');
@@ -71,8 +115,16 @@ async function google(path: string, token: string, params: Record<string, string
     response = await fetch(`https://www.googleapis.com/${path}?${query}`, {
       signal: AbortSignal.timeout(30000), headers: { authorization: `Bearer ${token}` }
     });
-  } catch { throw new SyncError('GOOGLE_NETWORK_ERROR'); }
-  if (!response.ok) throw new SyncError(response.status === 410 ? 'GOOGLE_SYNC_TOKEN_EXPIRED' : `GOOGLE_API_HTTP_${response.status}`, response.status);
+  } catch (error) {
+    const timeout = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+    throw new SyncError(timeout ? 'GOOGLE_TIMEOUT' : 'GOOGLE_NETWORK_ERROR', timeout ? 504 : 503, {
+      operation: 'google.calendar', cause: error instanceof Error ? error.name : 'FetchError', retryable: true,
+    });
+  }
+  if (!response.ok) throw new SyncError(response.status === 410 ? 'GOOGLE_SYNC_TOKEN_EXPIRED' : `GOOGLE_API_HTTP_${response.status}`, response.status, {
+    operation: 'google.calendar', cause: bounded(await response.text().catch(() => ''), 512),
+    retryable: response.status === 429 || response.status >= 500,
+  });
   try { return await response.json(); } catch { throw new SyncError('GOOGLE_INVALID_RESPONSE'); }
 }
 
@@ -274,5 +326,9 @@ async function main(req: Request) {
 Deno.serve(async req => {
   if (req.method !== 'POST') return json({ success: false, error: 'METHOD_NOT_ALLOWED' }, 405);
   try { return await main(req); }
-  catch (error) { const e = safeError(error); console.error(JSON.stringify({ error_code: e.code })); return json({ success: false, error: e.code }, e.status); }
+  catch (error) {
+    const e = safeError(error); const requestId = crypto.randomUUID();
+    console.error(JSON.stringify({ error_code: e.code, request_id: requestId }));
+    return json({ success: false, error: e.code, error_detail: e.toJSON(requestId), requestId }, e.status);
+  }
 });

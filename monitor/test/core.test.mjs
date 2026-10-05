@@ -52,3 +52,31 @@ test('successful run projects canonical events after the provider commit', async
   assert.equal(calls[1][0], 'events');
   assert.equal(calls[1][2][0].event_type, 'bill_due');
 });
+
+test('retryable background job failures emit a deferred canonical event', async () => {
+  const events = [];
+  const store = {
+    env: {},
+    rpc: async (name) => { assert.equal(name, 'fail'); return 1; },
+    enqueueUnifiedEvents: async batch => { events.push(...batch); return batch.length; },
+  };
+  await runJob(store, { job: { id: 'job-deferred', lease_token: 'fence', attempts: 2 }, source: { id: 'source', kind: 'calendar' } },
+    async () => { throw new MonitorError('HTTP_503'); }, async () => {});
+  assert.equal(events.length, 1);
+  assert.equal(events[0].event_type, 'background_job_deferred');
+  assert.equal(events[0].metadata.error_code, 'HTTP_503');
+});
+
+test('successful retry emits one recovered background job event', async () => {
+  const events = [];
+  const store = {
+    env: {},
+    rpc: async name => { assert.equal(name, 'commit'); return 1; },
+    enqueueUnifiedEvents: async batch => { events.push(...batch); return batch.length; },
+  };
+  await runJob(store, { job: { id: 'job-recovered', lease_token: 'fence', attempts: 2 }, source: { id: 'source', kind: 'tasks' } },
+    async () => ({ records: [], cursor: { page: 'next' } }), async () => {});
+  assert.equal(events.length, 1);
+  assert.equal(events[0].event_type, 'background_job_recovered');
+  assert.equal(events[0].status, 'resolved');
+});

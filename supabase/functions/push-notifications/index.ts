@@ -13,11 +13,31 @@ type PushSubscriptionRow = {
 class PushError extends Error {
   code: string;
   status: number;
-  constructor(code: string, status = 500) {
-    super(code);
-    this.code = code;
-    this.status = status;
+  operation: string | null;
+  cause: string | null;
+  retryable: boolean;
+  details: Record<string, unknown>;
+  constructor(code: string, status = 500, options: {
+    message?: string; operation?: string; cause?: unknown; retryable?: boolean;
+    details?: Record<string, unknown>;
+  } = {}) {
+    super(options.message || code.replaceAll('_', ' ').toLowerCase());
+    this.code = code; this.status = status; this.operation = options.operation || null;
+    this.cause = bounded(options.cause, 512);
+    this.retryable = options.retryable ?? (status === 408 || status === 429 || status >= 500);
+    this.details = options.details || {};
   }
+  toJSON(requestId: string | null = null) {
+    return { error_code: this.code, code: this.code, subsystem: 'push_notifications', operation: this.operation,
+      message: this.message, cause: this.cause, status_code: this.status, target: null,
+      retryable: this.retryable, timestamp: new Date().toISOString(), correlation_id: requestId,
+      details: this.details };
+  }
+}
+function bounded(value: unknown, limit = 1024): string | null {
+  if (value === undefined || value === null) return null;
+  const text = String(value).replace(/\s+/g, ' ').trim();
+  return text.length <= limit ? text : `${text.slice(0, limit - 14).trimEnd()}… [truncated]`;
 }
 
 const PROJECT_ORIGIN = 'https://garoggy.github.io';
@@ -97,8 +117,15 @@ async function authenticatedUser(req: Request): Promise<User> {
       signal: AbortSignal.timeout(10000),
       headers: { apikey: publicKey(), authorization: `Bearer ${token}` },
     });
-  } catch { throw new PushError('AUTHENTICATION_UNAVAILABLE', 503); }
-  if (!response.ok) throw new PushError('AUTHENTICATION_REQUIRED', 401);
+  } catch (error) {
+    const timeout = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+    throw new PushError(timeout ? 'AUTHENTICATION_TIMEOUT' : 'AUTHENTICATION_UNAVAILABLE', timeout ? 504 : 503, {
+      operation: 'auth.user', cause: error instanceof Error ? error.name : 'FetchError', retryable: true,
+    });
+  }
+  if (!response.ok) throw new PushError('AUTHENTICATION_REQUIRED', 401, {
+    operation: 'auth.user', retryable: false, cause: bounded(await response.text().catch(() => ''), 512),
+  });
   const user = await response.json().catch(() => null);
   if (!user || typeof user.id !== 'string') throw new PushError('AUTHENTICATION_REQUIRED', 401);
   return { id: user.id };
@@ -115,8 +142,16 @@ async function db(path: string, options: RequestInit = {}): Promise<unknown> {
         ...(options.headers || {}),
       },
     });
-  } catch { throw new PushError('DATABASE_UNAVAILABLE', 503); }
-  if (!response.ok) throw new PushError(`DATABASE_HTTP_${response.status}`, response.status >= 500 ? 503 : 400);
+  } catch (error) {
+    const timeout = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+    throw new PushError(timeout ? 'DATABASE_TIMEOUT' : 'DATABASE_UNAVAILABLE', timeout ? 504 : 503, {
+      operation: 'supabase.rest', cause: error instanceof Error ? error.name : 'FetchError', retryable: true,
+    });
+  }
+  if (!response.ok) throw new PushError(`DATABASE_HTTP_${response.status}`, response.status >= 500 ? 503 : 400, {
+    operation: 'supabase.rest', retryable: response.status === 429 || response.status >= 500,
+    cause: bounded(await response.text().catch(() => ''), 512),
+  });
   if (response.status === 204) return null;
   return await response.json().catch(() => null);
 }
@@ -338,8 +373,11 @@ Deno.serve(async req => {
   if (req.method !== 'POST') return json({ ok: false, error: 'METHOD_NOT_ALLOWED' }, 405, PROJECT_ORIGIN);
   try { return await handle(req); }
   catch (error) {
-    const safe = error instanceof PushError ? error : new PushError('UNEXPECTED_ERROR');
-    console.error(JSON.stringify({ error_code: safe.code }));
-    return json({ ok: false, error: safe.code }, safe.status, origin === PROJECT_ORIGIN ? origin : PROJECT_ORIGIN);
+    const safe = error instanceof PushError ? error : new PushError('UNEXPECTED_ERROR', 500, {
+      operation: 'push.request', cause: error instanceof Error ? error.name : 'UnknownError',
+    });
+    const requestId = crypto.randomUUID();
+    console.error(JSON.stringify({ error_code: safe.code, request_id: requestId }));
+    return json({ ok: false, error: safe.code, error_detail: safe.toJSON(requestId), requestId }, safe.status, origin === PROJECT_ORIGIN ? origin : PROJECT_ORIGIN);
   }
 });

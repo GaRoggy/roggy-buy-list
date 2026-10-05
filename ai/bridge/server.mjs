@@ -8,6 +8,7 @@ import { config } from './config.mjs';
 import { authorize } from './auth.mjs';
 import { createAI } from '../processing.mjs';
 import { AIError, LIMITS, validateRequest } from '../shared/protocol.js';
+import { acquireProcessLock } from '../shared/single-instance.mjs';
 
 function bucket(limit, windowMs = 60000) {
   let count = 0, reset = 0;
@@ -33,6 +34,17 @@ async function readBody(req, signal) {
   });
 }
 const json = (res, status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); };
+function remoteFailure(payload, fallbackCode, fallbackMessage, status, operation) {
+  const remote = payload?.error;
+  if (remote && typeof remote === 'object') {
+    return new AIError(String(remote.error_code || remote.code || fallbackCode), status, {
+      message: remote.message || fallbackMessage, operation: remote.operation || operation,
+      cause: remote.cause, target: remote.target, retryable: remote.retryable,
+      details: remote.details || {},
+    });
+  }
+  return new AIError(typeof remote === 'string' ? remote : fallbackCode, status, { message: fallbackMessage, operation });
+}
 
 const SMART_HOME_PREFIX = '/smart-home';
 const SMART_HOME_PATH = /^\/(?:devices(?:\/[A-Za-z0-9._~%+\-]+(?:\/actions)?)?|rooms(?:\/[A-Za-z0-9._~%+\-]+)?|events\/(?:history|stream))$/;
@@ -161,14 +173,24 @@ async function smartHomeDiagnostics(cfg, fetcher, signal) {
       last_seen: device.last_seen,
       last_state_changed_at: device.last_state_changed_at
     })) : [];
-  } catch { result.smart_home = { status: 'offline', reason: 'network_error' }; }
+  } catch (error) {
+    const detail = error instanceof AIError ? error.toJSON() : new AIError(
+      'SMART_HOME_UNAVAILABLE', 503, { operation: 'smart_home.diagnostics', cause: error?.name || 'FetchError' },
+    ).toJSON();
+    result.smart_home = { status: 'offline', reason: 'network_error', error: detail };
+  }
   const token = await localAgentToken(cfg);
   if (!token) result.layne = { status: 'unknown', reason: 'not_configured' };
   else {
     try {
       const response = await probe(`${cfg.localAgent}/health`, { Authorization: `Bearer ${token}` });
       result.layne = { status: response.ok ? 'online' : 'offline' };
-    } catch { result.layne = { status: 'offline', reason: 'network_error' }; }
+    } catch (error) {
+      const detail = error instanceof AIError ? error.toJSON() : new AIError(
+        'LAYNE_UNAVAILABLE', 503, { operation: 'layne.health', cause: error?.name || 'FetchError' },
+      ).toJSON();
+      result.layne = { status: 'offline', reason: 'network_error', error: detail };
+    }
   }
   return result;
 }
@@ -194,7 +216,9 @@ async function proxySmartHome(req, res, cfg, fetcher, signal, route) {
     response = await fetcher(target.toString(), { method: route.method, headers, body, redirect: 'error', signal: AbortSignal.any([signal, connect.signal]) });
   } catch (error) {
     if (signal.aborted) throw signal.reason || error;
-    throw new AIError(timedOut ? 'SMART_HOME_TIMEOUT' : 'SMART_HOME_UNAVAILABLE', timedOut ? 504 : 503);
+    throw new AIError(timedOut ? 'SMART_HOME_TIMEOUT' : 'SMART_HOME_UNAVAILABLE', timedOut ? 504 : 503, {
+      operation: 'smart_home.proxy', cause: error?.name || 'FetchError', retryable: true,
+    });
   } finally { clearTimeout(timer); }
   const contentType = response.headers.get('content-type') || 'application/json; charset=utf-8';
   res.writeHead(response.status, { 'Content-Type': contentType, 'Cache-Control': route.stream ? 'no-cache, no-store' : 'no-store', 'X-Accel-Buffering': 'no' });
@@ -208,10 +232,13 @@ async function proxySmartHome(req, res, cfg, fetcher, signal, route) {
 
 async function proxyNetwork(res, cfg, fetcher, signal, route) {
   const token = await localAgentToken(cfg);
-  if (!token) throw new AIError('NETWORK_UNAVAILABLE', 503);
+  if (!token) throw new AIError('NETWORK_AUTH_NOT_CONFIGURED', 503, {
+    operation: 'network_watch.proxy', retryable: false,
+  });
   const target = new URL(`/tools/${route.tool}/execute`, `${cfg.localAgent}/`);
   const connect = new AbortController();
-  const timer = setTimeout(() => connect.abort(), 10000);
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; connect.abort(); }, 10000);
   let response;
   try {
     response = await fetcher(target.toString(), {
@@ -221,17 +248,25 @@ async function proxyNetwork(res, cfg, fetcher, signal, route) {
       redirect: 'error',
       signal: AbortSignal.any([signal, connect.signal]),
     });
-  } catch {
-    throw new AIError('NETWORK_UNAVAILABLE', 503);
+  } catch (error) {
+    if (signal.aborted) throw signal.reason || error;
+    throw new AIError(timedOut ? 'NETWORK_TIMEOUT' : 'NETWORK_UNAVAILABLE', timedOut ? 504 : 503, {
+      operation: 'network_watch.proxy', cause: error?.name || 'FetchError', retryable: true,
+    });
   } finally { clearTimeout(timer); }
   const payload = await response.json().catch(() => null);
-  if (!response.ok || !payload?.ok) throw new AIError('NETWORK_UNAVAILABLE', 503);
+  if (!response.ok || !payload?.ok) {
+    throw remoteFailure(payload, 'NETWORK_UNAVAILABLE', 'NetworkWatch returned a diagnostic failure.',
+      response.status >= 400 ? response.status : 503, 'network_watch.proxy');
+  }
   json(res, 200, payload.data || { status: 'UNKNOWN' });
 }
 
 async function proxyCamera(req, res, cfg, fetcher, signal, route) {
   const token = await localAgentToken(cfg);
-  if (!token) throw new AIError('CAMERA_UNAVAILABLE', 503);
+  if (!token) throw new AIError('CAMERA_AUTH_NOT_CONFIGURED', 503, {
+    operation: 'camera.proxy', retryable: false,
+  });
   const target = new URL(`${route.path}${route.search || ''}`, `${cfg.localAgent}/`);
   const headers = { Accept: req.headers.accept || (route.json ? 'application/json' : 'image/*'), Authorization: `Bearer ${token}` };
   const connect = new AbortController();
@@ -242,7 +277,9 @@ async function proxyCamera(req, res, cfg, fetcher, signal, route) {
     response = await fetcher(target.toString(), { method: route.method || 'GET', headers, redirect: 'error', signal: AbortSignal.any([signal, connect.signal]) });
   } catch (error) {
     if (signal.aborted) throw signal.reason || error;
-    throw new AIError(timedOut ? 'CAMERA_TIMEOUT' : 'CAMERA_UNAVAILABLE', timedOut ? 504 : 503);
+    throw new AIError(timedOut ? 'CAMERA_TIMEOUT' : 'CAMERA_UNAVAILABLE', timedOut ? 504 : 503, {
+      operation: 'camera.proxy', cause: error?.name || 'FetchError', retryable: true,
+    });
   } finally { clearTimeout(timer); }
   if (route.json) {
     // JSON camera state is deliberately sanitized before it crosses the
@@ -346,13 +383,15 @@ export function createBridge(cfg, { fetcher = fetch, ai = createAI(cfg, fetcher)
       res.end();
     } catch (error) {
       const failure = signal.aborted ? signal.reason : error;
-      const safe = failure instanceof AIError ? failure : new AIError('INTERNAL_ERROR', 500); outcome = safe.code;
+      const safe = failure instanceof AIError ? failure : new AIError('INTERNAL_ERROR', 500, {
+        operation: 'bridge.request', cause: failure?.name || 'UnknownError', retryable: false,
+      }); outcome = safe.code;
       if (!res.destroyed && !res.writableEnded) {
         if (!res.headersSent) {
           if (safe.status === 429) res.setHeader('Retry-After', '60');
           res.setHeader('Connection', 'close');
-          json(res, safe.status, { error: safe.code, requestId: id });
-        } else res.end(JSON.stringify({ type: 'error', error: safe.code, requestId: id }) + '\n');
+          json(res, safe.status, { error: safe.code, error_detail: safe.toJSON(id), requestId: id });
+        } else res.end(JSON.stringify({ type: 'error', error: safe.code, error_detail: safe.toJSON(id), requestId: id }) + '\n');
       }
     } finally {
       clearTimeout(timer); clearInterval(heartbeat); active.delete(controller);
@@ -366,10 +405,21 @@ export function createBridge(cfg, { fetcher = fetch, ai = createAI(cfg, fetcher)
   return server;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  let lock;
   try {
+    lock = await acquireProcessLock(new URL('../../logs/ai-bridge.lock', import.meta.url));
     const cfg = config(), server = createBridge(cfg);
-    server.on('error', e => { console.error(JSON.stringify({ event: 'bridge_failed', code: e.code === 'EADDRINUSE' ? 'PORT_IN_USE' : 'START_FAILED' })); process.exitCode = 1; });
+    server.on('error', async e => {
+      console.error(JSON.stringify({ event: 'bridge_failed', code: e.code === 'EADDRINUSE' ? 'PORT_IN_USE' : 'START_FAILED' }));
+      process.exitCode = 1;
+      await lock?.release();
+      lock = null;
+    });
+    server.on('close', async () => { await lock?.release(); lock = null; });
     server.listen(cfg.port, '127.0.0.1', () => console.log(JSON.stringify({ event: 'bridge_ready', host: '127.0.0.1', port: cfg.port })));
     for (const event of ['SIGINT', 'SIGTERM']) process.on(event, () => server.stop());
-  } catch (e) { console.error(`Bridge configuration: ${e.message}`); process.exitCode = 1; }
+  } catch (e) {
+    await lock?.release();
+    console.error(`Bridge configuration: ${e.message}`); process.exitCode = 1;
+  }
 }

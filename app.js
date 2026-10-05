@@ -6,6 +6,15 @@ const $=id=>document.getElementById(id);
 const PROJECT_KEY="roggy-projects-v1";
 let projects=JSON.parse(localStorage.getItem(PROJECT_KEY)||"[]");
 function saveProjects(){localStorage.setItem(PROJECT_KEY,JSON.stringify(projects))}
+async function recordActivityEvent(event){
+  try{
+    const {data:{session}}=await sb.auth.getSession();
+    if(!isOwnerSession(session))return false;
+    const {error}=await sb.from("monitor_event_outbox").insert({user_id:session.user.id,event:{...event,source:"website",timestamp:event.timestamp||new Date().toISOString()}});
+    if(error)console.warn("activity_event_enqueue_failed",error.code||"unknown");
+    return !error;
+  }catch(error){console.warn("activity_event_enqueue_failed",error?.name||"unknown");return false}
+}
 
 /* The primary navigation order is the contract shared by tabs, swipe panels,
    page indicators, and the panorama. Secondary shelves (including Groceries)
@@ -92,13 +101,15 @@ function smartStateLabel(value){return String(value??"unknown").replaceAll("_","
 function smartTime(value){if(!value)return "";const date=new Date(value);return Number.isNaN(date.getTime())?"":date.toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}
 function smartClock(value){if(!value)return "";const date=new Date(value);return Number.isNaN(date.getTime())?"":date.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}
 function smartRelative(value){if(!value)return "";const age=Math.max(0,Date.now()-new Date(value).getTime());if(!Number.isFinite(age))return "";const seconds=Math.round(age/1000);if(seconds<10)return "just now";if(seconds<60)return `${seconds} sec ago`;const minutes=Math.round(seconds/60);if(minutes<60)return `${minutes} min ago`;const hours=Math.round(minutes/60);if(hours<24)return `${hours} hr ago`;const days=Math.round(hours/24);return `${days} day${days===1?"":"s"} ago`}
-function smartErrorMessage(error){if(error?.name==="AbortError")return "request timed out";return error?.payload?.error?.code||error?.code||error?.message||"Smart-home service unavailable."}
+function smartErrorDetail(error){const payload=error?.payload||{};const value=payload.error_detail||payload.error;return value&&typeof value==="object"?value:null}
+function payloadErrorCode(error){const value=error?.payload?.error;return typeof value==="string"?value:value?.error_code||value?.code||error?.payload?.error_detail?.error_code||error?.payload?.error_detail?.code}
+function smartErrorMessage(error){if(error?.name==="AbortError")return "request timed out";const detail=smartErrorDetail(error);return detail?.message||error?.message||detail?.code||payloadErrorCode(error)||error?.code||"Smart-home service unavailable."}
 async function smartHomeFetch(path,options={}){
  if(!SMART_HOME_API)throw Object.assign(new Error("Smart-home bridge is not configured"),{code:"bridge_not_configured",status:0});
  const {timeoutMs=12000,...requestOptions}=options,controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),timeoutMs);
  let response;try{response=await fetch(SMART_HOME_API+path,{cache:"no-store",...requestOptions,signal:controller.signal,headers:{Accept:"application/json",...(smartHomeAccessToken?{Authorization:`Bearer ${smartHomeAccessToken}`}:{ }),...(requestOptions.headers||{})}})}finally{clearTimeout(timeout)}
  let payload=null;try{payload=await response.json()}catch{}
- if(!response.ok)throw Object.assign(new Error(smartErrorMessage({payload})),{payload,status:response.status});
+ if(!response.ok)throw Object.assign(new Error(smartErrorMessage({payload})),{payload,status:response.status,code:payloadErrorCode({payload})});
  return payload||{};
 }
 async function cameraBinary(path){
@@ -114,7 +125,7 @@ async function cameraJson(path,options={}){
  const {timeoutMs=15000,...requestOptions}=options,controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),timeoutMs);
  let response;try{response=await fetch(CAMERA_API+path,{cache:"no-store",...requestOptions,headers:{Accept:"application/json",Authorization:`Bearer ${smartHomeAccessToken}`,...(requestOptions.headers||{})},signal:controller.signal})}finally{clearTimeout(timeout)}
  let payload=null;try{payload=await response.json()}catch{}
- if(!response.ok)throw Object.assign(new Error(payload?.error||`Camera request failed (${response.status})`),{payload,status:response.status,code:payload?.error||"camera_request_failed"});
+ if(!response.ok)throw Object.assign(new Error(smartErrorMessage({payload})),{payload,status:response.status,code:payloadErrorCode({payload})||"camera_request_failed"});
  return payload||{};
 }
 function frontDoorCameraOnline(){return !!frontDoorState&&frontDoorState.listener_connected!==false&&!frontDoorState.last_error}
@@ -223,6 +234,7 @@ async function updateFrontDoorDeletion(row,deleted){
  const {error}=await sb.from("camera_events").update({deleted_at:value}).eq("id",row.id).eq("user_id",session.user.id);
  if(error){$("frontDoorDetailImageStatus").hidden=false;$("frontDoorDetailImageStatus").textContent="Could not update this event.";return}
  const fresh=frontDoorEvents.find(item=>String(item.id)===String(row.id));if(fresh){fresh.deleted_at=value;fresh.trash_expires_at=deleted?new Date(Math.min(Date.now()+7*86400000,new Date(fresh.captured_at).getTime()+14*86400000)).toISOString():null}
+ await recordActivityEvent({event_id:`website:camera_event:${row.id}:${deleted?"deleted":"restored"}:${Date.now()}`,event_type:deleted?"camera_event_deleted":"camera_event_restored",category:"camera",title:deleted?"A camera event was moved to trash":"A camera event was restored",summary:deleted?"A front-door camera event was moved to the private trash view.":"A front-door camera event was restored from the private trash view.",importance:.38,room:"porch",device_id:"front_door_cam",related_entity:String(row.id),metadata:{action:deleted?"delete":"restore"}});
  $("frontDoorDetailDialog").close();renderFrontDoorEvents();
 }
 async function refreshFrontDoorFrame(){
@@ -317,12 +329,12 @@ function canonicalRoomId(value){
  const raw=typeof value==="object"&&value?value.room_id||value.area_id||value.id||value.name:value;
  const normalized=String(raw??"").trim().toLowerCase().replace(/[ -]+/g,"_");
  if(!normalized||normalized==="unassigned"||normalized==="unknown"||normalized==="none")return "";
- const aliases={livingroom:"living_room",living_room:"living_room",bedroom:"bedroom",kitchen:"kitchen",hall:"hallway",hallway:"hallway",corridor:"hallway",diningroom:"dining_room",dining_room:"dining_room",bathroom:"bathroom",porch:"porch",front_door:"porch",frontdoor:"porch"};
+ const aliases={livingroom:"living_room",living_room:"living_room",lounge:"living_room",family_room:"living_room",bedroom:"bedroom",bed_room:"bedroom",my_bedroom:"bedroom",the_bedroom:"bedroom",kitchen:"kitchen",the_kitchen:"kitchen",hall:"hallway",hallway:"hallway",corridor:"hallway",diningroom:"dining_room",dining_room:"dining_room",dining_area:"dining_room",bathroom:"bathroom",bath_room:"bathroom",restroom:"bathroom",washroom:"bathroom",porch:"porch",front_porch:"porch",front_door:"porch",frontdoor:"porch"};
  return aliases[normalized]||(/^[a-z0-9]+(?:_[a-z0-9]+)*$/.test(normalized)?normalized:"");
 }
 function roomIdFromFriendlyName(value){
  const text=String(value||"").toLowerCase();
- for(const [roomId,aliases] of Object.entries({living_room:["living room","livingroom"],bedroom:["bedroom"],kitchen:["kitchen"],hallway:["hallway","hall"],dining_room:["dining room","diningroom"],bathroom:["bathroom"],porch:["porch","front door","frontdoor"]}))if(aliases.some(alias=>text.includes(alias)))return roomId;
+ for(const [roomId,aliases] of Object.entries({living_room:["living room","livingroom","lounge","family room"],bedroom:["bedroom","bed room"],kitchen:["kitchen"],hallway:["hallway","hall","corridor"],dining_room:["dining room","diningroom","dining area"],bathroom:["bathroom","bath room","restroom","washroom"],porch:["porch","front porch","front door","frontdoor"]}))if(aliases.some(alias=>text.includes(alias)))return roomId;
  return "";
 }
 function roomDisplayName(room){return room?.room_id==="porch"?"Front Door / Porch":room?.friendly_name||smartStateLabel(room?.room_id||"Unassigned")}
@@ -518,12 +530,14 @@ async function saveItem(x){
   localStorage.setItem(KEY,JSON.stringify(data));
   const {error}=await sb.from("list_items").update({item:x.item,category:x.category||null,priority:x.priority||null,quantity:x.quantity||null,status:x.status,bought_at:x.boughtAt||null,notes:x.notes||null,deleted_at:x.deleted?(x.deletedAt||new Date().toISOString()):null}).eq("id",x.id);
   if(error)throw error;
+  await recordActivityEvent({event_id:`website:list_item:${x.id}:updated:${Date.now()}`,event_type:"list_item_updated",category:"list",title:"A list item changed",summary:`${x.item||"List item"} is now ${x.status}.`,importance:.42,related_entity:String(x.id),metadata:{list_type:currentPage,status:x.status}});
 }
 async function insertItem(x){
   x.status=listStatus(x.status);
   x.boughtAt=x.status==="bought"?(x.boughtAt||new Date().toISOString()):null;
   const {data:rows,error}=await sb.from("list_items").insert({list_type:currentPage,item:x.item,category:x.category||null,priority:x.priority||null,quantity:x.quantity||null,status:x.status,bought_at:x.boughtAt||null,notes:x.notes||null}).select();
   if(error)throw error;if(rows?.[0])x.id=rows[0].id;localStorage.setItem(KEY,JSON.stringify(data));
+  await recordActivityEvent({event_id:`website:list_item:${x.id}:created:${Date.now()}`,event_type:"list_item_created",category:"list",title:"A list item was added",summary:`${x.item||"List item"} was added to the list.`,importance:.44,related_entity:String(x.id),metadata:{list_type:currentPage,status:x.status}});
 }
 
 function renderLists(){
@@ -557,7 +571,7 @@ function renderLists(){
     c.querySelector(".removebtn").onclick=()=>{if(currentPage==="buy")x.status="bought";x.deleted=true;x.deletedAt=new Date().toISOString();saveItem(x).catch(showErr);renderLists()};
     c.querySelectorAll(".statusbtn").forEach(b=>b.onclick=()=>{x.status=b.dataset.s;saveItem(x).catch(showErr);renderLists()});
     c.querySelectorAll(".prioritybtn").forEach(b=>b.onclick=()=>changePriority(x,b.dataset.dir));
-    c.querySelector(".editbtn").onclick=()=>openEdit(x);c.querySelector(".deletebtn").onclick=async()=>{if(!confirm(`Delete "${x.item}" permanently? This will not move it to ${currentPage==="buy"?"Bought":"Recently Deleted"}.`))return;const {error}=await sb.from("list_items").delete().eq("id",x.id);if(error){showErr(error);return}data[currentPage]=data[currentPage].filter(i=>i.id!==x.id);localStorage.setItem(KEY,JSON.stringify(data));renderLists()};$("list").appendChild(c);
+    c.querySelector(".editbtn").onclick=()=>openEdit(x);c.querySelector(".deletebtn").onclick=async()=>{if(!confirm(`Delete "${x.item}" permanently? This will not move it to ${currentPage==="buy"?"Bought":"Recently Deleted"}.`))return;const {error}=await sb.from("list_items").delete().eq("id",x.id);if(error){showErr(error);return}data[currentPage]=data[currentPage].filter(i=>i.id!==x.id);localStorage.setItem(KEY,JSON.stringify(data));await recordActivityEvent({event_id:`website:list_item:${x.id}:deleted:${Date.now()}`,event_type:"list_item_deleted",category:"list",title:"A list item was deleted",summary:"A list item was removed from the list.",importance:.46,related_entity:String(x.id),metadata:{list_type:currentPage}});renderLists()};$("list").appendChild(c);
   });
 }
 function safeLink(url){try{const u=new URL(url);return ["http:","https:"].includes(u.protocol)?u.href:""}catch{return ""}}
@@ -862,7 +876,7 @@ async function saveManualReminder(previous){
   if(allDay){startDate=date;endDate=reminderDayOffset(date,1);startAt=reminderLocalToIso(date,"00:00");endAt=reminderLocalToIso(endDate,"00:00")}else{startAt=reminderLocalToIso(date,start);endAt=end?reminderLocalToIso(date,end):null;if(endAt&&new Date(endAt)<=new Date(startAt))return}
   const updates={title,start_at:startAt,end_at:endAt,all_day:allDay,start_date:startDate,end_date:endDate,location:$("reminderEditLocation").value.trim()||null,description:$("reminderEditDescription").value.trim()||null};
   const {data,error}=await sb.from("reminders").update(updates).eq("id",previous.id).eq("user_id",session.user.id).eq("source","manual").select().single();if(error||!data)return;
-  const index=reminders.findIndex(x=>String(x.id)===String(previous.id));if(index>=0)reminders[index]=data;$("reminderDetailDialog").close();renderReminders();
+  const index=reminders.findIndex(x=>String(x.id)===String(previous.id));if(index>=0)reminders[index]=data;await recordActivityEvent({event_id:`website:reminder:${previous.id}:updated:${Date.now()}`,event_type:"reminder_updated",category:"task",title:"A reminder was updated",summary:`${title} was updated.`,importance:.48,related_entity:String(previous.id),metadata:{source:"manual",all_day:allDay}});$("reminderDetailDialog").close();renderReminders();
 }
 function openReminderDetail(id){
   const reminder=reminders.find(x=>String(x.id)===String(id));if(!reminder)return;
@@ -872,7 +886,7 @@ function openReminderDetail(id){
 async function completeManualReminder(id){
   const {data:{session}}=await sb.auth.getSession(),reminder=reminders.find(x=>String(x.id)===String(id));if(!reminder||reminder.source!=="manual"||!isOwnerSession(session))return;
   const button=$("completeManualReminder");if(button)button.disabled=true;const {error}=await sb.from("reminders").update({completed:true}).eq("id",id).eq("user_id",session.user.id).eq("source","manual");
-  if(error){if(button){button.disabled=false;button.textContent="Could not complete"}return}$("reminderDetailDialog").close();reminders=reminders.filter(x=>String(x.id)!==String(id));renderReminders();
+  if(error){if(button){button.disabled=false;button.textContent="Could not complete"}return}await recordActivityEvent({event_id:`website:reminder:${id}:completed:${Date.now()}`,event_type:"reminder_completed",category:"task",title:"A reminder was completed",summary:`${reminder.title||"Reminder"} was marked complete.`,importance:.52,related_entity:String(id),metadata:{source:"manual"}});$("reminderDetailDialog").close();reminders=reminders.filter(x=>String(x.id)!==String(id));renderReminders();
 }
 document.querySelectorAll(".reminder-tab").forEach(b=>b.onclick=()=>{reminderView=b.dataset.reminderView;document.querySelectorAll(".reminder-tab").forEach(z=>z.classList.toggle("active",z===b));renderReminders()});
 document.querySelectorAll(".front-door-view-tab").forEach(b=>b.onclick=()=>{frontDoorView=b.dataset.frontDoorView;renderFrontDoorEvents()});
@@ -1158,6 +1172,7 @@ async function moveProject(index,delta){
  const a=projects[index],b=projects[other];const ao=a.sort_order??index,bo=b.sort_order??other;
  const {error:e1}=await sb.from("projects").update({sort_order:bo,updated_at:new Date().toISOString()}).eq("id",a.id);if(e1){showErr(e1);return}
  const {error:e2}=await sb.from("projects").update({sort_order:ao,updated_at:new Date().toISOString()}).eq("id",b.id);if(e2){showErr(e2);return}
+ await recordActivityEvent({event_id:`website:project:${a.id}:reordered:${Date.now()}`,event_type:"project_reordered",category:"project",title:"Projects were reordered",summary:"Project display order was updated.",importance:.36,related_entity:String(a.id),metadata:{moved_project:String(a.id),swapped_with:String(b.id)}});
  await renderProjects();
 }
 async function renderProjects(){await loadProjectsFromSupabase();$("projectList").innerHTML=projects.map((p,i)=>'<div class="project-card-wrap"><button type="button" class="project-card project-open" data-project-open="'+i+'"><div><span class="project-status">'+esc(p.status)+'</span><h3>'+esc(p.title)+'</h3></div><div class="project-foot"><span>'+esc(p.priority||"High")+' priority</span><span>Open →</span></div></button><div class="project-order-controls"><button type="button" data-project-up="'+i+'" '+(i===0?'disabled':'')+' aria-label="Move '+esc(p.title)+' up">↑</button><button type="button" data-project-down="'+i+'" '+(i===projects.length-1?'disabled':'')+' aria-label="Move '+esc(p.title)+' down">↓</button></div></div>').join("");document.querySelectorAll("[data-project-open]").forEach(b=>b.onclick=()=>openProject(+b.dataset.projectOpen));document.querySelectorAll("[data-project-up]").forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();moveProject(+b.dataset.projectUp,-1)});document.querySelectorAll("[data-project-down]").forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();moveProject(+b.dataset.projectDown,1)})}
@@ -1183,7 +1198,7 @@ async function toggleProjectItemCheck(button,id,next,title){
  button.blur();
  button.classList.toggle("checked",next);button.setAttribute("aria-pressed",String(next));button.textContent=next?"✓":"";
  const {error}=await sb.from("project_items").update({checked:next,updated_at:new Date().toISOString()}).eq("id",id);
- if(error){button.classList.toggle("checked",!next);button.setAttribute("aria-pressed",String(!next));button.textContent=!next?"✓":"";showErr(error)}
+ if(error){button.classList.toggle("checked",!next);button.setAttribute("aria-pressed",String(!next));button.textContent=!next?"✓":"";showErr(error)}else await recordActivityEvent({event_id:`website:project_item:${id}:checked:${Date.now()}`,event_type:"project_item_checked",category:"project",title:"A project item changed",summary:`A project item was marked ${next?"complete":"open"}.`,importance:.4,related_entity:String(id),metadata:{checked:next,project:title}});
  requestAnimationFrame(()=>window.scrollTo({top:y,left:0,behavior:"instant"}));
 }
 async function createAndCheckProjectItem(projectTitle,itemTitle,itemType,notes,url,restoreY=window.scrollY){
@@ -1191,6 +1206,7 @@ async function createAndCheckProjectItem(projectTitle,itemTitle,itemType,notes,u
  const {data:{session}}=await sb.auth.getSession();if(!isOwnerSession(session))return;
  const {error}=await sb.from("project_items").insert({project_id:projectId,user_id:session.user.id,title:itemTitle,item_type:itemType,status:"planned",notes:notes||null,product_url:url||null,checked:true});
  if(error){showErr(error);return}
+ await recordActivityEvent({event_id:`website:project_item:${projectId}:created:${Date.now()}`,event_type:"project_item_created",category:"project",title:"A project item was added",summary:`${itemTitle} was added to ${projectTitle}.`,importance:.42,related_entity:String(projectId),metadata:{project:projectTitle,item_type:itemType,checked:true}});
  const i=projects.findIndex(p=>p.title===projectTitle);if(i>=0){await openProject(i);requestAnimationFrame(()=>window.scrollTo({top:restoreY,left:0,behavior:"instant"}))}
 }
 async function openProject(i){
@@ -1217,7 +1233,7 @@ async function openProject(i){
 }
 $("projectBackBtn").onclick=()=>setPage("projects");
 $("newProjectBtn").onclick=()=>$("projectDialog").showModal();
-$("projectForm").addEventListener("submit",async e=>{if(e.submitter?.value==="cancel")return;e.preventDefault();const {data:{session}}=await sb.auth.getSession();if(!isOwnerSession(session))return;const row={user_id:session.user.id,title:$("projectTitle").value.trim(),description:$("projectDescription").value.trim()||null,status:String($("projectStatus").value||"Active").toLowerCase().replace(" ","_")};const {error}=await sb.from("projects").insert(row);if(error){showErr(error);return}$("projectForm").reset();$("projectDialog").close();await renderProjects()});
+$("projectForm").addEventListener("submit",async e=>{if(e.submitter?.value==="cancel")return;e.preventDefault();const {data:{session}}=await sb.auth.getSession();if(!isOwnerSession(session))return;const row={user_id:session.user.id,title:$("projectTitle").value.trim(),description:$("projectDescription").value.trim()||null,status:String($("projectStatus").value||"Active").toLowerCase().replace(" ","_")};const {data:created,error}=await sb.from("projects").insert(row).select("id,title,status").single();if(error){showErr(error);return}await recordActivityEvent({event_id:`website:project:${created?.id||row.title}:created:${Date.now()}`,event_type:"project_created",category:"project",title:"A project was created",summary:`${row.title} was added to projects.`,importance:.5,related_entity:String(created?.id||row.title),metadata:{status:row.status}});$("projectForm").reset();$("projectDialog").close();await renderProjects()});
 document.querySelectorAll(".command-card[data-jump]").forEach(b=>b.onclick=()=>setPage(b.dataset.jump));document.querySelectorAll("[data-focus-jump]").forEach(b=>b.onclick=()=>setPage(b.dataset.focusJump));
 function openGlobalSearch(){$("globalSearchDialog").showModal();$("globalSearchInput").value="";renderGlobalSearch("");setTimeout(()=>$("globalSearchInput").focus(),50)}
 $("globalSearchBtn").onclick=openGlobalSearch;$("closeGlobalSearch").onclick=()=>$("globalSearchDialog").close();

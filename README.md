@@ -97,7 +97,9 @@ After a successful monitor commit, `monitor/events.mjs` deterministically projec
 
 `monitor/enrichment.mjs` is an optional, side-effect-free adapter for the existing lightweight Ollama worker. It receives only bounded canonical fields marked as untrusted event data, validates structured annotations, times out, and fails closed. It is not invoked for routine monitoring, so no model remains loaded for the event pipeline.
 
-The local agent's owner-authenticated `PersonalDataService` exposes `/event-data` and `/event-search`, plus the `CHECK_PERSONAL_EVENTS` and `SEARCH_PERSONAL_EVENTS` registered processes. Layne retrieves relevant events on demand; it does not ingest the inbox continuously. The existing `/email-data` and Roggy Lists email panel remain available during the migration.
+The unified activity schema adds category, severity, room/device, related entity, dedupe and incident lifecycle fields to `monitor_events`. LocalAgent, Smart Home, NetworkWatch and the monitor's provider projections write privacy-filtered envelopes; the monitor worker drains the atomic local outbox and the same-database `monitor_event_outbox` queue into this canonical table. Website list, reminder, project and project-item mutations enqueue compact activity envelopes through owner-scoped authenticated inserts. Queue or event-storage failures are additive and non-fatal to producers.
+
+The local agent's owner-authenticated `PersonalDataService` exposes `/event-data`, `/event-data/today`, and `/event-search`, plus the `CHECK_PERSONAL_EVENTS` and `SEARCH_PERSONAL_EVENTS` registered processes. Layne can answer “what happened today?” using local-day sections for system issues, purchases, camera activity, Layne completions and tasks. Raw Gmail bodies, reminder descriptions, project notes, transcripts, tokens, credentials and camera snapshots are not stored in the canonical event projection.
 
 ## Finance authorization and behavior
 
