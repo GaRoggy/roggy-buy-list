@@ -1,0 +1,16 @@
+{
+  "name": "Roggy Buy List",
+  "short_name": "Buy List",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#3b0764",
+  "theme_color": "#6d28d9",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

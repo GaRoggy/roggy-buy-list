@@ -1,0 +1,20 @@
+{
+  "name": "roggy-lists",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=24"},
+  "scripts": {
+    "test": "node --test monitor/test/*.test.mjs ai/test/*.test.mjs",
+    "build": "node scripts/build.mjs",
+    "ollama-bridge": "node --env-file=.env ai/bridge/server.mjs",
+    "ai:configure": "node --env-file=.env scripts/configure-ai.mjs",
+    "test:ai": "node --test ai/test/*.test.mjs",
+    "monitor": "node --env-file=.env monitor/worker.mjs",
+    "monitor:once": "node --env-file=.env monitor/worker.mjs --once",
+    "calibrate:email": "node --env-file=.env monitor/calibrate-email.mjs",
+    "reclassify:email": "node --env-file=.env monitor/reclassify-email.mjs",
+    "google:auth": "node --env-file=.env monitor/google-auth.mjs",
+    "gmail:setup": "node --env-file=.env monitor/setup.mjs gmail",
+    "google:services": "node --env-file=.env monitor/setup.mjs google-services"
+  }
+}

@@ -1,0 +1,81 @@
+// Run: node monitor/test/database.mjs <absolute path to PGlite dist/index.js>
+// PGlite 0.5.8 is a disposable PostgreSQL WASM test database, never production.
+import { pathToFileURL } from 'node:url';
+import { readFile, readdir } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+const { PGlite } = await import(pathToFileURL(process.argv[2]).href);
+const db = new PGlite();
+await db.exec(`create role anon; create role authenticated; create role service_role bypassrls;
+create schema auth; create table auth.users(id uuid primary key);
+create function auth.uid() returns uuid language sql as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+grant usage on schema auth to authenticated;
+create table public.reminders(id uuid primary key default gen_random_uuid(),title text not null,start_at timestamptz not null,
+end_at timestamptz,all_day boolean not null default false,source text not null default 'manual',external_id text unique,completed boolean not null default false,created_at timestamptz default now());
+create table public.list_items(id uuid primary key default gen_random_uuid(),list_type text not null,item text not null,
+category text,priority text,quantity text,status text not null default 'Looking',notes text,target_price numeric,
+deleted_at timestamptz,created_at timestamptz not null default now(),updated_at timestamptz not null default now(),
+user_id uuid not null references auth.users(id));
+create table public.budget_entries(user_id uuid);
+insert into auth.users values('00000000-0000-4000-8000-000000000001'),('00000000-0000-4000-8000-000000000002');
+insert into public.budget_entries values('00000000-0000-4000-8000-000000000001');`);
+for (const file of (await readdir('supabase/migrations')).sort()) await db.exec(await readFile(`supabase/migrations/${file}`, 'utf8'));
+const owner = '00000000-0000-4000-8000-000000000001';
+const { rows: [source] } = await db.query(`insert into monitor_sources(user_id,kind,external_id,enabled) values($1,'gmail','test',true) returning *`, [owner]);
+await db.query('select monitor_schedule($1)', [owner]); await db.query('select monitor_schedule($1)', [owner]);
+assert.equal((await db.query('select * from monitor_jobs')).rows.length, 1);
+const claim = (await db.query('select monitor_claim($1) as claim', [owner])).rows[0].claim;
+assert.equal((await db.query('select monitor_claim($1) as claim', [owner])).rows[0].claim, null);
+const record = { kind: 'email', external_id: 'test-message', occurred_at: '2026-09-21T12:00:00Z', payload: { subject: 'synthetic' } };
+await assert.rejects(db.query('select monitor_commit($1,$2,$3,$4)', [claim.job.id, '00000000-0000-4000-8000-000000000000', JSON.stringify([record]), '{}']));
+await db.query('select monitor_commit($1,$2,$3,$4)', [claim.job.id, claim.job.lease_token, JSON.stringify([record]), '{"historyId":"1"}']);
+await db.exec(`update monitor_sources set next_run_at=now();`);
+await db.query('select monitor_schedule($1)', [owner]);
+const claim2 = (await db.query('select monitor_claim($1) as claim', [owner])).rows[0].claim;
+await assert.rejects(db.query('select monitor_commit($1,$2,$3,$4)', [claim2.job.id, claim2.job.lease_token,
+  JSON.stringify([record,{kind:'email',external_id:'broken',occurred_at:'bad-date',payload:{}}]), '{"historyId":"bad"}']));
+assert.equal((await db.query('select cursor from monitor_sources where id=$1',[source.id])).rows[0].cursor.historyId,'1');
+await db.query('select monitor_commit($1,$2,$3,$4)', [claim2.job.id, claim2.job.lease_token, JSON.stringify([record]), '{"historyId":"2"}']);
+assert.equal((await db.query('select * from monitor_records')).rows.length, 1);
+await db.query(`insert into monitor_events(user_id,source_id,source_kind,source_event_id,event_type,title,importance,confidence)
+  values($1,$2,'gmail','event-1','bill_due','Synthetic bill',0.8,0.9)`, [owner, source.id]);
+await db.exec(`set role authenticated; set request.jwt.claim.sub='00000000-0000-4000-8000-000000000002';`);
+assert.equal((await db.query('select * from monitor_records')).rows.length, 0);
+assert.equal((await db.query('select * from monitor_events')).rows.length, 0);
+await assert.rejects(db.query('select monitor_schedule($1)',[owner]));
+await db.exec(`set request.jwt.claim.sub='${owner}';`);
+assert.equal((await db.query('select * from monitor_records')).rows.length,1);
+assert.equal((await db.query('select * from monitor_events')).rows.length,1);
+await db.exec('reset role; set role anon;');
+await assert.rejects(db.query('select * from monitor_records'));
+await assert.rejects(db.query('select * from monitor_events'));
+await db.exec('reset role;');
+// Reminder projection keeps IDs/completion and propagates changes/cancellations.
+const cal=(await db.query(`insert into monitor_sources(user_id,kind,external_id) values($1,'calendar','test-calendar') returning id`,[owner])).rows[0];
+const payload={title:'Synthetic all-day',start:'2026-11-01',end:'2026-11-02',all_day:true,time_zone:'America/Chicago'};
+const rec=(await db.query(`insert into monitor_records(user_id,source_id,kind,external_id,payload) values($1,$2,'calendar_event','cal-event',$3) returning id`,[owner,cal.id,JSON.stringify(payload)])).rows[0];
+const reminder=(await db.query('select * from reminders where monitor_record_id=$1',[rec.id])).rows[0];
+assert.equal(reminder.start_at.toISOString(),'2026-11-01T05:00:00.000Z');
+assert.equal(reminder.end_at.toISOString(),'2026-11-02T06:00:00.000Z');
+await db.query('update reminders set completed=true where id=$1',[reminder.id]);
+await db.query('update monitor_records set payload=$1 where id=$2',[JSON.stringify({...payload,title:'Changed'}),rec.id]);
+assert.equal((await db.query('select * from reminders where id=$1',[reminder.id])).rows[0].completed,true);
+assert.equal((await db.query('select * from reminders')).rows.length,1);
+await db.query(`update monitor_records set status='deleted' where id=$1`,[rec.id]);
+assert.ok((await db.query('select * from reminders where id=$1',[reminder.id])).rows[0].cancelled_at);
+await db.exec('set role anon;');await assert.rejects(db.query('select * from reminders'));await db.exec('reset role;');
+const legacy=(await db.query(`insert into reminders(user_id,title,start_at,source,external_id) values($1,'Legacy synthetic',now(),'google_calendar','legacy-cancelled') returning id`,[owner])).rows[0];
+await db.query(`insert into monitor_records(user_id,source_id,kind,external_id,status,payload) values($1,$2,'calendar_event','legacy-cancelled','deleted','{}')`,[owner,cal.id]);
+const cancelledLegacy=(await db.query('select * from reminders where id=$1',[legacy.id])).rows[0];
+assert.ok(cancelledLegacy.monitor_record_id);assert.ok(cancelledLegacy.cancelled_at);
+// Expired claims are reclaimed, and the old worker is fenced off.
+await db.exec(`update monitor_sources set next_run_at=now() where enabled;`);
+await db.query('select monitor_schedule($1)',[owner]);
+const abandoned=(await db.query('select monitor_claim($1) as c',[owner])).rows[0].c;
+await db.query(`update monitor_jobs set lease_until=now()-interval '1 second' where id=$1`,[abandoned.job.id]);
+const recovered=(await db.query('select monitor_claim($1) as c',[owner])).rows[0].c;
+assert.equal(recovered.job.id,abandoned.job.id);assert.notEqual(recovered.job.lease_token,abandoned.job.lease_token);
+await assert.rejects(db.query('select monitor_commit($1,$2,$3,$4)',[abandoned.job.id,abandoned.job.lease_token,'[]','{}']));
+await db.query('select monitor_fail($1,$2,$3,$4,$5)',[recovered.job.id,recovered.job.lease_token,'GOOGLE_OAUTH_REQUIRED',60,true]);
+assert.equal((await db.query('select enabled from monitor_sources where id=$1',[source.id])).rows[0].enabled,false);
+await db.close();
+console.log('Database checks passed: migrations, scheduling deduplication, lease fencing/recovery, atomic rollback, record/reminder deduplication, DST all-day projection, cancellation, completion preservation, owner isolation, anonymous denial, auth failure disabling.');
