@@ -42,6 +42,24 @@ async function fixture(t, opts = {}) {
     if (url.endsWith('/internal/camera/front_door/frame') || url.includes('/internal/camera/front_door/snapshots/')) {
       return new Response(new Uint8Array([255, 216, 255, 217]), { status: 200, headers: { 'Content-Type': 'image/jpeg' } });
     }
+    if (url.endsWith('/tools/network_get_status/execute')) return result({ ok: true, data: {
+      status: 'RUNNING', classification: 'NORMAL', current_latency_ms: 18, current_jitter_ms: 2,
+      packet_loss_5m_pct: 0, gateway: { online: true }, dns: { online: true },
+      internet: { online: true, successes: 3, total: 3 }, last_measurement_at: '2026-10-05T04:00:00Z',
+    } });
+    if (url.endsWith('/tools/network_get_reliability/execute')) return result({ ok: true, data: {
+      status: 'OK', period: '24h', measured_external_availability_pct: 100, average_latency_ms: 18,
+      median_latency_ms: 18, p95_latency_ms: 22, external_packet_loss_pct: 0,
+      outage_events: 0, degradation_events: 0, measurements: 10, cycles: 2, incidents: [],
+    } });
+    if (url.endsWith('/tools/network_get_incidents/execute')) return result({ ok: true, data: {
+      status: 'OK', period: '24h', count: 0, incidents: [],
+    } });
+    if (url.endsWith('/tools/network_get_measurements/execute')) return result({ ok: true, data: {
+      status: 'OK', period: '24h', measurement_count: 2, truncated: false, jitter_method: 'fixture',
+      summary: { average_latency_ms: 18, average_jitter_ms: 2, average_packet_loss_pct: 0 },
+      measurements: [{ timestamp: '2026-10-05T04:00:00Z', latency_ms: 18, jitter_ms: 2, packet_loss_pct: 0 }],
+    } });
     if (url.endsWith('/api/commands')) return result({ message: 'Layne command accepted' });
     if (url.endsWith('/api/devices/fixture_light/actions')) return result({ success: true });
     if (opts.offline) throw Error('sensitive Ollama detail');
@@ -141,6 +159,24 @@ test('authenticated smart-home traffic stays behind the owner bridge', async t =
   assert.equal(upstream.options.headers.Authorization, 'Bearer valid');
   assert.equal((await f.request('/smart-home/commands', { text: 'status' })).status, 200);
   assert.equal((await f.request('/smart-home/devices/fixture_light/actions', { action: 'power', value: 'off' })).status, 200);
+});
+test('authenticated network traffic stays behind the owner bridge and exposes safe data only', async t => {
+  const f = await fixture(t, { cfg: { localAgentApiToken: 'agent-fixture' } });
+  const status = await f.request('/network/status', null);
+  assert.equal(status.status, 200);
+  const statusBody = await status.json();
+  assert.equal(statusBody.classification, 'NORMAL');
+  assert.equal('database_path' in statusBody, false);
+  const summary = await f.request('/network/summary?range=24h', null);
+  assert.equal(summary.status, 200);
+  assert.equal((await summary.json()).period, '24h');
+  const measurements = await f.request('/network/measurements?range=6h&limit=10', null);
+  assert.equal(measurements.status, 200);
+  assert.equal((await measurements.json()).jitter_method, 'fixture');
+  assert.equal((await f.request('/network/summary?range=30d', null)).status, 400);
+  const upstream = f.calls.find(call => call.url.endsWith('/tools/network_get_status/execute'));
+  assert.equal(upstream.options.headers.Authorization, 'Bearer agent-fixture');
+  assert.equal(JSON.parse(upstream.options.body).arguments && 'database_path' in JSON.parse(upstream.options.body).arguments, false);
 });
 test('camera traffic uses the local-agent token and strips filesystem paths', async t => {
   const f = await fixture(t, { cfg: { localAgentApiToken: 'agent-fixture' } });

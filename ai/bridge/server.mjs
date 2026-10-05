@@ -39,6 +39,7 @@ const SMART_HOME_PATH = /^\/(?:devices(?:\/[A-Za-z0-9._~%+\-]+(?:\/actions)?)?|r
 const CONFIRMATION_PATH = /^\/confirmations\/[A-Za-z0-9._~%+\-]+$/;
 const CAMERA_PREFIX = '/camera';
 const CAMERA_SNAPSHOT_NAME = /^front_door_[0-9_-]+\.jpg$/;
+const NETWORK_RANGE = new Set(['1h', '6h', '24h', '7d']);
 function smartHomeRequest(reqUrl, requestMethod = null) {
   const parsed = new URL(reqUrl, 'http://bridge.local');
   if (!parsed.pathname.startsWith(`${SMART_HOME_PREFIX}/`) && parsed.pathname !== SMART_HOME_PREFIX) return null;
@@ -55,6 +56,29 @@ function smartHomeRequest(reqUrl, requestMethod = null) {
   const method = isAction ? 'POST' : 'GET';
   if (parsed.search && path === '/events/stream') return { kind: 'proxy', method, path: `/api${path}`, search: parsed.search };
   return { kind: 'proxy', method, path: `/api${path}`, search: parsed.search, stream: isStream };
+}
+
+function networkRequest(reqUrl, requestMethod = null) {
+  const parsed = new URL(reqUrl, 'http://bridge.local');
+  if (!parsed.pathname.startsWith('/network/')) return null;
+  if (requestMethod !== 'GET') throw new AIError('METHOD_NOT_ALLOWED', 405);
+  const path = parsed.pathname.slice('/network'.length);
+  const range = parsed.searchParams.get('range') || '24h';
+  if (!NETWORK_RANGE.has(range)) throw new AIError('NETWORK_RANGE_INVALID', 400);
+  const limitValue = parsed.searchParams.get('limit');
+  const limit = limitValue === null ? undefined : Number(limitValue);
+  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 1200)) {
+    throw new AIError('NETWORK_LIMIT_INVALID', 400);
+  }
+  const routes = {
+    '/status': { tool: 'network_get_status', arguments: {} },
+    '/summary': { tool: 'network_get_reliability', arguments: { period: range } },
+    '/incidents': { tool: 'network_get_incidents', arguments: { period: range, limit: Math.min(limit || 50, 100) } },
+    '/measurements': { tool: 'network_get_measurements', arguments: { period: range, limit: limit || 600 } },
+  };
+  const route = routes[path];
+  if (!route) throw new AIError('NETWORK_ROUTE_NOT_FOUND', 404);
+  return route;
 }
 
 function cameraRequest(reqUrl, requestMethod = null) {
@@ -182,6 +206,29 @@ async function proxySmartHome(req, res, cfg, fetcher, signal, route) {
   res.end();
 }
 
+async function proxyNetwork(res, cfg, fetcher, signal, route) {
+  const token = await localAgentToken(cfg);
+  if (!token) throw new AIError('NETWORK_UNAVAILABLE', 503);
+  const target = new URL(`/tools/${route.tool}/execute`, `${cfg.localAgent}/`);
+  const connect = new AbortController();
+  const timer = setTimeout(() => connect.abort(), 10000);
+  let response;
+  try {
+    response = await fetcher(target.toString(), {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ arguments: route.arguments }),
+      redirect: 'error',
+      signal: AbortSignal.any([signal, connect.signal]),
+    });
+  } catch {
+    throw new AIError('NETWORK_UNAVAILABLE', 503);
+  } finally { clearTimeout(timer); }
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.ok) throw new AIError('NETWORK_UNAVAILABLE', 503);
+  json(res, 200, payload.data || { status: 'UNKNOWN' });
+}
+
 async function proxyCamera(req, res, cfg, fetcher, signal, route) {
   const token = await localAgentToken(cfg);
   if (!token) throw new AIError('CAMERA_UNAVAILABLE', 503);
@@ -252,6 +299,13 @@ export function createBridge(cfg, { fetcher = fetch, ai = createAI(cfg, fetcher)
       inflight++; counted = true;
       await authorize(req.headers.authorization, cfg, signal, fetcher);
       signal.throwIfAborted();
+      const network = networkRequest(req.url, req.method);
+      if (network) {
+        clearTimeout(timer);
+        timer = setTimeout(() => controller.abort(new AIError('NETWORK_TIMEOUT', 504)), 12000);
+        await proxyNetwork(res, cfg, fetcher, signal, network);
+        return;
+      }
       const smartHome = smartHomeRequest(req.url, req.method);
       if (smartHome) {
         if (smartHome.method !== req.method) throw new AIError('METHOD_NOT_ALLOWED', 405);

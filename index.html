@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="styles.css?v=115">
 <link rel="stylesheet" href="todos.css?v=61">
 <link rel="stylesheet" href="polish.css?v=109">
+<link rel="stylesheet" href="network.css?v=1">
 <link rel="apple-touch-icon" href="icon.svg?v=2">
 </head>
 <body>
@@ -34,6 +35,7 @@
   <button class="page-tab drawer-page-tab" data-page="budget" onclick="document.getElementById('moreToggle').checked=false">Finance</button>
   <button class="page-tab drawer-page-tab" data-page="digestibles" onclick="document.getElementById('moreToggle').checked=false">Digestibles</button>
   <button class="page-tab drawer-page-tab" data-page="front-door" onclick="document.getElementById('moreToggle').checked=false">Front Door</button>
+  <button class="page-tab drawer-page-tab" data-page="network" onclick="document.getElementById('moreToggle').checked=false">Network</button>
   <button class="page-tab drawer-page-tab" data-page="dough" onclick="document.getElementById('moreToggle').checked=false">Dough</button>
   <div class="under-construction-group">
     <div class="under-construction-title">Under Construction</div>
@@ -99,6 +101,7 @@
     <button id="globalSearchBtn" class="command-search">⌕ <span>Search everything…</span><kbd>Search</kbd></button>
     <section class="today-hero compact-command"><div><span class="eyebrow">COMMAND CENTER</span><p id="homeDate"></p></div></section>
     <section class="home-focus-strip"><button type="button" data-focus-jump="todos"><span>Tasks</span><b id="focusTaskCount">—</b><small>open</small></button><button type="button" data-focus-jump="reminders"><span>Today</span><b id="focusTodayCount">—</b><small>events</small></button><button type="button" data-focus-jump="projects"><span>Projects</span><b id="focusProjectCount">—</b><small>active</small></button></section>
+    <section id="homeNetworkSection" class="home-section network-home-section" aria-labelledby="homeNetworkTitle"><button id="homeNetworkCard" class="network-home-card" type="button"><span class="network-status-dot" data-state="unknown" aria-hidden="true"></span><span class="network-home-copy"><span class="eyebrow">NETWORK</span><b id="homeNetworkTitle">Internet</b><small id="homeNetworkMessage">Checking current health…</small></span><span class="network-home-metric" id="homeNetworkMetric">—</span><span class="network-chevron" aria-hidden="true">›</span></button></section>
     <section class="home-primary-grid">
       <section id="homeHighTodos" class="home-section high-todos-section" hidden><div class="section-head"><div><span class="eyebrow">HIGH PRIORITY</span><h3>Tasks</h3></div><button id="homeHighTodosAll" class="text-action" type="button">See all</button></div><div id="homeHighTodoList" class="home-high-todo-list"></div></section>
       <section id="homeTimeline" class="home-timeline"></section>
@@ -130,6 +133,23 @@
 </section>
 <section id="projectDetailPage" hidden><main class="system-main project-detail-main"><button id="projectBackBtn" class="project-back">← Projects</button><div id="projectDetailContent"></div></main></section>
 <section id="devicesPage" hidden><main class="system-main device-main"><div class="system-intro"><span class="eyebrow">SMART HOME</span><h2>Devices</h2><p>Live state and controls from Layne’s registered device integrations.</p></div><section id="deviceDiagnostics" class="device-diagnostics" aria-live="polite"></section><section id="deviceRoomSummary" class="device-room-summary"></section><section id="deviceStatus" class="status"></section><section id="deviceRooms" class="device-rooms"></section></main></section>
+<section id="networkPage" hidden>
+  <main class="system-main network-main">
+    <div class="system-intro"><span class="eyebrow">NETWORK HEALTH</span><h2>Internet</h2><p>A quiet view of the connection you are actually using.</p></div>
+    <section id="networkStatusCard" class="network-status-card" aria-live="polite"></section>
+    <section id="networkMetrics" class="network-metric-grid" aria-label="Current network metrics"></section>
+    <section id="networkSummaryCard" class="network-panel" aria-live="polite"></section>
+    <section class="network-panel network-chart-panel">
+      <div class="section-head"><div><span class="eyebrow">TRENDS</span><h3 id="networkChartTitle">Latency</h3></div><div class="network-chart-controls"><label for="networkRange">Range<select id="networkRange"><option value="1h">1 hour</option><option value="6h">6 hours</option><option value="24h" selected>24 hours</option><option value="7d">7 days</option></select></label><label for="networkMetric">Metric<select id="networkMetric"><option value="latency">Latency</option><option value="jitter">Jitter</option><option value="loss">Packet loss</option></select></label></div></div>
+      <div id="networkChartWrap" class="network-chart-wrap"><canvas id="networkChart" aria-label="Network trend chart"></canvas><p id="networkChartEmpty" class="quiet-state" hidden>No measurements in this range.</p></div>
+      <p id="networkChartNote" class="network-chart-note"></p>
+    </section>
+    <section class="network-panel"><div class="section-head"><div><span class="eyebrow">RECENT EVENTS</span><h3>Incidents</h3></div><span id="networkIncidentCount" class="network-count">—</span></div><div id="networkIncidentList" class="network-incident-list"></div></section>
+    <section id="networkGamingCard" class="network-panel"></section>
+    <section class="network-panel network-layne-panel"><div><span class="eyebrow">ASK LAYNE</span><h3>Make sense of the pattern</h3><p>Ask a text-only question using the same local NetworkWatch evidence.</p></div><div class="network-layne-links"><button type="button" data-network-prompt="How has my internet been today?">How has my internet been today?</button><button type="button" data-network-prompt="Why was my internet bad around 8 PM?">Why was my internet bad around 8 PM?</button><button type="button" data-network-prompt="Was my network bad during my game?">Was my network bad during my game?</button></div></section>
+    <p id="networkPageStatus" class="status" role="status"></p>
+  </main>
+</section>
 <section id="healthPage" hidden><main class="system-main"><div class="system-intro"><span class="eyebrow">GARMIN CONNECT</span><h2>Health</h2><p>Your wellness dashboard is ready for Garmin data.</p></div><div class="metric-grid"><div><span>Sleep</span><b>—</b><small>Connect data</small></div><div><span>Body Battery</span><b>—</b><small>Connect data</small></div><div><span>Resting HR</span><b>—</b><small>Connect data</small></div><div><span>Stress</span><b>—</b><small>Connect data</small></div></div><div class="system-card"><b>Health trends</b><p>Sleep, HRV, stress, activity and workouts will live here with day / week / month views and correlations.</p></div></main></section>
 <section id="vehiclePage" hidden><main class="system-main"><div class="vehicle-hero"><div><span class="eyebrow">MY VEHICLE</span><h2>2021 Toyota RAV4</h2><p>Maintenance, mileage, documents and accessories.</p></div><span class="vehicle-icon">◇</span></div><div class="metric-grid"><div><span>Mileage</span><b>—</b><small>Tap to add</small></div><div><span>Oil</span><b>—</b><small>No record yet</small></div><div><span>Tires</span><b>—</b><small>No record yet</small></div><div><span>Next due</span><b>—</b><small>All clear</small></div></div><div class="system-card"><b>Maintenance history</b><p>Add mileage and service records here. Upcoming mileage- and date-based maintenance will surface on Home.</p></div></main></section>
 
@@ -404,6 +424,7 @@
 
 <dialog id="reminderDetailDialog"><div class="detail-dialog reminder-detail-dialog"><div class="dialog-head"><div><span id="reminderDetailKicker" class="dialog-kicker">REMINDER</span><h2 id="reminderDetailTitle">Reminder</h2></div><button id="closeReminderDetail" class="plain" type="button" aria-label="Close reminder details">✕</button></div><div id="reminderDetail"></div></div></dialog>
 <dialog id="frontDoorDetailDialog"><div class="detail-dialog front-door-detail-dialog"><div class="dialog-head"><div><span class="dialog-kicker">FRONT DOOR EVENT</span><h2 id="frontDoorDetailTitle">Front Door event</h2></div><button id="closeFrontDoorDetail" class="plain" type="button" aria-label="Close Front Door event details">✕</button></div><img id="frontDoorDetailImage" class="front-door-detail-image" alt="Front Door event snapshot" hidden><p id="frontDoorDetailImageStatus" class="quiet-state">Loading private snapshot…</p><div id="frontDoorDetailMeta" class="front-door-detail-meta"></div><p id="frontDoorDetailDescription" class="front-door-detail-description"></p><div id="frontDoorDetailFacts"></div><div id="frontDoorDetailDiagnostics"></div><div class="front-door-detail-actions"><button id="frontDoorDetailRestore" type="button" class="secondary" hidden>Restore event</button><button id="frontDoorDetailDelete" type="button" class="danger">Move to Recently Deleted</button></div></div></dialog>
+<dialog id="networkIncidentDialog"><div class="detail-dialog network-incident-dialog"><div class="dialog-head"><div><span class="dialog-kicker">NETWORK INCIDENT</span><h2 id="networkIncidentTitle">Incident details</h2></div><button id="closeNetworkIncident" class="plain" type="button" aria-label="Close incident details">✕</button></div><div id="networkIncidentDetail"></div></div></dialog>
 
 <input id="importFile" type="file" accept="application/json" hidden>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -411,10 +432,11 @@
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
 <script src="ai-config.js?v=43"></script>
-<script src="app.js?v=116"></script>
+<script src="app.js?v=117"></script>
 <script src="push-notifications.js?v=1"></script>
 <script src="monitor-ui.js?v=53"></script>
 <script src="todos.js?v=65"></script>
+<script type="module" src="network.js?v=1"></script>
 <script type="module" src="ai-ui.js?v=44"></script>
 <script src="polish.js?v=109"></script>
 </body></html>
