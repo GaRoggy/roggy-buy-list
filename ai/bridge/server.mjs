@@ -128,8 +128,13 @@ function cameraRequest(reqUrl, requestMethod = null) {
 function pcHealthRequest(reqUrl, requestMethod = null) {
   const parsed = new URL(reqUrl, 'http://bridge.local');
   if (parsed.pathname !== PC_HEALTH_PREFIX && !parsed.pathname.startsWith(`${PC_HEALTH_PREFIX}/`)) return null;
-  if (requestMethod !== 'GET') throw new AIError('METHOD_NOT_ALLOWED', 405);
   const path = parsed.pathname.slice(PC_HEALTH_PREFIX.length) || '/';
+  if (path === '/codex/stop') {
+    if (requestMethod !== 'POST') throw new AIError('METHOD_NOT_ALLOWED', 405);
+    if (parsed.search) throw new AIError('PC_HEALTH_ROUTE_NOT_FOUND', 404);
+    return { method: 'POST', path: '/internal/pc/codex/stop', search: '', timeoutMs: 10000, action: 'codex_stop' };
+  }
+  if (requestMethod !== 'GET') throw new AIError('METHOD_NOT_ALLOWED', 405);
   const limitValue = parsed.searchParams.get('limit');
   const limit = limitValue === null ? undefined : Number(limitValue);
   const max = path === '/history' ? 270 : 100;
@@ -325,7 +330,7 @@ async function proxyCamera(req, res, cfg, fetcher, signal, route) {
   res.end();
 }
 
-async function proxyPcHealth(res, cfg, fetcher, signal, route) {
+async function proxyPcHealth(req, res, cfg, fetcher, signal, route) {
   const token = await localAgentToken(cfg);
   if (!token) throw new AIError('PC_HEALTH_AUTH_NOT_CONFIGURED', 503, {
     operation: 'pc_health.proxy', retryable: false,
@@ -336,8 +341,16 @@ async function proxyPcHealth(res, cfg, fetcher, signal, route) {
   const timer = setTimeout(() => { timedOut = true; connect.abort(); }, route.timeoutMs || 12000);
   let response;
   try {
+    let body;
+    const headers = { Accept: 'application/json', Authorization: `Bearer ${token}` };
+    if (route.method === 'POST') {
+      const input = await readBody(req, signal);
+      if (!input || Array.isArray(input) || Object.keys(input).length) throw new AIError('PC_HEALTH_ACTION_BODY_INVALID', 400);
+      body = JSON.stringify({});
+      headers['Content-Type'] = 'application/json';
+    }
     response = await fetcher(target.toString(), {
-      method: 'GET', headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+      method: route.method || 'GET', headers, body,
       redirect: 'error', signal: AbortSignal.any([signal, connect.signal]),
     });
   } catch (error) {
@@ -352,12 +365,12 @@ async function proxyPcHealth(res, cfg, fetcher, signal, route) {
 
 export function createBridge(cfg, { fetcher = fetch, ai = createAI(cfg, fetcher), logger = row => console.log(JSON.stringify(row)) } = {}) {
   // Fixed-size global buckets avoid attacker-controlled IP/token maps. Forwarded headers are never trusted.
-  const ingress = bucket(120), chats = bucket(10), discovery = bucket(30);
+  const ingress = bucket(120), chats = bucket(10), discovery = bucket(30), codexStops = bucket(3);
   let inflight = 0, generating = false;
   const active = new Set();
   const server = createServer({ maxHeaderSize: 16384, headersTimeout: 10000, requestTimeout: 0 }, async (req, res) => {
     const started = Date.now(), id = randomUUID(), controller = new AbortController();
-    const { signal } = controller; let timer, heartbeat, ownsGeneration = false, counted = false, outcome = 'OK';
+    const { signal } = controller; let timer, heartbeat, ownsGeneration = false, counted = false, outcome = 'OK', operation = null;
     active.add(controller);
     res.setHeader('Cache-Control', 'no-store'); res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Vary', 'Origin'); res.setHeader('X-Request-Id', id);
@@ -397,9 +410,13 @@ export function createBridge(cfg, { fetcher = fetch, ai = createAI(cfg, fetcher)
       }
       const pcHealth = pcHealthRequest(req.url, req.method);
       if (pcHealth) {
+        if (pcHealth.action === 'codex_stop') {
+          if (!codexStops()) throw new AIError('RATE_LIMITED', 429);
+          operation = 'pc_health_codex_stop';
+        }
         clearTimeout(timer);
         timer = setTimeout(() => controller.abort(new AIError('PC_HEALTH_TIMEOUT', 504)), pcHealth.timeoutMs || 12000);
-        await proxyPcHealth(res, cfg, fetcher, signal, pcHealth);
+        await proxyPcHealth(req, res, cfg, fetcher, signal, pcHealth);
         return;
       }
       const smartHome = smartHomeRequest(req.url, req.method);
@@ -456,7 +473,7 @@ export function createBridge(cfg, { fetcher = fetch, ai = createAI(cfg, fetcher)
       clearTimeout(timer); clearInterval(heartbeat); active.delete(controller);
       controller.abort(); if (ownsGeneration) generating = false; if (counted) inflight--;
       // Deliberately exclude URL, headers, owner, model, prompt, response and raw errors.
-      logger({ time: new Date().toISOString(), event: 'ai_request', requestId: id, outcome, durationMs: Date.now() - started });
+      logger({ time: new Date().toISOString(), event: 'ai_request', requestId: id, operation, outcome, durationMs: Date.now() - started });
     }
   });
   server.maxConnections = 32; server.keepAliveTimeout = 5000; server.timeout = cfg.timeoutMs + 15000;

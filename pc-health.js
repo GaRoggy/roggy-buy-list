@@ -11,6 +11,7 @@ let events = null;
 let chart = null;
 let pagePromise = null;
 let refreshTimer = null;
+let codexStopState = { state: "idle", message: "No remote stop requested.", result: null };
 
 function number(value, suffix = "") {
   const parsed = Number(value);
@@ -108,6 +109,36 @@ function renderHeavyWork() {
   root.dataset.state = allowed ? "allowed" : "deferred";
   root.innerHTML = `<div><span class="eyebrow">HEAVY WORK</span><h3>${allowed ? "ALLOWED" : "DEFERRED"}</h3><p>${esc(allowed ? "The existing LocalAgent resource policy currently permits optional heavy work." : "Optional heavy work is being held until resource headroom returns.")}</p></div>${reasons.length ? `<ul>${reasons.map(reason => `<li>${esc(reason)}</li>`).join("")}</ul>` : ""}`;
 }
+function renderCodexStop() {
+  const root = $("pcHealthCodexStop");
+  if (!root) return;
+  const pending = codexStopState.state === "stopping";
+  root.dataset.state = codexStopState.state;
+  root.innerHTML = `<div class="pc-health-codex-stop-copy"><span class="eyebrow">REMOTE CONTROL</span><h3>Stop active Codex work</h3><p>Stops currently running Codex prompts on this PC.</p></div><div class="pc-health-codex-stop-action"><button type="button" class="pc-health-codex-stop-button" aria-describedby="pcHealthCodexStopDescription" ${pending ? "disabled" : ""}>${pending ? "STOPPING…" : "STOP CODEX"}</button><p id="pcHealthCodexStopDescription" class="pc-health-codex-stop-status" role="status">${esc(codexStopState.message)}</p></div>`;
+  root.querySelector("button")?.addEventListener("click", requestCodexStop);
+}
+async function requestCodexStop() {
+  if (codexStopState.state === "stopping") return;
+  if (!window.confirm("Stop all currently running Codex prompts on this PC? Codex will remain open so you can resume afterward.")) return;
+  codexStopState = { state: "stopping", message: "Stopping Codex…", result: null };
+  renderCodexStop();
+  try {
+    const result = await postHealth("/pc-health/codex/stop");
+    const stopped = Number(result?.stop_actions || 0);
+    if (result?.verified_stopped === true) {
+      codexStopState = { state: "success", message: `Codex stopped${stopped ? ` · ${stopped} active prompt${stopped === 1 ? "" : "s"} stopped` : ""}. Codex remains open.`, result };
+    } else if (result?.status === "no_active_prompt" && result?.verified_no_active_work === true) {
+      codexStopState = { state: "success", message: "No active Codex prompt found.", result };
+    } else if (result?.status === "window_not_found") {
+      codexStopState = { state: "error", message: "Codex window not found.", result };
+    } else {
+      codexStopState = { state: "error", message: `Stop failed: ${result?.failure_reason || result?.status || "verification failed"}.`, result };
+    }
+  } catch (error) {
+    codexStopState = { state: "error", message: `Stop failed: ${friendlyError(error)}`, result: null };
+  }
+  renderCodexStop();
+}
 function renderMetrics() {
   const root = $("pcHealthMetrics");
   if (!root) return;
@@ -157,6 +188,24 @@ function renderProcesses() {
     return `<article class="pc-health-process" data-running="${available ? "true" : "false"}"><div><b>${esc(item.name)}</b><small>${label}${item.instances ? ` · ${item.instances} instance${item.instances === 1 ? "" : "s"}` : ""}</small></div><span>${item.ramGb == null ? "—" : `${number(item.ramGb)} GB`}<small>${item.cpuPercent == null ? "CPU —" : `CPU ${number(item.cpuPercent, "%")}`}</small></span></article>`;
   }).join("");
 }
+async function postHealth(path, body = {}) {
+  if (!BRIDGE) throw Object.assign(new Error("bridge unavailable"), { code: "PC_HEALTH_UNAVAILABLE" });
+  const accessToken = await token();
+  if (!accessToken) throw Object.assign(new Error("sign in required"), { code: "AUTHENTICATION_REQUIRED" });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch(`${BRIDGE}${path}`, { method: "POST", cache: "no-store", headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` }, body: JSON.stringify(body), signal: controller.signal });
+    const payload = await response.json().catch(() => ({}));
+    const detail = payload?.error_detail || (payload?.error && typeof payload.error === "object" ? payload.error : null);
+    const code = detail?.error_code || detail?.code || (typeof payload?.error === "string" ? payload.error : "PC_HEALTH_ACTION_FAILED");
+    if (!response.ok) throw Object.assign(new Error(detail?.message || code), { code, status: response.status, error_detail: detail, error: payload?.error });
+    return payload;
+  } catch (error) {
+    if (error?.name === "AbortError") throw Object.assign(new Error("request timed out"), { code: "PC_HEALTH_TIMEOUT" });
+    throw error;
+  } finally { clearTimeout(timer); }
+}
 function renderEvents() {
   const root = $("pcHealthEvents");
   if (!root) return;
@@ -164,7 +213,7 @@ function renderEvents() {
   $("pcHealthEventCount").textContent = events?.count ?? rows.length;
   root.innerHTML = rows.length ? rows.map(event => `<article class="pc-health-event" data-severity="${esc(event.severity || "info")}"><span class="pc-health-event-bar" aria-hidden="true"></span><div><b>${esc(event.title || "PC health event")}</b><small>${esc(dateTime(event.timestamp))}</small><p>${esc(event.explanation || "")}</p></div></article>`).join("") : `<p class="quiet-state">No notable PC health changes recorded yet.</p>`;
 }
-function renderPage() { renderStatus(); renderHeavyWork(); renderMetrics(); renderChart(); renderProcesses(); renderEvents(); renderHomeCard(); }
+function renderPage() { renderStatus(); renderHeavyWork(); renderCodexStop(); renderMetrics(); renderChart(); renderProcesses(); renderEvents(); renderHomeCard(); }
 async function loadHome() {
   try { current = await fetchHealth("/pc-health"); renderHomeCard(); }
   catch (error) { current = { status: error.code === "AUTHENTICATION_REQUIRED" ? "unknown" : "unavailable", stale: true }; renderHomeCard(); }

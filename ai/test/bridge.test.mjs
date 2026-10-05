@@ -60,6 +60,12 @@ async function fixture(t, opts = {}) {
       summary: { average_latency_ms: 18, average_jitter_ms: 2, average_packet_loss_pct: 0 },
       measurements: [{ timestamp: '2026-10-05T04:00:00Z', latency_ms: 18, jitter_ms: 2, packet_loss_pct: 0 }],
     } });
+    if (url.endsWith('/internal/pc/codex/stop')) return result({
+      request_accepted: true, status: 'stopped', timestamp: '2026-10-05T04:01:00Z',
+      window_found: true, active_prompt_found: true, stop_control_found: true,
+      stop_invoked: true, stop_actions: 1, verified_no_active_work: true,
+      verified_stopped: true, codex_left_open: true, resumable: true, failure_reason: null,
+    });
     if (url.endsWith('/internal/pc-health')) return result({ status: 'healthy', healthState: 'GREEN', timestamp: '2026-10-05T04:00:00Z', stale: false,
       memory: { usedGb: 20.1, totalGb: 31.7, percent: 63.4 }, heavyWork: { allowed: true, decision: 'allow', reasons: [] } });
     if (url.includes('/internal/pc-health/history')) return result({ samples: [{ timestamp: '2026-10-05T04:00:00Z', cpuPercent: 18, ramPercent: 63.4 }], sampleIntervalSeconds: 7, windowMinutes: 30 });
@@ -193,6 +199,20 @@ test('authenticated PC health traffic is read-only and uses the local-agent toke
   const upstream = f.calls.find(call => call.url.endsWith('/internal/pc-health'));
   assert.equal(upstream.options.headers.Authorization, 'Bearer agent-fixture');
   assert.equal((await f.request('/pc-health', input, 'valid')).status, 405);
+});
+test('Codex stop is a narrowly scoped authenticated POST and returns verified state', async t => {
+  const f = await fixture(t, { cfg: { localAgentApiToken: 'agent-fixture' } });
+  const response = await f.request('/pc-health/codex/stop', {});
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.verified_stopped, true);
+  const upstream = f.calls.find(call => call.url.endsWith('/internal/pc/codex/stop'));
+  assert.equal(upstream.options.method, 'POST');
+  assert.equal(upstream.options.headers.Authorization, 'Bearer agent-fixture');
+  assert.deepEqual(JSON.parse(upstream.options.body), {});
+  assert.equal((await f.request('/pc-health/codex/stop', null)).status, 405);
+  assert.equal((await f.request('/pc-health/codex/stop', {}, '')).status, 401);
+  assert.equal((await f.request('/pc-health/codex/stop?x=1', {})).status, 404);
 });
 test('camera traffic uses the local-agent token and strips filesystem paths', async t => {
   const f = await fixture(t, { cfg: { localAgentApiToken: 'agent-fixture' } });
