@@ -16,6 +16,7 @@ let measurementData = null;
 let incidentData = null;
 let chart = null;
 let pagePromise = null;
+let homePromise = null;
 let refreshTimer = null;
 let historyRequest = 0;
 
@@ -190,9 +191,13 @@ function renderPage() {
   renderStatus(); renderMetrics(); renderSummary(); renderIncidents(); renderGaming(); renderChart(); renderHomeCard();
 }
 
-async function loadHomeNetworkCard() {
-  try { statusData = await networkFetch("/network/status"); renderHomeCard(); }
-  catch (error) { statusData = { status: error.code === "AUTHENTICATION_REQUIRED" ? "AUTH_REQUIRED" : "MONITOR_UNAVAILABLE", stale: true }; renderHomeCard(); }
+function loadHomeNetworkCard() {
+  if (homePromise) return homePromise;
+  homePromise = (async () => {
+    try { statusData = await networkFetch("/network/status"); renderHomeCard(); }
+    catch (error) { statusData = { status: error.code === "AUTHENTICATION_REQUIRED" ? "AUTH_REQUIRED" : "MONITOR_UNAVAILABLE", stale: true }; renderHomeCard(); }
+  })().finally(() => { homePromise = null; });
+  return homePromise;
 }
 
 async function loadNetworkPage() {

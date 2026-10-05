@@ -87,9 +87,9 @@ const DOUGH_IDEAS=Object.freeze([
 ]);
 const SMART_HOME_API=(window.ROGGY_SMART_HOME_API||window.ROGGY_AI_CONFIG?.smartHomeUrl||"").replace(/\/$/,"");
 const CAMERA_API=(window.ROGGY_AI_CONFIG?.bridgeUrl||"").replace(/\/$/,"");
-let smartHomeState={devices:[],rooms:[],events:[],diagnostics:null},smartHomeLoaded=false,smartHomeUnavailable=false,smartHomeFailure=null,smartHomeLoading=null,smartHomeStreamPromise=null,smartHomeStreamAbort=null,smartHomeStreamRetry=null,smartHomeLastEventId="",smartHomeStreamStatus="disconnected",smartHomeControlAllowed=false,smartHomeAccessToken="",smartHomePendingActions=new Map(),smartHomeActionSequence=0;
+let smartHomeState={devices:[],rooms:[],events:[],diagnostics:null},smartHomeLoaded=false,smartHomeUnavailable=false,smartHomeFailure=null,smartHomeLoading=null,smartHomeRefreshTimer=null,smartHomeRefreshQueued=false,smartHomeLastRefreshAt=0,smartHomeStreamPromise=null,smartHomeStreamAbort=null,smartHomeStreamRetry=null,smartHomeStreamRetryDelayMs=15000,smartHomeLastEventId="",smartHomeStreamStatus="disconnected",smartHomeControlAllowed=false,smartHomeAccessToken="",smartHomePendingActions=new Map(),smartHomeActionSequence=0;
 let layneChatMessages=[],layneChatBusy=false,layneChatError="",laynePendingAction=null,layneSessionId=null;
-let frontDoorEvents=[],frontDoorView="active",frontDoorLoaded=false,frontDoorLoading=null,frontDoorLoadError="",frontDoorFrameBusy=false,frontDoorFrameUrls=new Map(),frontDoorThumbnailUrls=new Map(),frontDoorThumbnailToken=0,frontDoorDeepLinkKey="",frontDoorDetailImageUrl="",frontDoorState=null,frontDoorStateLoading=null,frontDoorStateAttempted=false,frontDoorAnalyzeBusy=false,frontDoorAnalyzeError="";
+let frontDoorEvents=[],frontDoorView="active",frontDoorLoaded=false,frontDoorLoading=null,frontDoorLoadError="",frontDoorFrameBusy=false,frontDoorFrameUrls=new Map(),frontDoorThumbnailUrls=new Map(),frontDoorThumbnailToken=0,frontDoorDeepLinkKey="",frontDoorDetailImageUrl="",frontDoorState=null,frontDoorStateLoading=null,frontDoorStateAttempted=false,frontDoorStateRetryTimer=null,frontDoorStateRetryDelayMs=5000,frontDoorAnalyzeBusy=false,frontDoorAnalyzeError="";
 
 
 function esc(s=""){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
@@ -149,6 +149,30 @@ function frontDoorStatusMarkup(prefix="frontDoor"){
  const stamp=frontDoorAnalysisTimestamp();
  return `<div class="front-door-summary-grid"><div><span class="eyebrow">STATUS</span><b class="front-door-summary-status ${tone}">${online?"Online":"Offline"}</b></div><div><span class="eyebrow">PERSON</span><b>${esc(frontDoorDetectionLabel())}</b></div><div><span class="eyebrow">LAST ANALYSIS</span><b>${esc(stamp?smartTime(stamp):"—")}</b></div></div><p class="front-door-summary-description">${esc(description)}</p>${analysis?.full_description?`<details class="front-door-full-description"><summary>Full description</summary><p>${esc(analysis.full_description)}</p></details>`:""}`;
 }
+function clearFrontDoorStateRetry(){
+ if(frontDoorStateRetryTimer){clearTimeout(frontDoorStateRetryTimer);frontDoorStateRetryTimer=null}
+}
+function mergeLoadedFrontDoorState(){
+ smartHomeState.devices=mergeFrontDoorDevice(smartHomeState.devices);
+ renderHomeDeviceStatus();renderDevicesPage();
+}
+function scheduleFrontDoorStateRetry(){
+ if(frontDoorStateRetryTimer||!smartHomeControlAllowed||document.hidden)return;
+ if(currentPage!=="home"&&currentPage!=="devices"&&currentPage!=="front-door")return;
+ const delay=frontDoorStateRetryDelayMs;
+ frontDoorStateRetryDelayMs=Math.min(delay*2,60000);
+ frontDoorStateRetryTimer=setTimeout(()=>{
+  frontDoorStateRetryTimer=null;
+  if(!smartHomeControlAllowed||document.hidden)return;
+  loadFrontDoorState({silent:true,force:true}).then(loaded=>{if(loaded)mergeLoadedFrontDoorState()}).catch(()=>{});
+ },delay);
+}
+function maybeLoadFrontDoorState(){
+ // A failed one-shot attempt resolves immediately on later calls. Do not
+ // attach a render callback unless this function actually starts the request.
+ if(!smartHomeControlAllowed||frontDoorState||frontDoorStateLoading||frontDoorStateAttempted)return;
+ loadFrontDoorState({silent:true}).then(loaded=>{if(loaded)mergeLoadedFrontDoorState()}).catch(()=>{});
+}
 function renderFrontDoorSummary(){
  const page=$("frontDoorSummary"),homeDescription=$("homeFrontDoorDescription"),homeState=$("homeFrontDoorState"),homeStamp=$("homeFrontDoorAnalysisTime"),live=$("frontDoorLiveStatus"),analyze=$("frontDoorAnalyze"),analyzeStatus=$("frontDoorAnalyzeStatus");
  if(page)page.innerHTML=smartHomeControlAllowed?(frontDoorState?frontDoorStatusMarkup():"<p class=quiet-state>Loading camera status…</p>"):'<p class="quiet-state">Sign in to view the private camera.</p>';
@@ -162,9 +186,10 @@ function renderFrontDoorSummary(){
 async function loadFrontDoorState({silent=true,force=false}={}){
  if(frontDoorStateLoading)return frontDoorStateLoading;
  if(!smartHomeControlAllowed){frontDoorState=null;renderFrontDoorSummary();return false}
- if(frontDoorStateAttempted&&!force)return !!frontDoorState;
+ if(!force&&frontDoorStateAttempted)return !!frontDoorState;
+ if(force)clearFrontDoorStateRetry();
  frontDoorStateAttempted=true;
- frontDoorStateLoading=(async()=>{try{frontDoorState=await cameraJson("/camera/front-door");frontDoorAnalyzeError="";renderFrontDoorSummary();return true}catch(error){frontDoorState=null;if(!silent)frontDoorAnalyzeError="Camera status unavailable: "+smartErrorMessage(error);renderFrontDoorSummary();return false}})().finally(()=>{frontDoorStateLoading=null});
+ frontDoorStateLoading=(async()=>{try{frontDoorState=await cameraJson("/camera/front-door");frontDoorAnalyzeError="";frontDoorStateRetryDelayMs=5000;clearFrontDoorStateRetry();renderFrontDoorSummary();return true}catch(error){frontDoorState=null;if(!silent)frontDoorAnalyzeError="Camera status unavailable: "+smartErrorMessage(error);renderFrontDoorSummary();scheduleFrontDoorStateRetry();return false}})().finally(()=>{frontDoorStateLoading=null});
  return frontDoorStateLoading;
 }
 async function analyzeFrontDoor(){
@@ -472,7 +497,7 @@ async function sendRoomPower(roomId,value){
 }
 function renderHomeDeviceStatus(){
  const root=$("homeDeviceStatus");if(!root)return;
- if(smartHomeControlAllowed&&!frontDoorState&&!frontDoorStateLoading)loadFrontDoorState({silent:true}).then(()=>{smartHomeState.devices=mergeFrontDoorDevice(smartHomeState.devices);renderHomeDeviceStatus();renderDevicesPage()}).catch(()=>{});
+ maybeLoadFrontDoorState();
  smartHomeState.devices=mergeFrontDoorDevice(smartHomeState.devices);
  smartHomeState.devices=smartHomeState.devices.map(pendingDeviceState);
  if(smartHomeUnavailable){root.innerHTML=`<div class="quiet-state"><b>Smart Home</b><br>${esc(smartFailureKind(smartHomeFailure)==="authentication"?"Authentication failed.":"Bridge or smart-home service unavailable.")}</div>`;return}
@@ -488,7 +513,7 @@ function renderHomeDeviceStatus(){
 }
 function renderDevicesPage(){
  const summary=$("deviceRoomSummary"),rooms=$("deviceRooms");if(!summary||!rooms)return;
- if(smartHomeControlAllowed&&!frontDoorState&&!frontDoorStateLoading)loadFrontDoorState({silent:true}).then(()=>{smartHomeState.devices=mergeFrontDoorDevice(smartHomeState.devices);renderHomeDeviceStatus();renderDevicesPage()}).catch(()=>{});
+ maybeLoadFrontDoorState();
  smartHomeState.devices=mergeFrontDoorDevice(smartHomeState.devices);
  smartHomeState.devices=smartHomeState.devices.map(pendingDeviceState);
  renderDeviceDiagnostics();
@@ -513,6 +538,19 @@ async function sendDeviceAction(deviceId,body){
  try{await smartHomeFetch(`/devices/${encodeURIComponent(deviceId)}/actions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});if(!actionStillCurrent(deviceId,action.version))return;const refreshed=await refreshAfterDeviceAction(deviceId,action.version);if(status)status.textContent=refreshed?"Device state updated.":"Device command sent; showing requested state until the device confirms."}
  catch(error){if(actionStillCurrent(deviceId,action.version)){smartHomePendingActions.delete(deviceId);restoreDeviceSnapshot(deviceId,action.previous);if(status)status.textContent="Device update failed: "+smartErrorMessage(error)}}
 }
+function scheduleSmartHomeRefresh(delay=500){
+ if(!smartHomeAccessToken||document.hidden||!(["home","devices"].includes(currentPage)))return;
+ smartHomeRefreshQueued=true;
+ if(smartHomeRefreshTimer)return;
+ const wait=Math.max(delay,Math.max(0,1000-(Date.now()-smartHomeLastRefreshAt)));
+ smartHomeRefreshTimer=setTimeout(()=>{
+  smartHomeRefreshTimer=null;
+  if(!smartHomeRefreshQueued)return;
+  if(smartHomeLoading){scheduleSmartHomeRefresh(1000);return}
+  smartHomeRefreshQueued=false;smartHomeLastRefreshAt=Date.now();
+  loadSmartHome({silent:true}).catch(()=>{});
+ },wait);
+}
 function connectSmartHomeStream(){
  if(smartHomeStreamPromise||!smartHomeAccessToken||!SMART_HOME_API)return;
  smartHomeStreamStatus="connecting";
@@ -521,11 +559,11 @@ function connectSmartHomeStream(){
  smartHomeStreamPromise=(async()=>{try{
    const response=await fetch(SMART_HOME_API+"/events/stream",{cache:"no-store",headers:{Accept:"text/event-stream",Authorization:`Bearer ${smartHomeAccessToken}`,...(smartHomeLastEventId?{"Last-Event-ID":smartHomeLastEventId}: {})},signal:controller.signal});
    if(!response.ok||!response.body)throw new Error(`event stream ${response.status}`);
-   smartHomeStreamStatus="connected";
+   smartHomeStreamStatus="connected";smartHomeStreamRetryDelayMs=15000;
    window.dispatchEvent(new CustomEvent("roggy-smart-home-stream-status",{detail:{status:"connected"}}));
    const reader=response.body.getReader(),decoder=new TextDecoder();let buffer="";
-   while(!controller.signal.aborted){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const frames=buffer.split(/\r?\n\r?\n/);buffer=frames.pop()||"";for(const frame of frames){const id=frame.match(/^id:\s*(.+)$/m);if(id)smartHomeLastEventId=id[1].trim();const data=frame.split(/\r?\n/).filter(line=>line.startsWith("data:")).map(line=>line.slice(5).trim()).join("\n");if(!data)continue;let eventData=null;try{eventData=JSON.parse(data)}catch{}if(eventData)window.dispatchEvent(new CustomEvent("roggy-smart-home-event",{detail:eventData}));if(eventData?.type!=="whisper_transcript")loadSmartHome({silent:true}).catch(()=>{})}}
- }catch(error){if(!controller.signal.aborted){smartHomeStreamStatus="disconnected";window.dispatchEvent(new CustomEvent("roggy-smart-home-stream-status",{detail:{status:"disconnected",error:String(error?.message||error)}}));if(!smartHomeStreamRetry)smartHomeStreamRetry=setTimeout(()=>{smartHomeStreamRetry=null;connectSmartHomeStream()},15000)}}finally{smartHomeStreamPromise=null;smartHomeStreamAbort=null}})();
+   while(!controller.signal.aborted){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const frames=buffer.split(/\r?\n\r?\n/);buffer=frames.pop()||"";for(const frame of frames){const id=frame.match(/^id:\s*(.+)$/m);if(id)smartHomeLastEventId=id[1].trim();const data=frame.split(/\r?\n/).filter(line=>line.startsWith("data:")).map(line=>line.slice(5).trim()).join("\n");if(!data)continue;let eventData=null;try{eventData=JSON.parse(data)}catch{}if(eventData)window.dispatchEvent(new CustomEvent("roggy-smart-home-event",{detail:eventData}));if(eventData?.type!=="whisper_transcript"&&eventData?.type!=="layne_voice_response")scheduleSmartHomeRefresh()}}
+ }catch(error){if(!controller.signal.aborted){smartHomeStreamStatus="disconnected";window.dispatchEvent(new CustomEvent("roggy-smart-home-stream-status",{detail:{status:"disconnected",error:String(error?.message||error)}}));if(!smartHomeStreamRetry){const delay=smartHomeStreamRetryDelayMs;smartHomeStreamRetryDelayMs=Math.min(delay*2,120000);smartHomeStreamRetry=setTimeout(()=>{smartHomeStreamRetry=null;connectSmartHomeStream()},delay)}}}finally{smartHomeStreamPromise=null;smartHomeStreamAbort=null}})();
 }
 window.roggySmartHomeStream={
  connect:connectSmartHomeStream,
@@ -1143,6 +1181,7 @@ function applyAuthSession(session){
  if(!session&&smartHomeStreamAbort)smartHomeStreamAbort.abort();
  if(!session)smartHomeStreamStatus="disconnected";
  if(!session&&smartHomeStreamRetry){clearTimeout(smartHomeStreamRetry);smartHomeStreamRetry=null}
+ if(!session){clearFrontDoorStateRetry();if(smartHomeRefreshTimer){clearTimeout(smartHomeRefreshTimer);smartHomeRefreshTimer=null}smartHomeRefreshQueued=false;smartHomeStreamRetryDelayMs=15000}
  smartHomeControlAllowed=hasSession;smartHomeAccessToken=session?.access_token||"";
  if(!session){smartHomeLoaded=false;smartHomeUnavailable=false;smartHomeFailure=null;smartHomeState={devices:[],rooms:[],events:[],diagnostics:null};frontDoorEvents=[];frontDoorLoaded=false;frontDoorState=null;frontDoorStateAttempted=false;frontDoorAnalyzeError="";revokeFrontDoorFrameImages();renderFrontDoorEvents();renderFrontDoorSummary();layneChatMessages=[];laynePendingAction=null;layneSessionId=null;renderLayneChat()}
  setPrivacyGate(session);

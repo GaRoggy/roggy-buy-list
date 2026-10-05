@@ -10,6 +10,7 @@ let history = null;
 let events = null;
 let chart = null;
 let pagePromise = null;
+let homePromise = null;
 let refreshTimer = null;
 let codexStopState = { state: "idle", message: "No remote stop requested.", result: null };
 
@@ -214,9 +215,13 @@ function renderEvents() {
   root.innerHTML = rows.length ? rows.map(event => `<article class="pc-health-event" data-severity="${esc(event.severity || "info")}"><span class="pc-health-event-bar" aria-hidden="true"></span><div><b>${esc(event.title || "PC health event")}</b><small>${esc(dateTime(event.timestamp))}</small><p>${esc(event.explanation || "")}</p></div></article>`).join("") : `<p class="quiet-state">No notable PC health changes recorded yet.</p>`;
 }
 function renderPage() { renderStatus(); renderHeavyWork(); renderCodexStop(); renderMetrics(); renderChart(); renderProcesses(); renderEvents(); renderHomeCard(); }
-async function loadHome() {
-  try { current = await fetchHealth("/pc-health"); renderHomeCard(); }
-  catch (error) { current = { status: error.code === "AUTHENTICATION_REQUIRED" ? "unknown" : "unavailable", stale: true }; renderHomeCard(); }
+function loadHome() {
+  if (homePromise) return homePromise;
+  homePromise = (async () => {
+    try { current = await fetchHealth("/pc-health"); renderHomeCard(); }
+    catch (error) { current = { status: error.code === "AUTHENTICATION_REQUIRED" ? "unknown" : "unavailable", stale: true }; renderHomeCard(); }
+  })().finally(() => { homePromise = null; });
+  return homePromise;
 }
 async function loadPage() {
   if (pagePromise) return pagePromise;

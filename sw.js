@@ -1,5 +1,5 @@
-const CACHE='roggy-lists-v78';
-const ASSETS=['./','index.html','styles.css?v=116','todos.css?v=61','polish.css?v=109','network.css?v=1','pc-health.css?v=2','app.js?v=120','push-notifications.js?v=1','monitor-ui.js?v=53','todos.js?v=65','polish.js?v=109','network.js?v=1','network-model.mjs','pc-health.js?v=4','manifest.json','icon.svg?v=2','assets/mountain-panorama.jpg','ai-config.js?v=45','ai-ui.js?v=44','transcript.js?v=2','ai/browser/provider.js','ai/shared/protocol.js'];
+const CACHE='roggy-lists-v79';
+const ASSETS=['./','index.html','styles.css?v=116','todos.css?v=61','polish.css?v=109','network.css?v=1','pc-health.css?v=2','app.js?v=121','push-notifications.js?v=1','monitor-ui.js?v=53','todos.js?v=65','polish.js?v=109','network.js?v=1','network-model.mjs','pc-health.js?v=4','manifest.json','icon.svg?v=2','assets/mountain-panorama.jpg','ai-config.js?v=45','ai-ui.js?v=44','transcript.js?v=2','ai/browser/provider.js','ai/shared/protocol.js'];
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)))});
 self.addEventListener('activate',e=>e.waitUntil(Promise.all([
   caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('roggy-lists-')&&k!==CACHE).map(k=>caches.delete(k)))),
