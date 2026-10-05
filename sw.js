@@ -1,5 +1,5 @@
-const CACHE='roggy-lists-v75';
-const ASSETS=['./','index.html','styles.css?v=115','todos.css?v=61','polish.css?v=109','app.js?v=116','push-notifications.js?v=1','monitor-ui.js?v=53','todos.js?v=65','polish.js?v=109','manifest.json','icon.svg?v=2','assets/mountain-panorama.jpg','ai-config.js?v=43','ai-ui.js?v=44','transcript.js?v=2','ai/browser/provider.js','ai/shared/protocol.js'];
+const CACHE='roggy-lists-v76';
+const ASSETS=['./','index.html','styles.css?v=116','todos.css?v=61','polish.css?v=109','app.js?v=118','push-notifications.js?v=1','monitor-ui.js?v=53','todos.js?v=65','polish.js?v=109','manifest.json','icon.svg?v=2','assets/mountain-panorama.jpg','ai-config.js?v=45','ai-ui.js?v=44','transcript.js?v=2','ai/browser/provider.js','ai/shared/protocol.js'];
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)))});
 self.addEventListener('activate',e=>e.waitUntil(Promise.all([
   caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('roggy-lists-')&&k!==CACHE).map(k=>caches.delete(k)))),
