@@ -167,12 +167,20 @@ async function loadPage() {
     const status = $("pcHealthPageStatus");
     if (status) status.textContent = "Loading current PC health…";
     try {
-      const results = await Promise.allSettled([fetchHealth("/pc-health"), fetchHealth("/pc-health/history?limit=270"), fetchHealth("/pc-health/events?limit=50")]);
-      current = results[0].status === "fulfilled" ? results[0].value : { status: "unavailable", stale: true };
-      history = results[1].status === "fulfilled" ? results[1].value : null;
-      events = results[2].status === "fulfilled" ? results[2].value : null;
+      // Load the glanceable current state first. The bridge also serves network,
+      // camera, and smart-home reads, so avoid a three-request burst on entry.
+      const currentResult = (await Promise.allSettled([fetchHealth("/pc-health")]))[0];
+      current = currentResult.status === "fulfilled" ? currentResult.value : { status: "unavailable", stale: true };
       renderPage();
-      if (status) status.textContent = results.every(result => result.status === "fulfilled") ? "" : "Some PC health data is temporarily unavailable.";
+      const [historyResult, eventsResult] = await Promise.allSettled([fetchHealth("/pc-health/history?limit=270"), fetchHealth("/pc-health/events?limit=50")]);
+      history = historyResult.status === "fulfilled" ? historyResult.value : null;
+      events = eventsResult.status === "fulfilled" ? eventsResult.value : null;
+      renderPage();
+      const unavailable = [];
+      if (currentResult.status !== "fulfilled") unavailable.push("current status");
+      if (historyResult.status !== "fulfilled") unavailable.push("trend history");
+      if (eventsResult.status !== "fulfilled") unavailable.push("notable events");
+      if (status) status.textContent = unavailable.length ? `${unavailable.join(" and ")} temporarily unavailable.` : "";
     } catch (error) {
       current = { status: "unavailable", stale: true };
       history = events = null;
