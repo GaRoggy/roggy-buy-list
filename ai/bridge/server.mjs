@@ -51,6 +51,7 @@ const SMART_HOME_PATH = /^\/(?:devices(?:\/[A-Za-z0-9._~%+\-]+(?:\/actions)?)?|r
 const CONFIRMATION_PATH = /^\/confirmations\/[A-Za-z0-9._~%+\-]+$/;
 const CAMERA_PREFIX = '/camera';
 const CAMERA_SNAPSHOT_NAME = /^front_door_[0-9_-]+\.jpg$/;
+const PC_HEALTH_PREFIX = '/pc-health';
 const NETWORK_RANGE = new Set(['1h', '6h', '24h', '7d']);
 function smartHomeRequest(reqUrl, requestMethod = null) {
   const parsed = new URL(reqUrl, 'http://bridge.local');
@@ -122,6 +123,27 @@ function cameraRequest(reqUrl, requestMethod = null) {
     return { method: 'GET', path: `/internal/camera/front_door/snapshots/${encodeURIComponent(name)}`, search: parsed.search, json: false, timeoutMs: 15000 };
   }
   throw new AIError('CAMERA_ROUTE_NOT_FOUND', 404);
+}
+
+function pcHealthRequest(reqUrl, requestMethod = null) {
+  const parsed = new URL(reqUrl, 'http://bridge.local');
+  if (parsed.pathname !== PC_HEALTH_PREFIX && !parsed.pathname.startsWith(`${PC_HEALTH_PREFIX}/`)) return null;
+  if (requestMethod !== 'GET') throw new AIError('METHOD_NOT_ALLOWED', 405);
+  const path = parsed.pathname.slice(PC_HEALTH_PREFIX.length) || '/';
+  const limitValue = parsed.searchParams.get('limit');
+  const limit = limitValue === null ? undefined : Number(limitValue);
+  const max = path === '/history' ? 270 : 100;
+  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > max)) {
+    throw new AIError('PC_HEALTH_LIMIT_INVALID', 400);
+  }
+  const routes = {
+    '/': { path: '/internal/pc-health', search: '' },
+    '/history': { path: '/internal/pc-health/history', search: limit === undefined ? '' : `?limit=${limit}` },
+    '/events': { path: '/internal/pc-health/events', search: limit === undefined ? '' : `?limit=${limit}` },
+  };
+  const route = routes[path];
+  if (!route) throw new AIError('PC_HEALTH_ROUTE_NOT_FOUND', 404);
+  return { method: 'GET', ...route, timeoutMs: 12000 };
 }
 
 function sanitizeCameraPayload(value) {
@@ -303,6 +325,31 @@ async function proxyCamera(req, res, cfg, fetcher, signal, route) {
   res.end();
 }
 
+async function proxyPcHealth(res, cfg, fetcher, signal, route) {
+  const token = await localAgentToken(cfg);
+  if (!token) throw new AIError('PC_HEALTH_AUTH_NOT_CONFIGURED', 503, {
+    operation: 'pc_health.proxy', retryable: false,
+  });
+  const target = new URL(`${route.path}${route.search || ''}`, `${cfg.localAgent}/`);
+  const connect = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; connect.abort(); }, route.timeoutMs || 12000);
+  let response;
+  try {
+    response = await fetcher(target.toString(), {
+      method: 'GET', headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+      redirect: 'error', signal: AbortSignal.any([signal, connect.signal]),
+    });
+  } catch (error) {
+    if (signal.aborted) throw signal.reason || error;
+    throw new AIError(timedOut ? 'PC_HEALTH_TIMEOUT' : 'PC_HEALTH_UNAVAILABLE', timedOut ? 504 : 503, {
+      operation: 'pc_health.proxy', cause: error?.name || 'FetchError', retryable: true,
+    });
+  } finally { clearTimeout(timer); }
+  const payload = await response.json().catch(() => ({}));
+  json(res, response.status, payload);
+}
+
 export function createBridge(cfg, { fetcher = fetch, ai = createAI(cfg, fetcher), logger = row => console.log(JSON.stringify(row)) } = {}) {
   // Fixed-size global buckets avoid attacker-controlled IP/token maps. Forwarded headers are never trusted.
   const ingress = bucket(120), chats = bucket(10), discovery = bucket(30);
@@ -346,6 +393,13 @@ export function createBridge(cfg, { fetcher = fetch, ai = createAI(cfg, fetcher)
         clearTimeout(timer);
         timer = setTimeout(() => controller.abort(new AIError('NETWORK_TIMEOUT', 504)), 12000);
         await proxyNetwork(res, cfg, fetcher, signal, network);
+        return;
+      }
+      const pcHealth = pcHealthRequest(req.url, req.method);
+      if (pcHealth) {
+        clearTimeout(timer);
+        timer = setTimeout(() => controller.abort(new AIError('PC_HEALTH_TIMEOUT', 504)), pcHealth.timeoutMs || 12000);
+        await proxyPcHealth(res, cfg, fetcher, signal, pcHealth);
         return;
       }
       const smartHome = smartHomeRequest(req.url, req.method);

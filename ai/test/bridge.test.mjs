@@ -60,6 +60,10 @@ async function fixture(t, opts = {}) {
       summary: { average_latency_ms: 18, average_jitter_ms: 2, average_packet_loss_pct: 0 },
       measurements: [{ timestamp: '2026-10-05T04:00:00Z', latency_ms: 18, jitter_ms: 2, packet_loss_pct: 0 }],
     } });
+    if (url.endsWith('/internal/pc-health')) return result({ status: 'healthy', healthState: 'GREEN', timestamp: '2026-10-05T04:00:00Z', stale: false,
+      memory: { usedGb: 20.1, totalGb: 31.7, percent: 63.4 }, heavyWork: { allowed: true, decision: 'allow', reasons: [] } });
+    if (url.includes('/internal/pc-health/history')) return result({ samples: [{ timestamp: '2026-10-05T04:00:00Z', cpuPercent: 18, ramPercent: 63.4 }], sampleIntervalSeconds: 7, windowMinutes: 30 });
+    if (url.includes('/internal/pc-health/events')) return result({ events: [], count: 0 });
     if (url.endsWith('/api/commands')) return result({ message: 'Layne command accepted' });
     if (url.endsWith('/api/devices/fixture_light/actions')) return result({ success: true });
     if (opts.offline) throw Error('sensitive Ollama detail');
@@ -177,6 +181,18 @@ test('authenticated network traffic stays behind the owner bridge and exposes sa
   const upstream = f.calls.find(call => call.url.endsWith('/tools/network_get_status/execute'));
   assert.equal(upstream.options.headers.Authorization, 'Bearer agent-fixture');
   assert.equal(JSON.parse(upstream.options.body).arguments && 'database_path' in JSON.parse(upstream.options.body).arguments, false);
+});
+test('authenticated PC health traffic is read-only and uses the local-agent token', async t => {
+  const f = await fixture(t, { cfg: { localAgentApiToken: 'agent-fixture' } });
+  const current = await f.request('/pc-health', null);
+  assert.equal(current.status, 200);
+  assert.equal((await current.json()).healthState, 'GREEN');
+  assert.equal((await f.request('/pc-health/history?limit=10', null)).status, 200);
+  assert.equal((await f.request('/pc-health/events?limit=10', null)).status, 200);
+  assert.equal((await f.request('/pc-health/history?limit=999', null)).status, 400);
+  const upstream = f.calls.find(call => call.url.endsWith('/internal/pc-health'));
+  assert.equal(upstream.options.headers.Authorization, 'Bearer agent-fixture');
+  assert.equal((await f.request('/pc-health', input, 'valid')).status, 405);
 });
 test('camera traffic uses the local-agent token and strips filesystem paths', async t => {
   const f = await fixture(t, { cfg: { localAgentApiToken: 'agent-fixture' } });
