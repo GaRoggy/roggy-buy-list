@@ -147,7 +147,15 @@ function renderProcesses() {
   if (!root) return;
   const items = Array.isArray(current?.importantProcesses) ? current.importantProcesses : [];
   if (!items.length) { root.innerHTML = `<p class="quiet-state">Process evidence is unavailable.</p>`; return; }
-  root.innerHTML = items.map(item => `<article class="pc-health-process" data-running="${item.running ? "true" : "false"}"><div><b>${esc(item.name)}</b><small>${item.running ? "Running" : item.optional ? "Not running" : "Unavailable"}${item.instances ? ` · ${item.instances} instance${item.instances === 1 ? "" : "s"}` : ""}</small></div><span>${item.ramGb == null ? "—" : `${number(item.ramGb)} GB`}<small>${item.cpuPercent == null ? "CPU —" : `CPU ${number(item.cpuPercent, "%")}`}</small></span></article>`).join("");
+  const services = new Map((Array.isArray(current?.services) ? current.services : []).map(service => [service.name, service]));
+  root.innerHTML = items.map(item => {
+    const service = services.get(item.name);
+    const serviceRunning = service?.state === "running";
+    const healthy = service?.health !== "unhealthy";
+    const available = Boolean(item.running || (serviceRunning && healthy));
+    const label = item.running ? "Running" : serviceRunning && healthy ? "Service healthy" : item.optional ? "Not running" : "Unavailable";
+    return `<article class="pc-health-process" data-running="${available ? "true" : "false"}"><div><b>${esc(item.name)}</b><small>${label}${item.instances ? ` · ${item.instances} instance${item.instances === 1 ? "" : "s"}` : ""}</small></div><span>${item.ramGb == null ? "—" : `${number(item.ramGb)} GB`}<small>${item.cpuPercent == null ? "CPU —" : `CPU ${number(item.cpuPercent, "%")}`}</small></span></article>`;
+  }).join("");
 }
 function renderEvents() {
   const root = $("pcHealthEvents");
