@@ -250,7 +250,7 @@ async function loadFrontDoorState({silent=true,force=false}={}){
 async function analyzeFrontDoor(){
  if(frontDoorAnalyzeBusy||!smartHomeControlAllowed)return;
  frontDoorAnalyzeBusy=true;frontDoorAnalyzeError="";renderFrontDoorSummary();
- try{frontDoorState=await cameraJson("/camera/front-door/analyze",{method:"POST",timeoutMs:185000});await refreshFrontDoorFrame();await loadFrontDoorEvents({runCleanup:false});renderFrontDoorSummary()}
+  try{await cameraJson("/camera/front-door/analyze",{method:"POST",timeoutMs:185000});await loadFrontDoorState({silent:true,force:true});await refreshFrontDoorFrame();await loadFrontDoorEvents({runCleanup:false});renderFrontDoorSummary()}
  catch(error){frontDoorAnalyzeError="Manual analysis failed: "+smartErrorMessage(error);renderFrontDoorSummary()}
  finally{frontDoorAnalyzeBusy=false;renderFrontDoorSummary()}
 }
