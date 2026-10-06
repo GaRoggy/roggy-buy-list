@@ -1659,3 +1659,255 @@ html[data-mode="dark"] .drawer-footer{
   .drawer-head-copy b{font-size:23px!important}
   .drawer-category-toggle{min-height:56px!important}
 }
+
+
+/* Whole-site refinement pass v122 — 30 targeted upgrades */
+
+/* 01 — Give content more breathing room on tablets/desktops without turning phones into billboards. */
+.home-main,.system-main,.project-detail-main{width:min(100%,980px);max-width:980px}
+@media(min-width:900px){.home-main,.system-main,.project-detail-main{padding-left:20px!important;padding-right:20px!important}}
+
+/* 02 — Standardize vertical rhythm so stacked modules feel intentional. */
+.home-main>*+*,.system-main>*+*{scroll-margin-top:110px}
+.home-section,.home-timeline,.system-card{margin-top:14px}
+
+/* 03 — Refine the sticky app header with a cleaner glass edge and less visual weight. */
+header{
+  border-bottom:1px solid rgba(255,255,255,.14);
+  box-shadow:0 10px 28px color-mix(in srgb,var(--accent) 18%,rgba(0,0,0,.24));
+  backdrop-filter:saturate(135%) blur(14px);
+}
+
+/* 04 — Improve header title hierarchy and truncation behavior. */
+.header-title h1{line-height:1.02;letter-spacing:-.045em}
+.header-title p{line-height:1.2;opacity:.8}
+.header-title{overflow:hidden}
+
+/* 05 — Give the menu button a deliberate control surface instead of a floating glyph. */
+.header-menu{
+  display:grid!important;place-items:center;
+  border:1px solid rgba(255,255,255,.16);
+  background:rgba(255,255,255,.08);
+  border-radius:13px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+  -webkit-tap-highlight-color:transparent;
+}
+.header-menu:active{transform:scale(.95)}
+
+/* 06 — Unify Sign in / backup controls and improve touch feedback. */
+.header-actions{gap:7px}
+.auth-btn,.header-actions .icon-btn{
+  min-height:42px;
+  border:1px solid rgba(255,255,255,.18)!important;
+  background:rgba(255,255,255,.09)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+  backdrop-filter:blur(10px);
+}
+.header-actions .icon-btn{min-width:42px;border-radius:13px!important;padding:0 9px}
+.auth-btn:active,.header-actions .icon-btn:active{transform:scale(.96)}
+
+/* 07 — Make the primary page tabs read like a single navigation rail. */
+#primaryPageTabs{
+  width:min(calc(100% - 16px),980px);
+  margin:0 auto;
+  padding:8px 0 0!important;
+  gap:6px!important;
+}
+
+/* 08 — Strengthen active-tab location without relying only on fill color. */
+#primaryPageTabs .page-tab{position:relative;overflow:hidden}
+#primaryPageTabs .page-tab.active::after{
+  content:"";position:absolute;left:22%;right:22%;bottom:4px;height:2px;
+  border-radius:999px;background:rgba(255,255,255,.88);
+  box-shadow:0 0 10px color-mix(in srgb,var(--accent2) 60%,transparent);
+}
+
+/* 09 — Upgrade global search into a clearer command affordance. */
+.command-search{
+  min-height:50px;
+  padding:12px 15px!important;
+  border-radius:17px!important;
+  border-color:color-mix(in srgb,var(--accent2) 20%,rgba(255,255,255,.18))!important;
+  background:color-mix(in srgb,var(--surface) 88%,transparent)!important;
+  box-shadow:0 8px 24px rgba(7,3,20,.16)!important;
+}
+.command-search>span{font-weight:750;letter-spacing:-.01em}
+.command-search kbd{font-weight:850}
+
+/* 10 — Make the Command Center date feel like useful information, not footer text. */
+.today-hero.compact-command{min-height:78px;padding:16px 18px!important;border-radius:22px!important}
+.today-hero.compact-command #homeDate{font-size:15px!important;font-weight:800;opacity:.92;margin-top:4px!important}
+
+/* 11 — Sharpen dashboard focus cards and number hierarchy. */
+.home-focus-strip{gap:8px!important}
+.home-focus-strip button{
+  min-height:82px;
+  padding:12px 11px!important;
+  border:1px solid color-mix(in srgb,var(--accent2) 17%,var(--line))!important;
+  box-shadow:0 7px 20px rgba(7,3,20,.12)!important;
+}
+.home-focus-strip b{font-size:24px!important;line-height:1}
+.home-focus-strip span{font-weight:900}
+.home-focus-strip small{letter-spacing:.06em;text-transform:uppercase;font-weight:800}
+
+/* 12 — Add restrained press/hover feedback to dashboard shortcuts. */
+.home-focus-strip button:active{transform:scale(.975)}
+@media(hover:hover){.home-focus-strip button:hover{border-color:color-mix(in srgb,var(--accent2) 36%,var(--line))!important}}
+
+/* 13 — Normalize Network and PC Health home cards so they feel like one system family. */
+.network-home-card,.pc-health-home-card{
+  min-height:78px!important;
+  border-radius:20px!important;
+  padding:13px 15px!important;
+  border:1px solid color-mix(in srgb,var(--accent2) 15%,var(--line))!important;
+}
+.network-home-copy b,.pc-health-home-copy b{font-size:17px;letter-spacing:-.02em}
+.network-home-copy small,.pc-health-home-copy small{line-height:1.35}
+
+/* 14 — Give all dashboard sections one consistent card language. */
+.home-section,.home-timeline,.system-card{
+  border-radius:22px!important;
+  padding:16px!important;
+  border-color:color-mix(in srgb,var(--accent2) 15%,rgba(255,255,255,.14))!important;
+  box-shadow:0 9px 26px rgba(7,3,20,.14)!important;
+}
+
+/* 15 — Improve section header alignment, wrapping, and action spacing. */
+.section-head{gap:12px;align-items:flex-start}
+.section-head>div{min-width:0}
+.section-head h3{font-size:19px;line-height:1.1;margin:3px 0 0!important;letter-spacing:-.025em}
+.section-head .text-action{flex:0 0 auto}
+
+/* 16 — Make eyebrow labels easier to read while staying understated. */
+.eyebrow{
+  font-size:9px!important;
+  letter-spacing:.14em!important;
+  line-height:1.2;
+  font-weight:950!important;
+  opacity:.82!important;
+}
+
+/* 17 — Standardize small action pills across cards. */
+.text-action,.mini-add{
+  min-height:36px!important;
+  padding:7px 11px!important;
+  border:1px solid color-mix(in srgb,var(--accent2) 14%,transparent)!important;
+  background:color-mix(in srgb,var(--accent) 10%,var(--surface2))!important;
+  font-size:11px;
+  white-space:nowrap;
+}
+.text-action:active,.mini-add:active{transform:scale(.96)}
+
+/* 18 — Turn empty/loading text into a deliberate state treatment. */
+.quiet-state{
+  margin:4px 0;
+  padding:12px 13px!important;
+  border:1px dashed color-mix(in srgb,var(--accent2) 16%,var(--line));
+  border-radius:13px;
+  background:color-mix(in srgb,var(--accent) 4%,transparent);
+  line-height:1.45!important;
+}
+
+/* 19 — Improve smart-home control grouping and make sliders theme-aware. */
+.home-control-grid{gap:9px!important}
+.home-control-card{border-radius:17px!important;padding:13px!important}
+.home-control-card .device-control-group{padding-top:7px;border-top:1px solid color-mix(in srgb,var(--accent2) 10%,transparent)}
+.device-range{accent-color:var(--accent2);height:32px}
+
+/* 20 — Make dashboard email rows easier to scan and tap. */
+.important-email{
+  min-height:48px;
+  padding:9px 6px!important;
+  margin-inline:-5px;
+  border-radius:11px;
+}
+@media(hover:hover){.important-email:hover{background:color-mix(in srgb,var(--accent) 6%,transparent)}}
+.important-email:active{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.important-email b{font-size:12.5px!important}
+
+/* 21 — Improve front-door preview composition and prevent awkward image sizing. */
+.front-door-dashboard-card{gap:12px}
+.front-door-frame-wrap.compact{
+  overflow:hidden;
+  border-radius:14px!important;
+  background:color-mix(in srgb,var(--surface2) 92%,black 8%);
+}
+.front-door-frame-wrap.compact .front-door-frame{width:100%;height:100%;object-fit:cover;aspect-ratio:16/10}
+
+/* 22 — Strengthen page intro hierarchy on secondary shelves. */
+.system-intro{padding:8px 3px 12px!important}
+.system-intro h2{font-size:29px!important;line-height:1.05;letter-spacing:-.04em;margin:5px 0 6px!important}
+.system-intro p{max-width:68ch;font-size:13px;line-height:1.55!important}
+
+/* 23 — Unify secondary system panels and metric surfaces. */
+.network-panel,.pc-health-panel,.front-door-live-card,.device-room,.dough-strategy-card{
+  border-radius:20px!important;
+  border-color:color-mix(in srgb,var(--accent2) 15%,var(--line))!important;
+  box-shadow:0 8px 24px rgba(7,3,20,.13)!important;
+}
+
+/* 24 — Upgrade project cards with clearer interaction and denser metadata. */
+.project-card,.project-open{
+  border-radius:19px!important;
+}
+.project-card h3{font-size:18px;letter-spacing:-.025em}
+.project-foot{padding-top:11px;border-top:1px solid color-mix(in srgb,var(--accent2) 10%,transparent)}
+@media(hover:hover){.project-card:hover{border-color:color-mix(in srgb,var(--accent2) 32%,var(--line))!important}}
+
+/* 25 — Refine list cards so names dominate and metadata recedes. */
+.card{border-radius:17px!important;border:1px solid color-mix(in srgb,var(--accent2) 13%,var(--line))}
+.card-summary{min-height:72px!important;padding:13px 14px!important}
+.item-name{font-size:17px!important;letter-spacing:-.018em}
+.meta{opacity:.88;flex-wrap:wrap}
+
+/* 26 — Improve every form field's legibility, focus state, and mobile ergonomics. */
+input,select,textarea{
+  min-height:44px;
+  border-radius:12px!important;
+  border-color:color-mix(in srgb,var(--accent2) 16%,var(--line))!important;
+  background:color-mix(in srgb,var(--surface) 94%,var(--accent) 6%)!important;
+  color:var(--ink);
+}
+input::placeholder,textarea::placeholder{color:color-mix(in srgb,var(--muted) 72%,transparent)}
+input:focus,select:focus,textarea:focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent2) 12%,transparent)!important}
+
+/* 27 — Make dialogs feel native on phones while keeping centered desktop dialogs. */
+dialog{
+  border:1px solid color-mix(in srgb,var(--accent2) 16%,var(--line))!important;
+  box-shadow:0 24px 80px rgba(2,0,12,.38)!important;
+}
+@media(max-width:600px){
+  dialog:not(.layne-chat-dialog){
+    width:calc(100vw - 16px)!important;
+    max-width:none!important;
+    max-height:84dvh!important;
+    margin:auto 8px 8px!important;
+    border-radius:22px 22px 18px 18px!important;
+  }
+}
+
+/* 28 — Improve floating action hierarchy and avoid accidental edge taps. */
+.fab,.layne-chat-fab{
+  border:1px solid rgba(255,255,255,.16)!important;
+  box-shadow:0 14px 34px color-mix(in srgb,var(--accent) 30%,rgba(0,0,0,.28))!important;
+  -webkit-tap-highlight-color:transparent;
+}
+.fab:active,.layne-chat-fab:active{transform:scale(.94)}
+@media(max-width:500px){.fab{right:18px!important;bottom:calc(18px + env(safe-area-inset-bottom))!important}}
+
+/* 29 — Respect reduced-motion preferences across the broader UI, not only the drawer. */
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+
+/* 30 — Harden narrow-phone layout and safe-area spacing against clipping/overflow. */
+html,body{max-width:100%;overflow-x:hidden}
+img,video,canvas{max-width:100%}
+@media(max-width:390px){
+  .home-main,.system-main,.project-detail-main{padding-left:9px!important;padding-right:9px!important}
+  .home-focus-strip{gap:5px!important}
+  .home-focus-strip button{padding-inline:8px!important}
+  .section-head{gap:8px}
+  .section-head h3{font-size:17px}
+  .text-action{padding-inline:9px!important}
+}
