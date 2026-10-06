@@ -36,13 +36,27 @@ function renderPrimaryTabs(){
  root.innerHTML=PRIMARY_PAGES.map(page=>`<button class="page-tab" data-page="${page.id}" type="button">${page.label}</button>`).join("");
  root.querySelectorAll(".page-tab").forEach(button=>button.onclick=()=>setPage(button.dataset.page));
 }
+function setDrawerCategoryState(group,open){
+ const toggle=group?.querySelector(".drawer-category-toggle"),panel=group?.querySelector(".drawer-category-items");
+ if(!toggle||!panel)return;
+ toggle.setAttribute("aria-expanded",open?"true":"false");
+ group.classList.toggle("open",open);
+ panel.hidden=!open;
+}
+function initDrawerCategories(){
+ document.querySelectorAll("[data-drawer-category]").forEach(group=>{
+  const toggle=group.querySelector(".drawer-category-toggle");
+  if(!toggle)return;
+  toggle.onclick=()=>setDrawerCategoryState(group,toggle.getAttribute("aria-expanded")!=="true");
+ });
+}
 function syncPageNavigation(page=currentPage){
  document.querySelectorAll(".page-tab").forEach(button=>{
   const active=button.dataset.page===page;
   button.classList.toggle("active",active);
   if(button.closest("#primaryPageTabs")){if(active)button.setAttribute("aria-current","page");else button.removeAttribute("aria-current")}
  });
- document.querySelectorAll(".drawer-category").forEach(group=>{if(group.querySelector(".drawer-page-tab.active"))group.open=true});
+ document.querySelectorAll("[data-drawer-category]").forEach(group=>{if(group.querySelector(".drawer-page-tab.active"))setDrawerCategoryState(group,true)});
  PRIMARY_PAGES.forEach(definition=>primaryPageElement(definition.id)?.classList.add("primary-page"));
  syncLayneChatFab(page);
 }
@@ -1148,7 +1162,8 @@ function setPage(page){
  $("moreToggle").checked=false;
  window.dispatchEvent(new CustomEvent("roggy-page",{detail:{page}}));
 }
-renderPrimaryTabs();syncPageNavigation(currentPage);
+renderPrimaryTabs();
+initDrawerCategories();syncPageNavigation(currentPage);
 $("doughBackBtn")?.addEventListener("click",()=>renderDough());
 document.querySelectorAll(".side-drawer .page-tab").forEach(b=>b.onclick=()=>setPage(b.dataset.page));
 $("remindersBackBtn").onclick=()=>setPage(shelfReturnPage||lastPrimaryPage||"home");
