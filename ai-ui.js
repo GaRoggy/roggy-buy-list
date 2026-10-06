@@ -1,5 +1,5 @@
 import { createBridgeProvider } from './ai/browser/provider.js';
-import { LIMITS, validateRequest } from './ai/shared/protocol.js';
+import { LIMITS } from './ai/shared/protocol.js';
 import { createTranscriptStore, formatTranscriptLine, roomLabel } from './transcript.js?v=2';
 const el = id => document.getElementById(id);
 const messages = [], history = [];
@@ -132,7 +132,7 @@ function stopTranscriptPanel() {
 }
 function controls() {
   const busy = !!generation;
-  el('aiSend').disabled = busy || !signedIn || !online || !el('aiModel').value || !el('aiPrompt').value.trim();
+  el('aiSend').disabled = busy || !signedIn || !online || !el('aiPrompt').value.trim();
   el('aiStop').hidden = !busy; el('aiModel').disabled = busy || !online;
   el('aiRefresh').disabled = busy || !!checking || !signedIn;
   el('aiGenerating').hidden = !busy; el('aiHistory').setAttribute('aria-busy', String(busy));
@@ -161,8 +161,8 @@ async function refresh() {
     el('aiModel').replaceChildren(...models.map(m => { const option = document.createElement('option'); option.value = m.id; option.textContent = m.name; return option; }));
     const selected = models.find(m => m.id === current) || models.find(m => m.id === saved) || models[0];
     if (selected) el('aiModel').value = selected.id;
-    online = true; status(models.length ? 'Ollama online · private' : 'Online · no local models', 'online');
-    el('aiError').textContent = models.length ? '' : 'Install a local model in Ollama on your PC, then refresh models.';
+    online = true; status(models.length ? 'Layne online · private' : 'Layne online · model catalog unavailable', 'online');
+    el('aiError').textContent = models.length ? '' : 'Layne is reachable, but no local model is currently listed.';
   } catch (error) {
     if (ticket !== epoch || controller.signal.aborted) return;
     status(error.code === 'NOT_CONFIGURED' ? 'Setup needed' : 'AI unavailable', 'offline'); el('aiError').textContent = message(error);
@@ -170,29 +170,27 @@ async function refresh() {
 }
 async function send(event) {
   event.preventDefault(); if (el('aiSend').disabled) return;
-  const content = el('aiPrompt').value.trim(), model = el('aiModel').value;
-  const input = { provider: 'ollama', model, messages: [...history, { role: 'user', content }] };
-  try { validateRequest(input); } catch (e) { el('aiError').textContent = message(e); return; }
+  const content = el('aiPrompt').value.trim();
+  if (!content || content.length > LIMITS.messageChars) { el('aiError').textContent = 'Enter a shorter message.'; return; }
+  if (typeof window.roggyLayneCommand !== 'function') { el('aiError').textContent = 'Layne command routing is unavailable. Refresh the page and reconnect.'; return; }
   const ticket = epoch, controller = new AbortController(); generation = controller;
   const user = addMessage('user', content), reply = addMessage('assistant', '');
   el('aiPrompt').value = ''; el('aiError').textContent = ''; controls(); let full = '', complete = false;
   try {
-    for await (const event of provider.chat(input, AbortSignal.any([controller.signal, AbortSignal.timeout(615000)]))) {
-      if (ticket !== epoch) return;
-      if (event.type === 'delta') {
-        const box = el('aiHistory'), follow = box.scrollHeight - box.scrollTop - box.clientHeight < 90;
-        full += event.text; reply.text.textContent = full;
-        if (follow) box.scrollTop = box.scrollHeight;
-      } else if (event.type === 'done') {
-        complete = !!full.trim();
-        reply.note.textContent = event.reason === 'length' ? 'Output limit reached.' : '';
-      }
-    }
+    const payload = await window.roggyLayneCommand(content, {
+      context: { input_type: 'text', source: 'local_ai' },
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(185000)]),
+    });
+    if (ticket !== epoch) return;
+    full = typeof payload === 'string' ? payload : String(payload?.message || payload?.answer || payload?.result?.message || payload?.result || 'Layne returned a response without text.');
+    complete = !!full.trim();
+    reply.text.textContent = full;
+    if (payload?.status === 'failed') reply.note.textContent = 'Layne reported that the action failed; no generic chat fallback was used.';
     if (complete) {
       // Do not silently truncate history or exceed the per-message context bound.
       if (full.length <= LIMITS.messageChars) history.push({ role: 'user', content }, { role: 'assistant', content: full });
       else { online = false; reply.note.textContent = 'Reply too long for follow-up context. Clear this conversation before continuing.'; }
-    } else { reply.note.textContent = 'No text returned. Try another model.'; el('aiPrompt').value = content; }
+    } else { reply.note.textContent = 'No response returned.'; el('aiPrompt').value = content; }
   } catch (error) {
     if (ticket !== epoch) return;
     reply.note.textContent = controller.signal.aborted ? 'Stopped · excluded from follow-up context.' : 'Incomplete · excluded from follow-up context.';

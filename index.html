@@ -178,9 +178,9 @@
     <section class="ai-panel">
       <div class="ai-heading"><div><span class="eyebrow">YOUR PC · YOUR MODELS</span><h2>Local AI</h2></div><span id="aiConnection" class="ai-connection" role="status" data-state="offline">Not connected</span></div>
       <p class="ai-privacy">Chat privately with your PC through Tailscale. Conversation stays in this tab and clears when you sign out or reload.</p>
-      <div class="ai-tools"><label for="aiModel">Ollama model<select id="aiModel" disabled><option value="">Connect to discover models</option></select></label><button id="aiRefresh" type="button">Reconnect / refresh</button><button id="aiClear" type="button">Clear conversation</button></div>
+      <div class="ai-tools"><label for="aiModel">Layne local model catalog<select id="aiModel" disabled><option value="">Connect to discover models</option></select></label><button id="aiRefresh" type="button">Reconnect / refresh</button><button id="aiClear" type="button">Clear conversation</button></div>
       <p id="aiError" class="ai-error" role="alert"></p>
-      <div id="aiEmpty" class="ai-empty"><span aria-hidden="true">✦</span><h3>What’s on your mind?</h3><p>Choose a model, then send a message.<br>Only the text you enter here is sent to your PC.</p></div>
+      <div id="aiEmpty" class="ai-empty"><span aria-hidden="true">✦</span><h3>What’s on your mind?</h3><p>Layne routes commands to registered actions before using local conversation.<br>Only the text you enter here is sent to your PC.</p></div>
       <div id="aiHistory" class="ai-history" role="log" aria-label="AI conversation" aria-live="polite" aria-relevant="additions text"></div>
       <form id="aiForm" class="ai-composer">
         <label for="aiPrompt">Message</label><textarea id="aiPrompt" rows="3" maxlength="12000" placeholder="Ask your local AI…" autocomplete="off" required aria-describedby="aiKeyboard"></textarea>
@@ -459,6 +459,6 @@
 <script src="todos.js?v=65"></script>
 <script type="module" src="network.js?v=1"></script>
 <script type="module" src="pc-health.js?v=4"></script>
-<script type="module" src="ai-ui.js?v=44"></script>
+<script type="module" src="ai-ui.js?v=45"></script>
 <script src="polish.js?v=109"></script>
 </body></html>
