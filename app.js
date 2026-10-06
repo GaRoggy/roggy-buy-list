@@ -36,7 +36,7 @@ function renderPrimaryTabs(){
  root.innerHTML=PRIMARY_PAGES.map(page=>`<button class="page-tab" data-page="${page.id}" type="button">${page.label}</button>`).join("");
  root.querySelectorAll(".page-tab").forEach(button=>button.onclick=()=>setPage(button.dataset.page));
 }
-const DRAWER_OPEN_KEY="roggy-drawer-open-v1";
+const DRAWER_OPEN_KEY="roggy-drawer-open-v2";
 function drawerGroups(){return [...document.querySelectorAll("[data-drawer-category]")]}
 function savedDrawerGroups(){
  try{return new Set(JSON.parse(localStorage.getItem(DRAWER_OPEN_KEY)||"[]"))}catch{return new Set()}
@@ -58,39 +58,16 @@ function setDrawerCategoryState(group,open,{persist=true}={}){
  refreshDrawerCollapseControl();
 }
 function restoreDrawerCategoryState(){
- const saved=savedDrawerGroups();
- drawerGroups().forEach(group=>setDrawerCategoryState(group,saved.has(group.dataset.categoryKey),{persist:false}));
-}
-function resetDrawerSearch(){
- const input=$("drawerSearch"),clear=$("drawerSearchClear"),empty=$("drawerSearchEmpty");
- if(input)input.value="";
- if(clear)clear.hidden=true;
- if(empty)empty.hidden=true;
+ let hasSaved=false,saved=new Set();
+ try{
+  const raw=localStorage.getItem(DRAWER_OPEN_KEY);
+  hasSaved=raw!==null;
+  if(hasSaved)saved=new Set(JSON.parse(raw)||[]);
+ }catch{}
  drawerGroups().forEach(group=>{
-  group.hidden=false;
-  group.querySelectorAll(".drawer-page-tab").forEach(item=>item.hidden=false);
+  const open=hasSaved?saved.has(group.dataset.categoryKey):group.dataset.categoryKey==="everyday";
+  setDrawerCategoryState(group,open,{persist:false});
  });
- restoreDrawerCategoryState();
- const active=document.querySelector(".side-drawer .drawer-page-tab.active")?.closest("[data-drawer-category]");
- if(active)setDrawerCategoryState(active,true,{persist:false});
-}
-function filterDrawerShelves(query){
- const normalized=String(query||"").trim().toLowerCase(),empty=$("drawerSearchEmpty"),clear=$("drawerSearchClear");
- if(clear)clear.hidden=!normalized;
- if(!normalized){resetDrawerSearch();return}
- let matches=0;
- drawerGroups().forEach(group=>{
-  let groupMatches=0;
-  group.querySelectorAll(".drawer-page-tab").forEach(item=>{
-   const match=item.textContent.toLowerCase().includes(normalized);
-   item.hidden=!match;
-   if(match){groupMatches++;matches++}
-  });
-  group.hidden=groupMatches===0;
-  if(groupMatches)setDrawerCategoryState(group,true,{persist:false});
- });
- if(empty)empty.hidden=matches!==0;
- refreshDrawerCollapseControl();
 }
 function initDrawerCategories(){
  restoreDrawerCategoryState();
@@ -99,15 +76,11 @@ function initDrawerCategories(){
   if(!toggle)return;
   toggle.onclick=()=>setDrawerCategoryState(group,toggle.getAttribute("aria-expanded")!=="true");
  });
- const search=$("drawerSearch"),clear=$("drawerSearchClear"),collapse=$("drawerCollapseAll"),more=$("moreToggle");
- if(search)search.oninput=()=>filterDrawerShelves(search.value);
- if(clear)clear.onclick=()=>{resetDrawerSearch();search?.focus()};
+ const collapse=$("drawerCollapseAll"),more=$("moreToggle");
  if(collapse)collapse.onclick=()=>{
-  if(search?.value)resetDrawerSearch();
   drawerGroups().forEach(group=>setDrawerCategoryState(group,false,{persist:false}));
   saveDrawerGroups();refreshDrawerCollapseControl();
  };
- if(more)more.addEventListener("change",()=>{if(more.checked)resetDrawerSearch()});
  document.addEventListener("keydown",event=>{
   if(event.key!=="Escape"||!more?.checked)return;
   more.checked=false;
