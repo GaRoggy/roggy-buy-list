@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#6d28d9">
 <title>Roggy Lists</title>
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="styles.css?v=120">
+<link rel="stylesheet" href="styles.css?v=121">
 <link rel="stylesheet" href="todos.css?v=61">
 <link rel="stylesheet" href="polish.css?v=109">
 <link rel="stylesheet" href="network.css?v=1">
@@ -34,29 +34,18 @@
     </div>
   </div>
 
-  <div class="drawer-tools">
-    <label class="drawer-search" for="drawerSearch">
-      <span class="drawer-search-icon" aria-hidden="true">⌕</span>
-      <input id="drawerSearch" type="search" inputmode="search" autocomplete="off" placeholder="Find a shelf…" aria-label="Find a shelf">
-      <button id="drawerSearchClear" class="drawer-search-clear" type="button" aria-label="Clear shelf search" hidden>✕</button>
-    </label>
-  </div>
-  <p id="drawerSearchEmpty" class="drawer-search-empty" hidden>No shelf matches that search.</p>
-
   <section class="drawer-category" data-drawer-category data-category-key="everyday">
     <button class="drawer-category-toggle" type="button" aria-expanded="false" aria-controls="drawerEveryday">
       <span class="drawer-category-leading">
         <span class="drawer-category-icon" aria-hidden="true">⌂</span>
         <span class="drawer-category-copy"><b>Everyday</b><small>Lists & planning</small></span>
       </span>
-      <span class="drawer-category-meta"><span class="drawer-category-count">5</span><span class="drawer-category-chevron" aria-hidden="true">⌄</span></span>
+      <span class="drawer-category-meta"><span class="drawer-category-count">3</span><span class="drawer-category-chevron" aria-hidden="true">⌄</span></span>
     </button>
     <div id="drawerEveryday" class="drawer-category-items" hidden>
       <button class="page-tab drawer-page-tab" data-page="reminders" onclick="document.getElementById('moreToggle').checked=false"><span>Reminders</span></button>
       <button class="page-tab drawer-page-tab" data-page="groceries" onclick="document.getElementById('moreToggle').checked=false"><span>Groceries</span></button>
       <button class="page-tab drawer-page-tab" data-page="projects" onclick="document.getElementById('moreToggle').checked=false"><span>Projects</span></button>
-      <button class="page-tab drawer-page-tab" data-page="digestibles" onclick="document.getElementById('moreToggle').checked=false"><span>Digestibles</span></button>
-      <button class="page-tab drawer-page-tab" data-page="dough" onclick="document.getElementById('moreToggle').checked=false"><span>Dough</span></button>
     </div>
   </section>
 
@@ -66,11 +55,12 @@
         <span class="drawer-category-icon" aria-hidden="true">$</span>
         <span class="drawer-category-copy"><b>Inbox & Money</b><small>Mail & finance</small></span>
       </span>
-      <span class="drawer-category-meta"><span class="drawer-category-count">2</span><span class="drawer-category-chevron" aria-hidden="true">⌄</span></span>
+      <span class="drawer-category-meta"><span class="drawer-category-count">3</span><span class="drawer-category-chevron" aria-hidden="true">⌄</span></span>
     </button>
     <div id="drawerInboxMoney" class="drawer-category-items" hidden>
       <button class="page-tab drawer-page-tab" data-page="mail" onclick="document.getElementById('moreToggle').checked=false"><span>Mail</span><span id="mailNavCount" class="mail-nav-count" hidden></span></button>
       <button class="page-tab drawer-page-tab" data-page="budget" onclick="document.getElementById('moreToggle').checked=false"><span>Finance</span></button>
+      <button class="page-tab drawer-page-tab" data-page="dough" onclick="document.getElementById('moreToggle').checked=false"><span>Dough</span></button>
     </div>
   </section>
 
@@ -95,11 +85,12 @@
         <span class="drawer-category-icon" aria-hidden="true">✦</span>
         <span class="drawer-category-copy"><b>Layne & Data</b><small>AI & tracking</small></span>
       </span>
-      <span class="drawer-category-meta"><span class="drawer-category-count">2</span><span class="drawer-category-chevron" aria-hidden="true">⌄</span></span>
+      <span class="drawer-category-meta"><span class="drawer-category-count">3</span><span class="drawer-category-chevron" aria-hidden="true">⌄</span></span>
     </button>
     <div id="drawerLayneData" class="drawer-category-items" hidden>
       <button class="page-tab drawer-page-tab" data-page="ai" onclick="document.getElementById('moreToggle').checked=false"><span>Local AI</span></button>
       <button class="page-tab drawer-page-tab" data-page="drivers" onclick="document.getElementById('moreToggle').checked=false"><span>Bad Drivers</span></button>
+      <button class="page-tab drawer-page-tab" data-page="digestibles" onclick="document.getElementById('moreToggle').checked=false"><span>Digestibles</span></button>
     </div>
   </section>
 
@@ -519,7 +510,7 @@
 <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
 <script src="ai-config.js?v=45"></script>
 <script>window.ROGGY_AI_CONFIG=window.ROGGY_AI_CONFIG||Object.freeze({"bridgeUrl":"https://desktop-movehp4.tail990d14.ts.net","smartHomeUrl":"https://desktop-movehp4.tail990d14.ts.net/smart-home","transcriptTimeZone":"America/Chicago"});</script>
-<script src="app.js?v=124"></script>
+<script src="app.js?v=125"></script>
 <script src="push-notifications.js?v=1"></script>
 <script src="monitor-ui.js?v=53"></script>
 <script src="todos.js?v=65"></script>
