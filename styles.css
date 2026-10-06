@@ -1235,3 +1235,20 @@ html[data-mode="dark"] .drawer-category{background:color-mix(in srgb,#17151d 88%
 .home-control-card .device-control-group{margin-top:8px}
 .home-control-card .device-current-state{margin-top:4px}
 @media(min-width:720px){.home-control-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+
+/* Drawer accordion flow fix v118
+   Open shelf groups participate in normal document flow so their full contents
+   push following groups downward instead of being compressed/clipped by the
+   fixed-height drawer grid. The drawer itself remains the scrolling surface. */
+.side-drawer{
+  display:block!important;
+  align-content:initial!important;
+}
+.side-drawer>.drawer-head{margin-bottom:12px}
+.side-drawer>.drawer-category{display:block;height:auto!important;max-height:none!important;overflow:visible!important;margin:0 0 12px}
+.side-drawer>.drawer-category[open]{height:auto!important}
+.drawer-category-items{position:static!important;height:auto!important;max-height:none!important;overflow:visible!important}
+.side-drawer>.under-construction-group{margin-top:18px;margin-bottom:12px}
+.side-drawer>.drawer-divider{margin-top:12px;margin-bottom:12px}
+.side-drawer>.settings-open{margin-bottom:2px}
