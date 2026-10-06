@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#6d28d9">
 <title>Roggy Lists</title>
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="styles.css?v=119">
+<link rel="stylesheet" href="styles.css?v=120">
 <link rel="stylesheet" href="todos.css?v=61">
 <link rel="stylesheet" href="polish.css?v=109">
 <link rel="stylesheet" href="network.css?v=1">
@@ -25,59 +25,93 @@
 
 <input id="moreToggle" class="drawer-toggle" type="checkbox" hidden>
 <label class="drawer-backdrop" for="moreToggle" aria-label="Close menu"></label>
-<aside class="side-drawer" aria-label="More sections">
-  <div class="drawer-head"><b>More</b><label for="moreToggle" class="drawer-close" aria-label="Close navigation" tabindex="0">✕</label></div>
-  <section class="drawer-category" data-drawer-category>
+<aside class="side-drawer" aria-label="Shelves navigation">
+  <div class="drawer-head">
+    <div class="drawer-head-copy"><b>Shelves</b><span>Jump anywhere in Roggy.</span></div>
+    <div class="drawer-head-actions">
+      <button id="drawerCollapseAll" class="drawer-collapse-all" type="button" hidden>Collapse</button>
+      <label for="moreToggle" class="drawer-close" aria-label="Close shelves" tabindex="0">✕</label>
+    </div>
+  </div>
+
+  <div class="drawer-tools">
+    <label class="drawer-search" for="drawerSearch">
+      <span class="drawer-search-icon" aria-hidden="true">⌕</span>
+      <input id="drawerSearch" type="search" inputmode="search" autocomplete="off" placeholder="Find a shelf…" aria-label="Find a shelf">
+      <button id="drawerSearchClear" class="drawer-search-clear" type="button" aria-label="Clear shelf search" hidden>✕</button>
+    </label>
+  </div>
+  <p id="drawerSearchEmpty" class="drawer-search-empty" hidden>No shelf matches that search.</p>
+
+  <section class="drawer-category" data-drawer-category data-category-key="everyday">
     <button class="drawer-category-toggle" type="button" aria-expanded="false" aria-controls="drawerEveryday">
-      <span class="drawer-category-copy"><b>Everyday</b><small>Lists & planning</small></span>
-      <span class="drawer-category-chevron" aria-hidden="true">⌄</span>
+      <span class="drawer-category-leading">
+        <span class="drawer-category-icon" aria-hidden="true">⌂</span>
+        <span class="drawer-category-copy"><b>Everyday</b><small>Lists & planning</small></span>
+      </span>
+      <span class="drawer-category-meta"><span class="drawer-category-count">5</span><span class="drawer-category-chevron" aria-hidden="true">⌄</span></span>
     </button>
     <div id="drawerEveryday" class="drawer-category-items" hidden>
-      <button class="page-tab drawer-page-tab" data-page="reminders" onclick="document.getElementById('moreToggle').checked=false">Reminders</button>
-      <button class="page-tab drawer-page-tab" data-page="groceries" onclick="document.getElementById('moreToggle').checked=false">Groceries</button>
-      <button class="page-tab drawer-page-tab" data-page="projects" onclick="document.getElementById('moreToggle').checked=false">Projects</button>
-      <button class="page-tab drawer-page-tab" data-page="digestibles" onclick="document.getElementById('moreToggle').checked=false">Digestibles</button>
-      <button class="page-tab drawer-page-tab" data-page="dough" onclick="document.getElementById('moreToggle').checked=false">Dough</button>
+      <button class="page-tab drawer-page-tab" data-page="reminders" onclick="document.getElementById('moreToggle').checked=false"><span>Reminders</span></button>
+      <button class="page-tab drawer-page-tab" data-page="groceries" onclick="document.getElementById('moreToggle').checked=false"><span>Groceries</span></button>
+      <button class="page-tab drawer-page-tab" data-page="projects" onclick="document.getElementById('moreToggle').checked=false"><span>Projects</span></button>
+      <button class="page-tab drawer-page-tab" data-page="digestibles" onclick="document.getElementById('moreToggle').checked=false"><span>Digestibles</span></button>
+      <button class="page-tab drawer-page-tab" data-page="dough" onclick="document.getElementById('moreToggle').checked=false"><span>Dough</span></button>
     </div>
   </section>
-  <section class="drawer-category" data-drawer-category>
+
+  <section class="drawer-category" data-drawer-category data-category-key="inbox-money">
     <button class="drawer-category-toggle" type="button" aria-expanded="false" aria-controls="drawerInboxMoney">
-      <span class="drawer-category-copy"><b>Inbox & Money</b><small>Mail & finance</small></span>
-      <span class="drawer-category-chevron" aria-hidden="true">⌄</span>
+      <span class="drawer-category-leading">
+        <span class="drawer-category-icon" aria-hidden="true">$</span>
+        <span class="drawer-category-copy"><b>Inbox & Money</b><small>Mail & finance</small></span>
+      </span>
+      <span class="drawer-category-meta"><span class="drawer-category-count">2</span><span class="drawer-category-chevron" aria-hidden="true">⌄</span></span>
     </button>
     <div id="drawerInboxMoney" class="drawer-category-items" hidden>
-      <button class="page-tab drawer-page-tab" data-page="mail" onclick="document.getElementById('moreToggle').checked=false">Mail <span id="mailNavCount" class="mail-nav-count" hidden></span></button>
-      <button class="page-tab drawer-page-tab" data-page="budget" onclick="document.getElementById('moreToggle').checked=false">Finance</button>
+      <button class="page-tab drawer-page-tab" data-page="mail" onclick="document.getElementById('moreToggle').checked=false"><span>Mail</span><span id="mailNavCount" class="mail-nav-count" hidden></span></button>
+      <button class="page-tab drawer-page-tab" data-page="budget" onclick="document.getElementById('moreToggle').checked=false"><span>Finance</span></button>
     </div>
   </section>
-  <section class="drawer-category" data-drawer-category>
+
+  <section class="drawer-category" data-drawer-category data-category-key="system">
     <button class="drawer-category-toggle" type="button" aria-expanded="false" aria-controls="drawerSystem">
-      <span class="drawer-category-copy"><b>System</b><small>Network, PC & camera</small></span>
-      <span class="drawer-category-chevron" aria-hidden="true">⌄</span>
+      <span class="drawer-category-leading">
+        <span class="drawer-category-icon" aria-hidden="true">⌁</span>
+        <span class="drawer-category-copy"><b>System</b><small>Network, PC & camera</small></span>
+      </span>
+      <span class="drawer-category-meta"><span class="drawer-category-count">3</span><span class="drawer-category-chevron" aria-hidden="true">⌄</span></span>
     </button>
     <div id="drawerSystem" class="drawer-category-items" hidden>
-      <button class="page-tab drawer-page-tab" data-page="network" onclick="document.getElementById('moreToggle').checked=false">Network</button>
-      <button class="page-tab drawer-page-tab" data-page="pc-health" onclick="document.getElementById('moreToggle').checked=false">PC Health</button>
-      <button class="page-tab drawer-page-tab" data-page="front-door" onclick="document.getElementById('moreToggle').checked=false">Camera</button>
+      <button class="page-tab drawer-page-tab" data-page="network" onclick="document.getElementById('moreToggle').checked=false"><span>Network</span></button>
+      <button class="page-tab drawer-page-tab" data-page="pc-health" onclick="document.getElementById('moreToggle').checked=false"><span>PC Health</span></button>
+      <button class="page-tab drawer-page-tab" data-page="front-door" onclick="document.getElementById('moreToggle').checked=false"><span>Camera</span></button>
     </div>
   </section>
-  <section class="drawer-category" data-drawer-category>
+
+  <section class="drawer-category" data-drawer-category data-category-key="layne-data">
     <button class="drawer-category-toggle" type="button" aria-expanded="false" aria-controls="drawerLayneData">
-      <span class="drawer-category-copy"><b>Layne & Data</b><small>AI & tracking</small></span>
-      <span class="drawer-category-chevron" aria-hidden="true">⌄</span>
+      <span class="drawer-category-leading">
+        <span class="drawer-category-icon" aria-hidden="true">✦</span>
+        <span class="drawer-category-copy"><b>Layne & Data</b><small>AI & tracking</small></span>
+      </span>
+      <span class="drawer-category-meta"><span class="drawer-category-count">2</span><span class="drawer-category-chevron" aria-hidden="true">⌄</span></span>
     </button>
     <div id="drawerLayneData" class="drawer-category-items" hidden>
-      <button class="page-tab drawer-page-tab" data-page="ai" onclick="document.getElementById('moreToggle').checked=false">Local AI</button>
-      <button class="page-tab drawer-page-tab" data-page="drivers" onclick="document.getElementById('moreToggle').checked=false">Bad Drivers</button>
+      <button class="page-tab drawer-page-tab" data-page="ai" onclick="document.getElementById('moreToggle').checked=false"><span>Local AI</span></button>
+      <button class="page-tab drawer-page-tab" data-page="drivers" onclick="document.getElementById('moreToggle').checked=false"><span>Bad Drivers</span></button>
     </div>
   </section>
+
+  <div class="drawer-secondary-label">Coming later</div>
   <div class="under-construction-group">
-    <div class="under-construction-title">Under Construction</div>
-    <button class="drawer-page-tab under-construction-item" type="button" disabled>Health <span>Garmin</span></button>
-    <button class="drawer-page-tab under-construction-item" type="button" disabled>Vehicle <span>Coming soon</span></button>
+    <button class="drawer-page-tab under-construction-item" type="button" disabled><span>Health</span><small>Garmin</small></button>
+    <button class="drawer-page-tab under-construction-item" type="button" disabled><span>Vehicle</span><small>Coming soon</small></button>
   </div>
-  <div class="drawer-divider"></div>
-  <button id="settingsShelfBtn" class="drawer-page-tab settings-open" type="button">Settings <span>⚙</span></button>
+
+  <div class="drawer-footer">
+    <button id="settingsShelfBtn" class="drawer-page-tab settings-open" type="button"><span class="drawer-settings-icon" aria-hidden="true">⚙</span><span>Settings</span><span class="drawer-settings-chevron" aria-hidden="true">›</span></button>
+  </div>
 </aside>
 
 <input id="settingsToggle" class="settings-toggle" type="checkbox" hidden>
@@ -485,7 +519,7 @@
 <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
 <script src="ai-config.js?v=45"></script>
 <script>window.ROGGY_AI_CONFIG=window.ROGGY_AI_CONFIG||Object.freeze({"bridgeUrl":"https://desktop-movehp4.tail990d14.ts.net","smartHomeUrl":"https://desktop-movehp4.tail990d14.ts.net/smart-home","transcriptTimeZone":"America/Chicago"});</script>
-<script src="app.js?v=123"></script>
+<script src="app.js?v=124"></script>
 <script src="push-notifications.js?v=1"></script>
 <script src="monitor-ui.js?v=53"></script>
 <script src="todos.js?v=65"></script>
