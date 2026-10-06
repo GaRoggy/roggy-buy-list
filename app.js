@@ -36,18 +36,81 @@ function renderPrimaryTabs(){
  root.innerHTML=PRIMARY_PAGES.map(page=>`<button class="page-tab" data-page="${page.id}" type="button">${page.label}</button>`).join("");
  root.querySelectorAll(".page-tab").forEach(button=>button.onclick=()=>setPage(button.dataset.page));
 }
-function setDrawerCategoryState(group,open){
+const DRAWER_OPEN_KEY="roggy-drawer-open-v1";
+function drawerGroups(){return [...document.querySelectorAll("[data-drawer-category]")]}
+function savedDrawerGroups(){
+ try{return new Set(JSON.parse(localStorage.getItem(DRAWER_OPEN_KEY)||"[]"))}catch{return new Set()}
+}
+function saveDrawerGroups(){
+ try{localStorage.setItem(DRAWER_OPEN_KEY,JSON.stringify(drawerGroups().filter(group=>group.classList.contains("open")).map(group=>group.dataset.categoryKey).filter(Boolean)))}catch{}
+}
+function refreshDrawerCollapseControl(){
+ const collapse=$("drawerCollapseAll");
+ if(collapse)collapse.hidden=!drawerGroups().some(group=>group.classList.contains("open"));
+}
+function setDrawerCategoryState(group,open,{persist=true}={}){
  const toggle=group?.querySelector(".drawer-category-toggle"),panel=group?.querySelector(".drawer-category-items");
  if(!toggle||!panel)return;
  toggle.setAttribute("aria-expanded",open?"true":"false");
  group.classList.toggle("open",open);
  panel.hidden=!open;
+ if(persist)saveDrawerGroups();
+ refreshDrawerCollapseControl();
+}
+function restoreDrawerCategoryState(){
+ const saved=savedDrawerGroups();
+ drawerGroups().forEach(group=>setDrawerCategoryState(group,saved.has(group.dataset.categoryKey),{persist:false}));
+}
+function resetDrawerSearch(){
+ const input=$("drawerSearch"),clear=$("drawerSearchClear"),empty=$("drawerSearchEmpty");
+ if(input)input.value="";
+ if(clear)clear.hidden=true;
+ if(empty)empty.hidden=true;
+ drawerGroups().forEach(group=>{
+  group.hidden=false;
+  group.querySelectorAll(".drawer-page-tab").forEach(item=>item.hidden=false);
+ });
+ restoreDrawerCategoryState();
+ const active=document.querySelector(".side-drawer .drawer-page-tab.active")?.closest("[data-drawer-category]");
+ if(active)setDrawerCategoryState(active,true,{persist:false});
+}
+function filterDrawerShelves(query){
+ const normalized=String(query||"").trim().toLowerCase(),empty=$("drawerSearchEmpty"),clear=$("drawerSearchClear");
+ if(clear)clear.hidden=!normalized;
+ if(!normalized){resetDrawerSearch();return}
+ let matches=0;
+ drawerGroups().forEach(group=>{
+  let groupMatches=0;
+  group.querySelectorAll(".drawer-page-tab").forEach(item=>{
+   const match=item.textContent.toLowerCase().includes(normalized);
+   item.hidden=!match;
+   if(match){groupMatches++;matches++}
+  });
+  group.hidden=groupMatches===0;
+  if(groupMatches)setDrawerCategoryState(group,true,{persist:false});
+ });
+ if(empty)empty.hidden=matches!==0;
+ refreshDrawerCollapseControl();
 }
 function initDrawerCategories(){
- document.querySelectorAll("[data-drawer-category]").forEach(group=>{
+ restoreDrawerCategoryState();
+ drawerGroups().forEach(group=>{
   const toggle=group.querySelector(".drawer-category-toggle");
   if(!toggle)return;
   toggle.onclick=()=>setDrawerCategoryState(group,toggle.getAttribute("aria-expanded")!=="true");
+ });
+ const search=$("drawerSearch"),clear=$("drawerSearchClear"),collapse=$("drawerCollapseAll"),more=$("moreToggle");
+ if(search)search.oninput=()=>filterDrawerShelves(search.value);
+ if(clear)clear.onclick=()=>{resetDrawerSearch();search?.focus()};
+ if(collapse)collapse.onclick=()=>{
+  if(search?.value)resetDrawerSearch();
+  drawerGroups().forEach(group=>setDrawerCategoryState(group,false,{persist:false}));
+  saveDrawerGroups();refreshDrawerCollapseControl();
+ };
+ if(more)more.addEventListener("change",()=>{if(more.checked)resetDrawerSearch()});
+ document.addEventListener("keydown",event=>{
+  if(event.key!=="Escape"||!more?.checked)return;
+  more.checked=false;
  });
 }
 function syncPageNavigation(page=currentPage){
@@ -56,7 +119,11 @@ function syncPageNavigation(page=currentPage){
   button.classList.toggle("active",active);
   if(button.closest("#primaryPageTabs")){if(active)button.setAttribute("aria-current","page");else button.removeAttribute("aria-current")}
  });
- document.querySelectorAll("[data-drawer-category]").forEach(group=>{if(group.querySelector(".drawer-page-tab.active"))setDrawerCategoryState(group,true)});
+ document.querySelectorAll(".side-drawer .drawer-page-tab[data-page]").forEach(button=>{
+  const active=button.dataset.page===page;
+  if(active)button.setAttribute("aria-current","page");else button.removeAttribute("aria-current");
+ });
+ drawerGroups().forEach(group=>{if(group.querySelector(".drawer-page-tab.active"))setDrawerCategoryState(group,true,{persist:false})});
  PRIMARY_PAGES.forEach(definition=>primaryPageElement(definition.id)?.classList.add("primary-page"));
  syncLayneChatFab(page);
 }
