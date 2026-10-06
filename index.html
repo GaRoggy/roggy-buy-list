@@ -152,6 +152,23 @@
       <button id="pushDisable" type="button" hidden>Disable on This Device</button>
     </div>
     <small id="pushSupportNote"></small>
+    <section id="pushDiagnostics" class="push-diagnostics" aria-label="Notification diagnostics">
+      <h4>Notification diagnostics</h4>
+      <dl>
+        <div><dt>Permission</dt><dd id="pushDiagnosticPermission">Checking…</dd></div>
+        <div><dt>Service worker</dt><dd id="pushDiagnosticServiceWorker">Checking…</dd></div>
+        <div><dt>Local subscription</dt><dd id="pushDiagnosticLocalSubscription">Checking…</dd></div>
+        <div><dt>Backend registration</dt><dd id="pushDiagnosticBackendRegistration">Checking…</dd></div>
+        <div><dt>Push backend</dt><dd id="pushDiagnosticBackend">Checking…</dd></div>
+        <div><dt>Last test attempt</dt><dd id="pushDiagnosticLastAttempt">Never</dd></div>
+        <div><dt>Last test result</dt><dd id="pushDiagnosticLastResult">Not run</dd></div>
+        <div><dt>Failure stage</dt><dd id="pushDiagnosticFailureStage">—</dd></div>
+      </dl>
+      <details>
+        <summary>Technical details</summary>
+        <pre id="pushDiagnosticDetails">No diagnostic details yet.</pre>
+      </details>
+    </section>
   </section>
 </aside>
 
@@ -511,7 +528,7 @@
 <script src="ai-config.js?v=45"></script>
 <script>window.ROGGY_AI_CONFIG=window.ROGGY_AI_CONFIG||Object.freeze({"bridgeUrl":"https://desktop-movehp4.tail990d14.ts.net","smartHomeUrl":"https://desktop-movehp4.tail990d14.ts.net/smart-home","transcriptTimeZone":"America/Chicago"});</script>
 <script src="app.js?v=125"></script>
-<script src="push-notifications.js?v=1"></script>
+<script src="push-notifications.js?v=2"></script>
 <script src="monitor-ui.js?v=53"></script>
 <script src="todos.js?v=65"></script>
 <script type="module" src="network.js?v=1"></script>

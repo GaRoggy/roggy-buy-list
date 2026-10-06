@@ -7,7 +7,10 @@ type PushSubscriptionRow = {
   endpoint: string;
   p256dh: string;
   auth: string;
+  enabled: boolean;
   failure_count: number;
+  last_success_at?: string | null;
+  updated_at?: string | null;
 };
 
 class PushError extends Error {
@@ -57,6 +60,68 @@ function env(name: string): string {
   const value = Deno.env.get(name)?.trim();
   if (!value) throw new PushError(`MISSING_${name}`, 503);
   return value;
+}
+
+function pushConfiguration(): { subject: string; publicKey: string; privateKey: string } {
+  try {
+    const subject = env('VAPID_SUBJECT');
+    const publicKey = env('VAPID_PUBLIC_KEY');
+    const privateKey = env('VAPID_PRIVATE_KEY');
+    webpush.setVapidDetails(subject, publicKey, privateKey);
+    return { subject, publicKey, privateKey };
+  } catch (error) {
+    const missing = error instanceof PushError && error.code.startsWith('MISSING_VAPID_');
+    throw new PushError(missing ? 'PUSH_CONFIGURATION_MISSING' : 'PUSH_CONFIGURATION_INVALID', 503, {
+      operation: 'push.config',
+      cause: error instanceof Error ? error.name : 'ConfigurationError',
+      retryable: false,
+    });
+  }
+}
+
+function safeProviderBody(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  return bounded(String(value)
+    .replace(/https?:\/\/\S+/gi, '[url redacted]')
+    .replace(/(authorization|token|secret|private[_ -]?key)\s*[:=]\s*[^,\s]+/gi, '$1=[redacted]'));
+}
+
+function providerStatusCode(error: unknown): number {
+  const candidate = error as { statusCode?: unknown; status?: unknown };
+  const status = Number(candidate?.statusCode ?? candidate?.status ?? 0);
+  return Number.isInteger(status) ? status : 0;
+}
+
+function providerError(error: unknown, subscription: PushSubscriptionRow): PushError {
+  const status = providerStatusCode(error);
+  const name = error instanceof Error ? error.name : 'ProviderError';
+  const body = safeProviderBody((error as { body?: unknown })?.body);
+  const details = {
+    provider_status: status || null,
+    provider_body: body,
+    exception_type: name,
+    subscription_endpoint: safeEndpointLog(subscription.endpoint),
+  };
+  if (status === 404 || status === 410) return new PushError('PUSH_SUBSCRIPTION_EXPIRED', 410, {
+    message: 'The push provider rejected this subscription as expired.', operation: 'push.send',
+    cause: `${name}${status ? ` (${status})` : ''}`, retryable: false, details,
+  });
+  if (status === 401 || status === 403) return new PushError('PUSH_AUTH_REJECTED', 502, {
+    message: 'The push provider rejected Layne authentication credentials.', operation: 'push.send',
+    cause: `${name}${status ? ` (${status})` : ''}`, retryable: false, details,
+  });
+  if (status === 400 || status === 422) return new PushError('PUSH_SUBSCRIPTION_INVALID', 502, {
+    message: 'The push provider rejected this subscription as invalid.', operation: 'push.send',
+    cause: `${name}${status ? ` (${status})` : ''}`, retryable: false, details,
+  });
+  if (name === 'TimeoutError' || name === 'AbortError') return new PushError('PUSH_PROVIDER_TIMEOUT', 504, {
+    message: 'The push provider timed out before accepting the notification.', operation: 'push.send',
+    cause: name, retryable: true, details,
+  });
+  return new PushError('PUSH_PROVIDER_ERROR', 502, {
+    message: 'The push provider rejected the notification.', operation: 'push.send',
+    cause: `${name}${status ? ` (${status})` : ''}`, retryable: status >= 500 || status === 0, details,
+  });
 }
 
 function groupedKey(groupedName: string, legacyName: string): string {
@@ -183,11 +248,21 @@ function subscriptionInput(value: unknown) {
   const p256dh = textField(item.keys && typeof item.keys === 'object' ? (item.keys as Json).p256dh : null, 'p256dh', 256, true)!;
   const auth = textField(item.keys && typeof item.keys === 'object' ? (item.keys as Json).auth : null, 'auth', 256, true)!;
   if (!/^[A-Za-z0-9_-]+$/.test(p256dh) || !/^[A-Za-z0-9_-]+$/.test(auth)) throw new PushError('SUBSCRIPTION_KEYS_INVALID', 400);
+  if (p256dh.length < 40 || auth.length < 8) throw new PushError('SUBSCRIPTION_KEYS_INVALID', 400);
   return {
     endpoint, p256dh, auth,
     user_agent: textField(item.userAgent, 'user_agent', 512),
     device_label: textField(item.deviceLabel, 'device_label', 80),
   };
+}
+
+function optionalEndpoint(value: unknown): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  const endpoint = textField(value, 'endpoint', 2048, true)!;
+  let parsed: URL;
+  try { parsed = new URL(endpoint); } catch { throw new PushError('ENDPOINT_INVALID', 400); }
+  if (parsed.protocol !== 'https:') throw new PushError('ENDPOINT_INVALID', 400);
+  return endpoint;
 }
 
 function safeEndpointLog(endpoint: string): string {
@@ -302,39 +377,104 @@ async function cleanupCameraEvents(user: User): Promise<Json> {
   return { ok: true, removed: (Array.isArray(oldImages) ? oldImages.length : 0) + (Array.isArray(expiredTrash) ? expiredTrash.length : 0) };
 }
 
-async function sendPushNotification(userId: string, notification: ReturnType<typeof notificationInput>): Promise<Json> {
-  const query = new URLSearchParams({ select: 'id,endpoint,p256dh,auth,failure_count', user_id: `eq.${userId}`, enabled: 'eq.true' });
+async function subscriptionRows(userId: string, endpoint: string | null, enabledOnly = false): Promise<PushSubscriptionRow[]> {
+  const query = new URLSearchParams({ select: 'id,endpoint,p256dh,auth,enabled,failure_count,last_success_at,updated_at', user_id: `eq.${userId}` });
+  if (endpoint) query.set('endpoint', `eq.${endpoint}`);
+  if (enabledOnly) query.set('enabled', 'eq.true');
   const rows = await db(`push_subscriptions?${query}`);
-  const subscriptions = Array.isArray(rows) ? rows as PushSubscriptionRow[] : [];
+  return Array.isArray(rows) ? rows as PushSubscriptionRow[] : [];
+}
+
+function storedSubscriptionIsValid(subscription: PushSubscriptionRow): boolean {
+  try {
+    const endpoint = new URL(subscription.endpoint);
+    return endpoint.protocol === 'https:' && /^[A-Za-z0-9_-]{40,}$/.test(subscription.p256dh) && /^[A-Za-z0-9_-]{8,}$/.test(subscription.auth);
+  } catch { return false; }
+}
+
+async function pushDiagnostics(userId: string, endpoint: string | null): Promise<Json> {
+  let configuration: Json = { status: 'healthy' };
+  try { pushConfiguration(); }
+  catch (error) {
+    const safe = error instanceof PushError ? error : new PushError('PUSH_CONFIGURATION_INVALID', 503, { operation: 'push.config', cause: error });
+    configuration = { status: 'error', error_code: safe.code, message: safe.message };
+  }
+  const rows = await subscriptionRows(userId, endpoint, false);
+  const match = endpoint ? rows[0] : null;
+  const registration = match ? {
+    status: match.enabled ? 'active' : 'disabled',
+    structurally_valid: storedSubscriptionIsValid(match),
+    failure_count: Number(match.failure_count) || 0,
+    last_success_at: match.last_success_at || null,
+    updated_at: match.updated_at || null,
+  } : { status: 'missing', structurally_valid: false, failure_count: 0, last_success_at: null, updated_at: null };
+  return {
+    ok: true,
+    push_backend: configuration,
+    registration,
+    stored_subscription_count: rows.length,
+  };
+}
+
+async function sendPushNotification(userId: string, notification: ReturnType<typeof notificationInput>, endpoint: string | null = null): Promise<Json> {
+  const subscriptions = await subscriptionRows(userId, endpoint, true);
+  if (subscriptions.length === 0) {
+    if (endpoint) {
+      const matchingRows = await subscriptionRows(userId, endpoint, false);
+      if (matchingRows.length > 0) throw new PushError('SUBSCRIPTION_DISABLED', 409, {
+        message: 'This device subscription is disabled.', operation: 'push.lookup', retryable: false,
+        details: { enabled: false, failure_count: Number(matchingRows[0].failure_count) || 0 },
+      });
+      throw new PushError('SUBSCRIPTION_NOT_REGISTERED', 409, {
+        message: 'This browser subscription is not registered with Layne.', operation: 'push.lookup', retryable: false,
+      });
+    }
+    throw new PushError('NO_ACTIVE_SUBSCRIPTION', 409, {
+      message: 'No active push subscription is registered for this account.', operation: 'push.lookup', retryable: false,
+    });
+  }
   let sent = 0;
   let removed = 0;
   let failed = 0;
+  let firstFailure: PushError | null = null;
   const payload = JSON.stringify({ title: notification.title, body: notification.body, icon: notification.icon, badge: notification.badge, tag: notification.tag, url: notification.url });
-  webpush.setVapidDetails(env('VAPID_SUBJECT'), env('VAPID_PUBLIC_KEY'), env('VAPID_PRIVATE_KEY'));
+  pushConfiguration();
   for (const subscription of subscriptions) {
     try {
       await webpush.sendNotification({ endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } }, payload, { TTL: 300 });
       sent++;
-      await db(`push_subscriptions?id=eq.${encodeURIComponent(subscription.id)}`, {
-        method: 'PATCH', headers: { Prefer: 'return=minimal' },
-        body: JSON.stringify({ last_success_at: new Date().toISOString(), failure_count: 0, enabled: true, updated_at: new Date().toISOString() }),
-      });
+      try {
+        await db(`push_subscriptions?id=eq.${encodeURIComponent(subscription.id)}`, {
+          method: 'PATCH', headers: { Prefer: 'return=minimal' },
+          body: JSON.stringify({ last_success_at: new Date().toISOString(), failure_count: 0, enabled: true, updated_at: new Date().toISOString() }),
+        });
+      } catch (error) {
+        console.error(JSON.stringify({ event: 'subscription_success_update_failed', user_id: userId, endpoint: safeEndpointLog(subscription.endpoint), error: error instanceof PushError ? error.code : 'DATABASE_ERROR' }));
+      }
     } catch (error) {
-      const status = Number((error as { statusCode?: number })?.statusCode || 0);
+      const status = providerStatusCode(error);
       if (status === 404 || status === 410) {
         removed++;
-        await db(`push_subscriptions?id=eq.${encodeURIComponent(subscription.id)}`, { method: 'DELETE' });
+        try { await db(`push_subscriptions?id=eq.${encodeURIComponent(subscription.id)}`, { method: 'DELETE' }); }
+        catch (cleanupError) { console.error(JSON.stringify({ event: 'expired_subscription_cleanup_failed', user_id: userId, endpoint: safeEndpointLog(subscription.endpoint), error: cleanupError instanceof PushError ? cleanupError.code : 'DATABASE_ERROR' })); }
       } else {
         failed++;
         const nextFailureCount = Math.max(0, Number(subscription.failure_count) || 0) + 1;
-        await db(`push_subscriptions?id=eq.${encodeURIComponent(subscription.id)}`, {
-          method: 'PATCH', headers: { Prefer: 'return=minimal' },
-          body: JSON.stringify({ failure_count: nextFailureCount, enabled: nextFailureCount < 5, updated_at: new Date().toISOString() }),
-        });
+        try {
+          await db(`push_subscriptions?id=eq.${encodeURIComponent(subscription.id)}`, {
+            method: 'PATCH', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ failure_count: nextFailureCount, enabled: nextFailureCount < 5, updated_at: new Date().toISOString() }),
+          });
+        } catch (updateError) { console.error(JSON.stringify({ event: 'subscription_failure_update_failed', user_id: userId, endpoint: safeEndpointLog(subscription.endpoint), error: updateError instanceof PushError ? updateError.code : 'DATABASE_ERROR' })); }
       }
+      const classified = providerError(error, subscription);if(!firstFailure)firstFailure=classified;
     }
   }
-  console.info(JSON.stringify({ event: 'push_send_complete', user_id: userId, sent, failed, removed }));
+  console.info(JSON.stringify({ event: 'push_send_complete', user_id: userId, sent, failed, removed, endpoint: endpoint ? safeEndpointLog(endpoint) : null, provider_status: firstFailure?.details?.provider_status || null }));
+  if (firstFailure && sent === 0) {
+    firstFailure.details = { ...firstFailure.details, sent, failed, removed, subscriptions: subscriptions.length };
+    throw firstFailure;
+  }
   return { sent, failed, removed, subscriptions: subscriptions.length };
 }
 
@@ -345,10 +485,11 @@ async function handle(req: Request): Promise<Response> {
   const action = textField(body.action, 'action', 40, true);
   if (action === 'subscribe') return json(await saveSubscription(user, body.subscription), 200, origin);
   if (action === 'unsubscribe') return json(await removeSubscription(user, body.endpoint), 200, origin);
+  if (action === 'diagnostics') return json(await pushDiagnostics(user.id, optionalEndpoint(body.endpoint)), 200, origin);
   if (action === 'send_test') {
     const result = await sendPushNotification(user.id, notificationInput({
       title: 'Roggy Lists', body: 'Push notifications are working.', url: '/', tag: 'roggy-test',
-    }));
+    }), optionalEndpoint(body.endpoint));
     return json({ ok: true, ...result }, 200, origin);
   }
   if (action === 'camera_event') return json(await saveCameraEvent(user, body.event), 200, origin);
@@ -377,7 +518,7 @@ Deno.serve(async req => {
       operation: 'push.request', cause: error instanceof Error ? error.name : 'UnknownError',
     });
     const requestId = crypto.randomUUID();
-    console.error(JSON.stringify({ error_code: safe.code, request_id: requestId }));
+    console.error(JSON.stringify({ event: 'push_request_failed', ...safe.toJSON(requestId) }));
     return json({ ok: false, error: safe.code, error_detail: safe.toJSON(requestId), requestId }, safe.status, origin === PROJECT_ORIGIN ? origin : PROJECT_ORIGIN);
   }
 });
