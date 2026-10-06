@@ -171,7 +171,7 @@ async function cameraBinary(path){
  if(!CAMERA_API)throw Object.assign(new Error("Camera bridge is not configured"),{code:"bridge_not_configured"});
  if(!smartHomeAccessToken)throw Object.assign(new Error("Sign in to view the private camera"),{code:"authentication_required",status:401});
  const response=await fetch(CAMERA_API+path,{cache:"no-store",headers:{Accept:"image/*",Authorization:`Bearer ${smartHomeAccessToken}`}});
- if(!response.ok)throw Object.assign(new Error(`Camera request failed (${response.status})`),{status:response.status});
+  if(!response.ok){console.warn("camera_frontend_image_error",{stage:"camera_image_request",path,status:response.status});throw Object.assign(new Error(`Camera request failed (${response.status})`),{status:response.status});}
  return response.blob();
 }
 async function cameraJson(path,options={}){
@@ -287,11 +287,12 @@ async function hydrateFrontDoorThumbnails(rows,token){
    if(token!==frontDoorThumbnailToken){URL.revokeObjectURL(url);return}
    const target=[...document.querySelectorAll("[data-front-door-thumbnail]")].find(node=>node.dataset.frontDoorThumbnail===String(row.id));
    if(!target){URL.revokeObjectURL(url);return}
-   const image=new Image();image.className="front-door-event-thumb-image";image.alt=`${row.short_description||"Front Door event"} snapshot`;image.onload=()=>{};image.onerror=()=>{URL.revokeObjectURL(url);frontDoorThumbnailUrls.delete(String(row.id));target.innerHTML=frontDoorThumbnailPlaceholder(row,"Snapshot unavailable")};image.src=url;
+    const image=new Image();image.className="front-door-event-thumb-image";image.alt=`${row.short_description||"Front Door event"} snapshot`;image.onload=()=>{};image.onerror=()=>{console.warn("camera_frontend_image_error",{stage:"camera_thumbnail_decode",snapshot:row.snapshot_name});URL.revokeObjectURL(url);frontDoorThumbnailUrls.delete(String(row.id));target.innerHTML=frontDoorThumbnailPlaceholder(row,"Snapshot unavailable")};image.src=url;
    frontDoorThumbnailUrls.set(String(row.id),url);target.replaceChildren(image);
-  }catch{
-   if(token!==frontDoorThumbnailToken)return;
-   const target=[...document.querySelectorAll("[data-front-door-thumbnail]")].find(node=>node.dataset.frontDoorThumbnail===String(row.id));
+   }catch(error){
+    if(token!==frontDoorThumbnailToken)return;
+    console.warn("camera_frontend_image_error",{stage:"camera_thumbnail_request",snapshot:row.snapshot_name,error:error?.message||"unknown"});
+    const target=[...document.querySelectorAll("[data-front-door-thumbnail]")].find(node=>node.dataset.frontDoorThumbnail===String(row.id));
    if(target)target.innerHTML=frontDoorThumbnailPlaceholder(row,"Snapshot unavailable");
   }
  }));
@@ -352,7 +353,7 @@ async function openFrontDoorDetail(id){
  const row=frontDoorEvents.find(item=>String(item.id)===String(id));if(!row)return;
  const dialog=$("frontDoorDetailDialog"),image=$("frontDoorDetailImage"),imageStatus=$("frontDoorDetailImageStatus"),restore=$("frontDoorDetailRestore"),remove=$("frontDoorDetailDelete");if(!dialog)return;
  revokeFrontDoorDetailImage();image.hidden=true;imageStatus.hidden=false;imageStatus.textContent="Loading private snapshot…";$('frontDoorDetailTitle').textContent=row.short_description||"Front Door event";$('frontDoorDetailMeta').innerHTML=`<span>${esc(smartTime(row.captured_at))}</span><span>${esc(row.camera_name||"Front Door Cam")}</span><span>${esc(cameraLocationLabel(row.location))}</span>`;$('frontDoorDetailDescription').textContent=row.full_description||row.summary||"No description available.";$('frontDoorDetailFacts').innerHTML=frontDoorEventFacts(row);$('frontDoorDetailDiagnostics').innerHTML=frontDoorEventDiagnostics(row);restore.hidden=!row.deleted_at;remove.hidden=!!row.deleted_at;dialog.dataset.frontDoorEventId=row.id;dialog.showModal();
- try{const blob=await cameraBinary(`/camera/front-door/image/${encodeURIComponent(row.snapshot_name)}`);frontDoorDetailImageUrl=URL.createObjectURL(blob);image.src=frontDoorDetailImageUrl;image.hidden=false;imageStatus.hidden=true}catch(error){imageStatus.textContent="Snapshot unavailable; the 14-day image retention window may have elapsed.";}
+  try{const blob=await cameraBinary(`/camera/front-door/image/${encodeURIComponent(row.snapshot_name)}`);frontDoorDetailImageUrl=URL.createObjectURL(blob);image.src=frontDoorDetailImageUrl;image.hidden=false;imageStatus.hidden=true}catch(error){console.warn("camera_frontend_image_error",{stage:"camera_detail_request",snapshot:row.snapshot_name,error:error?.message||"unknown"});imageStatus.textContent="Snapshot unavailable; the 14-day image retention window may have elapsed.";}
  if(row.source==="local_runtime"){restore.hidden=true;remove.hidden=true}
  restore.onclick=()=>updateFrontDoorDeletion(row,false);remove.onclick=()=>updateFrontDoorDeletion(row,true);
 }
