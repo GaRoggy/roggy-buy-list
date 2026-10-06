@@ -529,8 +529,9 @@ function bindDeviceControls(){
  document.querySelectorAll("[data-device-action=brightness]").forEach(input=>{input.oninput=()=>{const output=document.querySelector(`[data-device-brightness-output="${CSS.escape(input.dataset.deviceId)}"]`);if(output)output.textContent=input.value+"%"};input.onchange=()=>sendDeviceAction(input.dataset.deviceId,{action:"brightness",value:Number(input.value)})});
 }
 async function sendDeviceAction(deviceId,body){
- if(!smartHomeControlAllowed){const status=$("deviceStatus");if(status)status.textContent="Sign in to control devices.";return}
- const status=$("deviceStatus"),action=beginDeviceAction(deviceId,body);if(status)status.textContent="Updating device…";
+ const status=currentPage==="home"?$("homeControlStatus"):$("deviceStatus");
+ if(!smartHomeControlAllowed){if(status)status.textContent="Sign in to control devices.";return}
+ const action=beginDeviceAction(deviceId,body);if(status)status.textContent="Updating device…";
  try{await smartHomeFetch(`/devices/${encodeURIComponent(deviceId)}/actions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});if(!actionStillCurrent(deviceId,action.version))return;const refreshed=await refreshAfterDeviceAction(deviceId,action.version);if(status)status.textContent=refreshed?"Device state updated.":"Device command sent; showing requested state until the device confirms."}
  catch(error){if(actionStillCurrent(deviceId,action.version)){smartHomePendingActions.delete(deviceId);restoreDeviceSnapshot(deviceId,action.previous);if(status)status.textContent="Device update failed: "+smartErrorMessage(error)}}
 }
