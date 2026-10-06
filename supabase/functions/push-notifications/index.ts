@@ -44,13 +44,14 @@ function bounded(value: unknown, limit = 1024): string | null {
 }
 
 const PROJECT_ORIGIN = 'https://garoggy.github.io';
+const ALLOWED_HEADERS = 'authorization, apikey, content-type, x-client-info, x-supabase-api-version';
 const json = (body: Json, status = 200, origin = PROJECT_ORIGIN) => new Response(JSON.stringify(body), {
   status,
   headers: {
     'content-type': 'application/json',
     'cache-control': 'no-store',
     'access-control-allow-origin': origin,
-    'access-control-allow-headers': 'authorization, apikey, content-type',
+    'access-control-allow-headers': ALLOWED_HEADERS,
     'access-control-allow-methods': 'POST, OPTIONS',
     vary: 'Origin',
   },
@@ -506,7 +507,7 @@ Deno.serve(async req => {
     headers: {
       'cache-control': 'no-store',
       'access-control-allow-origin': origin === PROJECT_ORIGIN ? origin : PROJECT_ORIGIN,
-      'access-control-allow-headers': 'authorization, apikey, content-type',
+      'access-control-allow-headers': ALLOWED_HEADERS,
       'access-control-allow-methods': 'POST, OPTIONS',
       vary: 'Origin',
     },
