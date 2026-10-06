@@ -42,6 +42,7 @@ function syncPageNavigation(page=currentPage){
   button.classList.toggle("active",active);
   if(button.closest("#primaryPageTabs")){if(active)button.setAttribute("aria-current","page");else button.removeAttribute("aria-current")}
  });
+ document.querySelectorAll(".drawer-category").forEach(group=>{if(group.querySelector(".drawer-page-tab.active"))group.open=true});
  PRIMARY_PAGES.forEach(definition=>primaryPageElement(definition.id)?.classList.add("primary-page"));
  syncLayneChatFab(page);
 }
@@ -497,19 +498,14 @@ async function sendRoomPower(roomId,value){
 }
 function renderHomeDeviceStatus(){
  const root=$("homeDeviceStatus");if(!root)return;
- maybeLoadFrontDoorState();
- smartHomeState.devices=mergeFrontDoorDevice(smartHomeState.devices);
  smartHomeState.devices=smartHomeState.devices.map(pendingDeviceState);
  if(smartHomeUnavailable){root.innerHTML=`<div class="quiet-state"><b>Smart Home</b><br>${esc(smartFailureKind(smartHomeFailure)==="authentication"?"Authentication failed.":"Bridge or smart-home service unavailable.")}</div>`;return}
- if(!smartHomeLoaded){root.innerHTML='<div class="quiet-state">Loading device status…</div>';return}
- if(!smartHomeState.devices.length){root.innerHTML='<div class="quiet-state">No devices configured.</div>';return}
- root.innerHTML=smartHomeState.devices.map(device=>`<button type="button" class="home-device-row" data-home-jump="devices"><span class="home-device-dot ${deviceOnline(device)?"online":"offline"}></span><b>${esc(device.friendly_name||device.device_id)}</b><span>${esc(deviceStatusLine(device))}</span></button>`).join("");
- const rooms=smartHomeRooms(),events=recentSmartHomeEvents();
- const homeDeviceRow=device=>isFrontDoorCamera(device)?`<button type="button" class="home-device-row" data-camera-open="front-door"><span class="home-device-dot ${deviceStatusTone(device)}"></span><b>Front Door Cam</b><span>${esc(deviceStatusLine(device))}<small>${esc(device.attributes?.analysis_description||deviceFreshnessLine(device))}</small></span></button>`:`<button type="button" class="home-device-row" data-device-jump="${esc(device.device_id)}"><span class="home-device-dot ${deviceStatusTone(device)}"></span><b>${esc(device.friendly_name||device.device_id)}</b><span>${esc(deviceStatusLine(device))}<small>${esc(deviceFreshnessLine(device))}</small></span></button>`;
- const roomMarkup=rooms.map(room=>{const devices=roomDevices(room).slice().sort((a,b)=>(!deviceOnline(b)?1:!deviceOnline(a)?-1:!deviceFresh(b)?1:!deviceFresh(a)?-1:0)),lights=devices.filter(device=>device.capabilities?.includes("power")&&deviceUsable(device));return `<article class="home-room-card"><button type="button" class="home-room-open" data-room-jump="${esc(room.room_id)}"><div><span class="eyebrow">ROOM</span><b>${esc(roomDisplayName(room))}</b></div><strong>${esc(roomPresenceLabel(room))}</strong><span>${esc(roomLightLabel(room))}</span>${roomMicrophoneLabel(room)?`<span>${esc(roomMicrophoneLabel(room))}</span>`:""}<small>${esc(room.online_devices??devices.filter(device=>deviceOnline(device)).length)}/${esc(room.device_count??devices.length)} devices online · ${esc(roomHealthLine(room))}</small></button><div class="home-device-list">${devices.map(homeDeviceRow).join("")}</div>${lights.length?`<div class="home-room-quick"><span>Quick lights</span><button type="button" data-room-action="on" data-room-id="${esc(room.room_id)}">On</button><button type="button" data-room-action="off" data-room-id="${esc(room.room_id)}">Off</button></div>`:""}</article>`}).join("");
- const activity=events.length?`<div class="home-activity"><div class="home-subhead"><span>RECENT ACTIVITY</span><small>Latest ${events.length}</small></div>${events.map(event=>`<div class="home-activity-row"><time>${esc(smartClock(event.timestamp))}</time><span>${esc(deviceActivityText(event))}</span></div>`).join("")}</div>`:"";
- root.innerHTML=`<div class="home-room-summary-grid">${roomMarkup}</div>${activity}`;
- bindHomeDeviceLinks();document.querySelectorAll("[data-room-action]").forEach(button=>button.onclick=()=>sendRoomPower(button.dataset.roomId,button.dataset.roomAction));
+ if(!smartHomeLoaded){root.innerHTML='<div class="quiet-state">Loading controls…</div>';return}
+ const controllable=smartHomeState.devices.filter(device=>!isFrontDoorCamera(device)&&(device.capabilities||[]).some(capability=>["power","brightness"].includes(capability)));
+ if(!controllable.length){root.innerHTML='<div class="quiet-state">No controllable devices configured.</div>';return}
+ const memberships=roomMembershipIndex();
+ root.innerHTML=`<div class="home-control-grid">${controllable.map(device=>`<article class="home-control-card ${deviceStatusTone(device)!=="online"?"device-offline":""}"><div class="home-control-head"><div><span class="eyebrow">${esc(smartStateLabel(deviceRoomId(device,memberships)))}</span><b>${esc(device.friendly_name||device.device_id)}</b></div><span class="device-status-badge ${deviceStatusTone(device)}">${deviceStatusTone(device)==="online"?"Online":deviceStatusTone(device)==="stale"?"Stale":"Offline"}</span></div><div class="device-current-state"><span>Status</span><b>${esc(deviceStatusLine(device))}</b></div><div class="device-controls">${deviceControlsMarkup(device)}</div></article>`).join("")}</div>`;
+ bindDeviceControls();
 }
 function renderDevicesPage(){
  const summary=$("deviceRoomSummary"),rooms=$("deviceRooms");if(!summary||!rooms)return;
