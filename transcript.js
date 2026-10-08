@@ -11,7 +11,7 @@ function isResponseEvent(raw) {
 }
 
 function eventText(raw, response) {
-  return String(response ? (raw.message ?? raw.text ?? "") : (raw.normalized_transcript ?? raw.text ?? raw.transcript ?? "")).trim();
+  return String(response ? (raw.message ?? raw.text ?? "") : (raw.original_transcript ?? raw.transcript ?? raw.text ?? raw.canonical_text ?? raw.normalized_transcript ?? "")).trim();
 }
 
 function comparisonText(value) {
@@ -26,7 +26,10 @@ function comparisonText(value) {
 }
 
 function displayText(value) {
-  return String(value || "").trim().replace(/\blane\b/gi, "Layne");
+  // The panel is an ASR diagnostic. Preserve exactly what the recognizer
+  // produced; canonical wake normalization remains available in the raw
+  // event fields and must not be presented as invented speech.
+  return String(value || "").trim();
 }
 
 function similarity(left, right) {
@@ -67,9 +70,12 @@ function microphoneIds(raw) {
 }
 
 function logicalId(raw, response) {
+  if (response) {
+    const responseIdentity = raw?.response_id || raw?.event_id || raw?.transcript_event_id;
+    return responseIdentity ? `response:${String(responseIdentity).trim()}` : "";
+  }
   const explicit = [raw?.logical_utterance_id, raw?.utterance_group_id].find(value => String(value || "").trim());
   if (explicit) return String(explicit).trim();
-  if (response && raw?.transcript_event_id) return `response:${String(raw.transcript_event_id).trim()}`;
   return "";
 }
 
@@ -119,7 +125,9 @@ export function createTranscriptStore({ now = () => Date.now(), windowMs = TRANS
     const allRelatedMicrophones = unique([...(existing?.related_microphone_ids || []), ...relatedMicrophones, ...allMicrophones]);
     const rawEventIds = unique([...(existing?.raw_event_ids || []), existing?.raw_event_id, rawId]);
     const normalized = String(raw.normalized_transcript || "").trim();
-    const sourceText = response ? (String(raw.message || raw.text || "").trim() || existing?.text || text) : (normalized || text || existing?.text || "");
+      const sourceText = response
+        ? (String(raw.message || raw.text || "").trim() || existing?.text || text)
+        : String(raw.original_transcript || raw.transcript || raw.text || raw.canonical_text || normalized || text || existing?.text || "").trim();
     return {
       ...(existing || {}),
       ...raw,
@@ -145,6 +153,30 @@ export function createTranscriptStore({ now = () => Date.now(), windowMs = TRANS
     ingest(raw) {
       if (!raw || typeof raw !== "object") return null;
       const response = isResponseEvent(raw);
+      // The bridge commits the canonical user event before routing.  This is
+      // a bounded UI-side repair for a transient history-ingest failure: the
+      // response carries the same canonical object, so an executed action can
+      // never appear without the user turn that caused it.  Normal delivery
+      // finds the existing user group and does not create a duplicate.
+      if (response && raw.canonical_text && raw.transcript_event_id
+          && !rawToGroup.has(String(raw.transcript_event_id).trim())) {
+        this.ingest({
+          ...raw,
+          type: "whisper_transcript",
+          event_type: "whisper_transcript",
+          event_id: raw.transcript_event_id,
+          response_id: undefined,
+          timestamp: raw.speech_timestamp || raw.timestamp,
+          text: raw.canonical_text,
+          transcript: raw.canonical_text,
+          normalized_transcript: raw.canonical_text,
+          original_transcript: raw.canonical_text,
+          canonical_utterance: true,
+          addressing_classification: raw.addressing_classification || "addressed_to_layne",
+          final: true,
+        });
+      }
+      if (!response && raw.final === false) return null;
       const text = eventText(raw, response);
       const microphones = microphoneIds(raw);
       if (!text) return null;
@@ -179,7 +211,12 @@ export function createTranscriptStore({ now = () => Date.now(), windowMs = TRANS
         .filter(entry => filter === "all" || (entry.kind === "assistant"
           ? unique(entry.related_microphone_ids || entry.microphone_ids).includes(filter)
           : unique(entry.microphone_ids || [entry.microphone_id]).includes(filter)))
-        .sort((a, b) => timestampMs(a.timestamp, a.receivedAt) - timestampMs(b.timestamp, b.receivedAt));
+        .sort((a, b) => {
+          const timeDelta = timestampMs(a.timestamp, a.receivedAt) - timestampMs(b.timestamp, b.receivedAt);
+          if (timeDelta) return timeDelta;
+          // If two events share a timestamp, preserve causal turn order.
+          return (a.kind === "assistant" ? 1 : 0) - (b.kind === "assistant" ? 1 : 0);
+        });
     },
     clear() { entries.clear(); rawToGroup.clear(); logicalToGroup.clear(); },
     size() { prune(); return entries.size; },
@@ -207,6 +244,13 @@ export function formatTranscriptTime(value, { timeZone = "America/Chicago" } = {
 export function formatTranscriptLine(event, options = {}) {
   const time = formatTranscriptTime(event?.timestamp, options);
   const response = event?.kind === "assistant" || isResponseEvent(event);
-  const text = displayText(response ? (event?.text || event?.message) : (event?.normalized_transcript || event?.text || event?.transcript));
-  return `${time} ${response ? "Layne" : "Me"}: "${text}"`;
+  const text = displayText(response ? (event?.text || event?.message) : (event?.original_transcript || event?.transcript || event?.text));
+  const source = response ? "Layne" : (event?.friendly_name || roomLabel(event?.room) || event?.microphone_id || "Microphone");
+  const label = response ? (String(event?.status || "").toLowerCase() === "failed" ? "Failure" : "Response")
+    : (event?.layne_activated || event?.addressing_classification === "addressed_to_layne" ? "Command" : "Ambient");
+  const confidence = event?.confidence ?? event?.microphone_confidence ?? event?.speech_validity?.score;
+  const confidenceText = Number.isFinite(Number(confidence)) ? ` · confidence ${Number(confidence).toFixed(2)}` : "";
+  const uncertainty = event?.transcription_status === "uncertain" || (Array.isArray(event?.uncertainty) && event.uncertainty.length)
+    ? " · uncertain" : "";
+  return `${time} · ${source} · ${response ? "Layne" : "Heard"}: "${text}" · ${label}${confidenceText}${uncertainty}`;
 }
