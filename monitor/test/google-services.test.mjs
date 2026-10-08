@@ -110,3 +110,10 @@ test('Google client keeps write operations on the allowlisted People API path', 
   assert.equal(JSON.parse(calls[1][1].body).resourceName, 'people/c123');
   await assert.rejects(() => get.request('people.googleapis.com/v1/people/c123', { method: 'PATCH', body: {} }), /GOOGLE_PATH_DENIED/);
 });
+
+test('Google refresh-token revocation is reported as an actionable credential failure', async () => {
+  const get = await googleClient({ GOOGLE_CLIENT_ID: 'client', GOOGLE_CLIENT_SECRET: 'secret', GOOGLE_REFRESH_TOKEN: 'revoked' },
+    async () => new Response(JSON.stringify({ error: 'invalid_grant', error_description: 'Token has been expired or revoked.' }), { status: 400 }));
+  await assert.rejects(() => get('gmail/v1/users/me/profile'), error =>
+    error.code === 'GOOGLE_REFRESH_TOKEN_INVALID' && error.terminal === true && error.cause === 'invalid_grant');
+});

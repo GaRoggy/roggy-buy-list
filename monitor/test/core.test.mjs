@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MonitorError, backoff, request, pages, failure } from '../core.mjs';
+import { MonitorError, Store, backoff, request, pages, failure } from '../core.mjs';
 import { runJob } from '../worker.mjs';
 
 test('retry respects provider delay and is bounded', () => {
@@ -15,6 +15,14 @@ test('HTTP failures cannot leak provider bodies or tokens', async () => {
 });
 test('successful empty responses are accepted for write operations', async () => {
   assert.equal(await request('https://example.invalid', {}, async () => new Response('', { status: 200 })), null);
+});
+test('Supabase opaque server keys include the gateway authorization header', async () => {
+  let seen;
+  const store = new Store({ SUPABASE_URL: 'https://example.supabase.co', SUPABASE_SECRET_KEY: 'sb_secret_fixture' },
+    async (_url, options) => { seen = options.headers; return new Response('[]', { status: 200 }); });
+  await store.api('monitor_sources?select=id');
+  assert.equal(seen.apikey, 'sb_secret_fixture');
+  assert.equal(seen.Authorization, 'Bearer sb_secret_fixture');
 });
 test('pagination consumes final cursor only after every page', async () => {
   const seen = [];

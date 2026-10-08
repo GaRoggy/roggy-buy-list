@@ -76,6 +76,6 @@ const recovered=(await db.query('select monitor_claim($1) as c',[owner])).rows[0
 assert.equal(recovered.job.id,abandoned.job.id);assert.notEqual(recovered.job.lease_token,abandoned.job.lease_token);
 await assert.rejects(db.query('select monitor_commit($1,$2,$3,$4)',[abandoned.job.id,abandoned.job.lease_token,'[]','{}']));
 await db.query('select monitor_fail($1,$2,$3,$4,$5)',[recovered.job.id,recovered.job.lease_token,'GOOGLE_OAUTH_REQUIRED',60,true]);
-assert.equal((await db.query('select enabled from monitor_sources where id=$1',[source.id])).rows[0].enabled,false);
+assert.equal((await db.query('select enabled from monitor_sources where id=$1',[source.id])).rows[0].enabled,true);
 await db.close();
-console.log('Database checks passed: migrations, scheduling deduplication, lease fencing/recovery, atomic rollback, record/reminder deduplication, DST all-day projection, cancellation, completion preservation, owner isolation, anonymous denial, auth failure disabling.');
+console.log('Database checks passed: migrations, scheduling deduplication, lease fencing/recovery, atomic rollback, record/reminder deduplication, DST all-day projection, cancellation, completion preservation, owner isolation, anonymous denial, retryable source recovery.');

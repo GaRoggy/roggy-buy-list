@@ -22,9 +22,18 @@ export async function googleClient(env, fetcher = fetch) {
   const call = async (path, params = {}, raw = false, options = {}) => {
     if (!/^(calendar\/v3\/|gmail\/v1\/users\/me\/|tasks\/v1\/|people\/v1\/|drive\/v3\/)/.test(path)) throw new MonitorError('GOOGLE_PATH_DENIED', { terminal: true });
     if (Date.now() >= expiry) {
-      const data = await request('https://oauth2.googleapis.com/token', { method: 'POST',
-        body: new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET,
-          refresh_token: refresh, grant_type: 'refresh_token' }) }, fetcher);
+      let data;
+      try {
+        data = await request('https://oauth2.googleapis.com/token', { method: 'POST',
+          body: new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET,
+            refresh_token: refresh, grant_type: 'refresh_token' }) }, fetcher);
+      } catch (error) {
+        if (error?.code === 'HTTP_400' && /invalid_grant/i.test(String(error.cause || ''))) {
+          throw new MonitorError('GOOGLE_REFRESH_TOKEN_INVALID', { terminal: true, status: 400,
+            operation: 'google.oauth.token', cause: 'invalid_grant' });
+        }
+        throw error;
+      }
       if (!data.access_token) throw new MonitorError('GOOGLE_OAUTH_REQUIRED', { terminal: true });
       token = data.access_token; expiry = Date.now() + ((data.expires_in || 3600) - 60) * 1000;
     }

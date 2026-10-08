@@ -80,7 +80,10 @@ export class Store {
   async api(path, options = {}) {
     const key = this.env.SUPABASE_SECRET_KEY;
     return request(`${this.env.SUPABASE_URL}/rest/v1/${path}`, { ...options,
-      headers: { apikey: key, ...(key.startsWith('eyJ') ? { Authorization: `Bearer ${key}` } : {}),
+      // Supabase's opaque sb_secret_* keys are accepted by the gateway only
+      // when they are sent in the same two-header shape as the client SDK.
+      // Legacy JWT service keys use the same shape, so keep this unconditional.
+      headers: { apikey: key, Authorization: `Bearer ${key}`,
         'Content-Type': 'application/json', ...options.headers } }, this.fetcher);
   }
   rpc(name, body) { return this.api(`rpc/monitor_${name}`, { method: 'POST', body: JSON.stringify(body) }); }
