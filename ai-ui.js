@@ -30,6 +30,7 @@ function status(text, state) { el('aiConnection').textContent = text; el('aiConn
 const transcriptStore = createTranscriptStore();
 const transcriptTimeZone = window.ROGGY_AI_CONFIG?.transcriptTimeZone || 'America/Chicago';
 let transcriptFilter = 'all', transcriptFollowing = true, transcriptStreamStatus = 'disconnected', transcriptHealthTimer = null, transcriptBound = false;
+let transcriptHistoryState = 'idle', transcriptHistoryRequest = null, transcriptHistoryRetry = null, transcriptHistoryRetryDelay = 1000;
 const microphoneCatalog = new Map();
 
 function transcriptStatus(text, state) {
@@ -78,24 +79,56 @@ function applyTranscriptHealth(diagnostics) {
   }
   transcriptFilterOptions();
   if (bridge.configured_microphones === 0) return transcriptStatus('No microphones connected', 'offline');
-  if (voice.status === 'unavailable' || voice.transcriber_loaded === false || (voice.whisper && voice.whisper.ready === false)) return transcriptStatus('Whisper unavailable', 'offline');
+  if (voice.status === 'unavailable' || voice.state === 'STOPPING') return transcriptStatus('Whisper unavailable', 'offline');
   if (transcriptStreamStatus !== 'connected') return transcriptStatus('Disconnected', 'offline');
-  transcriptStatus(voice.all_audio_streams_healthy === false ? 'Listening · microphone reconnecting' : 'Listening', voice.all_audio_streams_healthy === false ? 'checking' : 'online');
+  if (transcriptHistoryState === 'loading' || transcriptHistoryState === 'idle') return transcriptStatus('Connecting transcript feed…', 'checking');
+  if (transcriptHistoryState === 'failed') return transcriptStatus('Transcript history unavailable', 'offline');
+  transcriptStatus(voice.all_audio_streams_healthy === false ? 'Listening · microphone reconnecting' : 'Listening · transcript feed live', voice.all_audio_streams_healthy === false ? 'checking' : 'online');
 }
 async function refreshTranscriptHealth() {
   if (!signedIn || !window.roggySmartHomeStream?.diagnostics) return;
   try { applyTranscriptHealth(await window.roggySmartHomeStream.diagnostics()); }
   catch { transcriptStatus('Disconnected', 'offline'); }
 }
+function scheduleTranscriptHistoryRetry(delay = transcriptHistoryRetryDelay) {
+  if (transcriptHistoryRetry || !signedIn || el('aiPage')?.hidden) return;
+  transcriptHistoryRetry = setTimeout(() => {
+    transcriptHistoryRetry = null;
+    loadTranscriptHistory().finally(() => refreshTranscriptHealth());
+  }, Math.max(250, delay));
+}
 async function loadTranscriptHistory() {
-  if (!signedIn || !window.roggySmartHomeStream?.history) return;
-  try {
-    const payload = await window.roggySmartHomeStream.history(100);
-    for (const event of (Array.isArray(payload?.events) ? payload.events : [])) {
-      if (event?.type === 'whisper_transcript' || event?.type === 'layne_voice_response') transcriptStore.ingest(event);
+  if (!signedIn) return false;
+  if (transcriptHistoryRequest) return transcriptHistoryRequest;
+  const stream = window.roggySmartHomeStream;
+  if (!stream?.history) {
+    transcriptHistoryState = 'idle';
+    transcriptStatus('Connecting transcript feed…', 'checking');
+    scheduleTranscriptHistoryRetry();
+    return false;
+  }
+  transcriptHistoryState = 'loading';
+  transcriptHistoryRequest = (async () => {
+    try {
+      const payload = await stream.history(100);
+      for (const event of (Array.isArray(payload?.events) ? payload.events : [])) {
+        if (event?.type === 'whisper_transcript' || event?.type === 'layne_voice_response') transcriptStore.ingest(event);
+      }
+      transcriptHistoryState = 'ready';
+      transcriptHistoryRetryDelay = 1000;
+      renderTranscript();
+      return true;
+    } catch {
+      transcriptHistoryState = 'failed';
+      transcriptHistoryRetryDelay = Math.min(transcriptHistoryRetryDelay * 2, 30000);
+      transcriptStatus('Transcript history unavailable', 'offline');
+      scheduleTranscriptHistoryRetry();
+      return false;
+    } finally {
+      transcriptHistoryRequest = null;
     }
-    renderTranscript();
-  } catch { transcriptStatus('Disconnected', 'offline'); }
+  })();
+  return transcriptHistoryRequest;
 }
 function startTranscriptPanel() {
   if (!transcriptBound) {
@@ -114,20 +147,28 @@ function startTranscriptPanel() {
     });
     window.addEventListener('roggy-smart-home-stream-status', event => {
       transcriptStreamStatus = event.detail?.status || 'disconnected';
-      if (transcriptStreamStatus === 'connected') refreshTranscriptHealth();
+      if (transcriptStreamStatus === 'connected') {
+        loadTranscriptHistory().finally(() => refreshTranscriptHealth());
+      }
       else if (transcriptStreamStatus === 'connecting') transcriptStatus('Connecting…', 'checking');
       else transcriptStatus('Disconnected', 'offline');
     });
   }
   if (!signedIn) { transcriptStatus('Disconnected', 'offline'); return; }
-  transcriptStreamStatus = window.roggySmartHomeStream?.status?.() || transcriptStreamStatus;
-  window.roggySmartHomeStream?.connect?.();
-  loadTranscriptHistory();
+  const stream = window.roggySmartHomeStream;
+  transcriptStreamStatus = stream?.status?.() || 'connecting';
+  if (!stream) transcriptStatus('Connecting transcript feed…', 'checking');
+  stream?.connect?.();
+  loadTranscriptHistory().finally(() => refreshTranscriptHealth());
   refreshTranscriptHealth();
   if (!transcriptHealthTimer) transcriptHealthTimer = setInterval(() => { if (!document.hidden && !el('aiPage')?.hidden) refreshTranscriptHealth(); }, 15000);
 }
 function stopTranscriptPanel() {
   if (transcriptHealthTimer) { clearInterval(transcriptHealthTimer); transcriptHealthTimer = null; }
+  if (transcriptHistoryRetry) { clearTimeout(transcriptHistoryRetry); transcriptHistoryRetry = null; }
+  transcriptHistoryRequest = null;
+  transcriptHistoryState = 'idle';
+  transcriptHistoryRetryDelay = 1000;
   transcriptStore.clear(); renderTranscript(); transcriptStreamStatus = 'disconnected'; transcriptStatus('Disconnected', 'offline');
 }
 function controls() {
