@@ -254,9 +254,16 @@ async function analyzeFrontDoor(){
  catch(error){frontDoorAnalyzeError="Manual analysis failed: "+smartErrorMessage(error);renderFrontDoorSummary()}
  finally{frontDoorAnalyzeBusy=false;renderFrontDoorSummary()}
 }
+function frontDoorRowIsNoteworthy(row){
+ const analysis=row?.analysis&&typeof row.analysis==="object"?row.analysis:{};
+ if(analysis.noteworthy===false)return false;
+ const description=String(row?.short_description||analysis.short_description||"").trim().toLowerCase();
+ return description!=="empty porch scene";
+}
 function frontDoorRows(){
  const cutoff=Date.now()-14*86400000,now=Date.now();
  return frontDoorEvents.filter(row=>{
+  if(!frontDoorRowIsNoteworthy(row))return false;
   const captured=new Date(row.captured_at||0).getTime();if(!Number.isFinite(captured)||captured<cutoff)return false;
   if(frontDoorView==="trash")return !!row.deleted_at&&new Date(row.trash_expires_at||0).getTime()>now;
   return !row.deleted_at;
@@ -1285,7 +1292,20 @@ function renderHome(){
  document.querySelectorAll("[data-focus-jump]").forEach(b=>b.onclick=()=>setPage(b.dataset.focusJump));
  if(!remindersLoaded){remindersLoaded=true;loadReminders().then(()=>{if(currentPage==="home")renderHome()}).catch(()=>{})}
 }
-document.addEventListener("visibilitychange",()=>{if(!document.hidden)refreshHomeForCurrentDate()});window.addEventListener("focus",refreshHomeForCurrentDate);
+document.addEventListener("visibilitychange",()=>{
+ if(document.hidden)return;
+ refreshHomeForCurrentDate();
+ if(!smartHomeControlAllowed)return;
+ if(currentPage==="home"||currentPage==="devices"){
+  loadSmartHome({silent:true}).catch(()=>{});
+  connectSmartHomeStream();
+ }
+ if(currentPage==="home"||currentPage==="devices"||currentPage==="front-door"){
+  loadFrontDoorState({silent:true,force:true}).then(loaded=>{if(loaded)mergeLoadedFrontDoorState()}).catch(()=>{});
+  refreshFrontDoorFrame().catch(()=>{});
+ }
+ if(currentPage==="front-door")loadFrontDoorEvents({runCleanup:false}).catch(()=>{});
+});window.addEventListener("focus",refreshHomeForCurrentDate);
 function renderImportantEmails(){
  renderEmailQueue("dashboard");
 }
