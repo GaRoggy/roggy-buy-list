@@ -3,31 +3,44 @@ import {readFile} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 const {chromium}=await import(pathToFileURL(process.argv[2]).href);
 const root=new URL('../../',import.meta.url);
-const allowed=['index.html','app.js','monitor-ui.js','styles.css','manifest.json','icon.svg','sw.js','ai-config.js','ai-ui.js','ai/browser/provider.js','ai/shared/protocol.js'];
+const allowed=['index.html','app.js','monitor-ui.js','styles.css','garmin.css','garmin-dashboard.js','manifest.json','icon.svg','sw.js','ai-config.js','ai-ui.js','ai/browser/provider.js','ai/shared/protocol.js'];
 const server=createServer(async(req,res)=>{const name=new URL(req.url,'http://localhost').pathname.slice(1)||'index.html';if(!allowed.includes(name)){res.writeHead(404);res.end();return}res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html');res.end(await readFile(new URL(name,root)))});
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
 let browser;
 try{
- browser=await chromium.launch({headless:true,channel:'msedge'});const page=await browser.newPage({viewport:{width:1280,height:900}});const errors=[];
+ const browserOptions={headless:true,channel:'msedge'};
+ browser=process.env.ROGGY_BROWSER_PROFILE?await chromium.launchPersistentContext(process.env.ROGGY_BROWSER_PROFILE,browserOptions):await chromium.launch(browserOptions);
+ const page=await browser.newPage();await page.setViewportSize({width:1280,height:900});const errors=[];
  page.on('pageerror',e=>errors.push(e.message));
  await page.route('https://**/*',route=>route.fulfill({contentType:'text/javascript',body:''}));
  const ownerId=(await readFile(new URL('app.js',root),'utf8')).match(/const OWNER_USER_ID="([^"]+)"/)[1];
  await page.addInitScript((ownerId)=>{
-  window.__session={user:{id:ownerId,email:'fixture@example.test'}};window.__reads=0;
+  window.__session={user:{id:ownerId,email:'fixture@example.test'}};window.__reads=0;window.__authChanges=[];
   const now=Date.now();
+  window.__garminHealthRows=[
+   {id:'garmin-steps',kind:'health_measurement',external_id:'steps',occurred_at:new Date(now-60000).toISOString(),status:'processed',payload:{metric:'steps',value:8240,unit:'count',source_format:'garmin_export',source_timezone:'America/Chicago',aggregation:'daily_total'}},
+   {id:'garmin-rhr',kind:'health_measurement',external_id:'rhr',occurred_at:new Date(now-120000).toISOString(),status:'processed',payload:{metric:'resting_heart_rate',value:57,unit:'bpm',source_format:'garmin_export',source_timezone:'America/Chicago'}},
+   {id:'garmin-sleep',kind:'health_measurement',external_id:'sleep',occurred_at:new Date(now-3600000).toISOString(),status:'processed',payload:{metric:'sleep_duration',value:26100,unit:'seconds',source_format:'garmin_export',source_timezone:'America/Chicago'}}
+  ];
+  window.__garminActivities=[{id:'garmin-workout',kind:'garmin_activity',external_id:'workout-1',occurred_at:new Date(now-86400000).toISOString(),status:'processed',payload:{activity_type:'run',start_time:new Date(now-86400000).toISOString(),duration_seconds:1800,distance_meters:5000,average_hr_bpm:142,gps_included:false,positionLat:123456,positionLong:654321}}];
+  window.__garminSources=[{id:'garmin-export-source',kind:'garmin',external_id:'official-export-import',enabled:false,interval_seconds:3600,last_success_at:new Date(now-60000).toISOString(),records_processed:4,error_code:null,config:{method:'official_export_import'}}];
+  window.__garminCharts=[];window.Chart=class{constructor(canvas,config){window.__garminCharts.push({id:canvas.id,config});}destroy(){}};
   window.__dashboardRows=Array.from({length:12},(_,i)=>({id:`queue-test-${i+1}`,route:'dashboard',subject:i===0?'<img src=x onerror=alert(1)>':`Fixture subject ${i+1}`,sender:`Fixture sender ${i+1}`,summary:i===0?'Synthetic security message':`Synthetic message ${i+1}`,category:'security',reason:'Synthetic test reason',occurred_at:new Date(now-i*60000).toISOString(),source_message_id:`test-${i+1}`,action_required:true,needs_reply:true,finance_related:false,route_confidence:.94}));
   window.__mailRows=Array.from({length:20},(_,i)=>({id:`queue-mail-${i+1}`,route:'mail',subject:`Reviewable message ${i+1}`,sender:`Uncertain sender ${i+1}`,summary:`Synthetic uncertain message ${i+1}`,category:'personal',reason:'Importance unclear',occurred_at:new Date(now-i*60000).toISOString(),source_message_id:`mail-test-${i+1}`,action_required:false,needs_reply:false,finance_related:false,route_confidence:.68,ambiguity_reason:['personal_context_requires_review']}));
   const chain=(table)=>{let query={};const obj={};for(const method of ['select','eq','neq','gte','lte','is','not','lt','or','order','limit'])obj[method]=(...args)=>{query[args[0]]=args[1];return obj};obj.update=(payload)=>{query.update=payload;return obj};obj.single=()=>{query.single=true;return obj};obj.then=(resolve)=>{
    let data=[];if(table==='reminders'){window.__reads++;const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago'}).format(new Date());data=[{id:'calendar-timed',title:'Band Practice',source:'google_calendar',start_at:new Date(now+60*60*1000).toISOString(),end_at:new Date(now+2*60*60*1000).toISOString(),all_day:false,location:"Paiden's parents house",description:'Synthetic calendar event',cancelled_at:null,hidden_locally:false},{id:'calendar-all-day',title:'Family Dinner',source:'google_calendar',start_date:today,end_date:today,all_day:true,start_at:new Date(now).toISOString(),end_at:new Date(now+24*60*60*1000).toISOString(),cancelled_at:null,hidden_locally:false},{id:'calendar-future',title:'Hog House football',source:'google_calendar',start_at:new Date(now+4*86400000).toISOString(),end_at:new Date(now+4*86400000+7200000).toISOString(),all_day:false,cancelled_at:null,hidden_locally:false},{id:'manual-reminder',title:'Pay rent',source:'manual',start_at:new Date(now+30*60*1000).toISOString(),end_at:null,all_day:false,description:'Manual note',cancelled_at:null,hidden_locally:false},{id:'calendar-cancelled',title:'Cancelled event',source:'google_calendar',start_at:new Date(now+5*86400000).toISOString(),end_at:null,all_day:false,cancelled_at:new Date().toISOString(),hidden_locally:false}]}
-   if(table==='monitor_sources')data=[{kind:'gmail',enabled:true,interval_seconds:300,last_success_at:new Date().toISOString()}];
+   if(table==='monitor_sources')data=query.kind==='garmin'?window.__garminSources:[{kind:'gmail',enabled:true,interval_seconds:300,last_success_at:new Date().toISOString()}];
+   if(table==='monitor_records')data=query.kind==='health_measurement'?window.__garminHealthRows:query.kind==='garmin_activity'?window.__garminActivities:[];
    if(table==='monitor_email_queue')data=query.route==='dashboard'?window.__dashboardRows:query.route==='mail'?window.__mailRows:[];
    if(table==='reminders'&&query.update)data=[{id:query.id||'manual-reminder',title:query.update.title||'Updated manual',source:'manual',start_at:query.update.start_at,end_at:query.update.end_at,all_day:query.update.all_day,location:query.update.location,description:query.update.description,cancelled_at:null,hidden_locally:false}];
    return Promise.resolve({data:query.single&&Array.isArray(data)?data[0]:data,error:null}).then(resolve);
   };return obj};
-  window.supabase={createClient:()=>({from:chain,rpc:async(name,args)=>{if(name==='dismiss_monitor_email'){for(const list of [window.__dashboardRows,window.__mailRows]){const index=list.findIndex(row=>row.id===args.p_queue_id);if(index>=0)list.splice(index,1)}return {data:true,error:null}}if(name==='set_monitor_email_route'){const source=window.__mailRows.findIndex(row=>row.id===args.p_queue_id);if(source<0)return {data:false,error:null};const [row]=window.__mailRows.splice(source,1);row.route=args.p_route;if(args.p_route==='dashboard')window.__dashboardRows.push(row);return {data:true,error:null}}return {data:null,error:null}},auth:{getSession:async()=>({data:{session:window.__session}}),onAuthStateChange:fn=>{window.__authChange=fn},signOut:async()=>({}),signInWithOAuth:async()=>({data:{}})}})};
+  window.supabase={createClient:()=>({from:chain,rpc:async(name,args)=>{if(name==='dismiss_monitor_email'){for(const list of [window.__dashboardRows,window.__mailRows]){const index=list.findIndex(row=>row.id===args.p_queue_id);if(index>=0)list.splice(index,1)}return {data:true,error:null}}if(name==='set_monitor_email_route'){const source=window.__mailRows.findIndex(row=>row.id===args.p_queue_id);if(source<0)return {data:false,error:null};const [row]=window.__mailRows.splice(source,1);row.route=args.p_route;if(args.p_route==='dashboard')window.__dashboardRows.push(row);return {data:true,error:null}}return {data:null,error:null}},auth:{getSession:async()=>({data:{session:window.__session}}),onAuthStateChange:fn=>{window.__authChanges.push(fn);return {data:{subscription:{unsubscribe(){}}}}},signOut:async()=>({}),signInWithOAuth:async()=>({data:{}})}})};
  },ownerId);
  await page.goto(`http://127.0.0.1:${server.address().port}`);await page.getByText('Synthetic security message',{exact:false}).waitFor();
  if(process.argv[4])await page.screenshot({path:process.argv[4],fullPage:true});
+ if(await page.locator('#homePage .garmin-main, #homePage .garmin-metric-card, #homePage .garmin-chart-card, #homePage [id^="garmin"]').count())throw Error('Garmin components appeared on the Command Center');
+ if(/Garmin|Body Battery|sleep score|resting heart rate|\bHRV\b/i.test(await page.locator('#homePage').innerText()))throw Error('Garmin statistics appeared on the Command Center');
  if(await page.locator('#importantEmailList img').count())throw Error('Unsafe HTML');
  if(await page.locator('#importantEmailList [data-email-card-id]').count()!==10)throw Error('Dashboard queue did not enforce the 10-card limit');
  if(await page.locator('#importantEmailList [data-email-card-id="queue-test-1"]').count()!==1)throw Error('Newest email was not first');
@@ -35,7 +48,7 @@ try{
  await page.locator('#importantEmailList [data-email-dismiss="queue-test-4"]').click();
  await page.waitForFunction(()=>document.querySelectorAll('#importantEmailList [data-email-card-id]').length===10&&document.querySelector('#importantEmailList [data-email-card-id="queue-test-11"]'));
  if(await page.locator('#importantEmailList [data-email-card-id="queue-test-4"]').count())throw Error('Dismissed email remained visible');
- if(await page.locator('#primaryPageTabs button[data-page="mail"]').count()!==1)throw Error('Mail was not promoted to primary navigation');
+ if(await page.locator('.drawer-page-tab[data-page="mail"]').count()!==1)throw Error('Mail shelf was missing from the drawer');
  if(await page.getByText('Finance',{exact:true}).count()<1)throw Error('Finance label missing');
  await page.locator('#homeTimeline').getByText('Band Practice',{exact:true}).waitFor();
  await page.locator('#homeTimeline [data-home-jump="reminders"]').first().click();await page.locator('#remindersPage:not([hidden])').waitFor();
@@ -65,6 +78,18 @@ try{
  if(await page.locator('#mailQueueList [data-email-card-id="queue-mail-4"]').count())throw Error('Dismissed Mail item remained visible');
  if(await page.locator('#mailNavCount').textContent()!=='10')throw Error('Mail count badge did not update');
  await page.evaluate(()=>{window.__mailRows.length=0;loadEmailQueue('mail',{reset:true})});await page.locator('#mailQueueList .quiet-state').waitFor();if(!(await page.locator('#mailQueueList').textContent()).includes('No emails need review'))throw Error('Mail empty state missing');
+ await page.locator('label.header-menu').click();await page.locator('.drawer-category[data-category-key="tracking"] .drawer-category-toggle').click();await page.locator('#drawerTracking [data-page="health"]').click();await page.locator('#healthPage:not([hidden])').waitFor();
+ await page.locator('#garminMetricCards .garmin-metric-card').first().waitFor();
+ if(!(await page.locator('#garminMetricCards').textContent()).includes("Today's steps"))throw Error('Garmin dashboard did not identify current-day steps');
+ if(await page.locator('.garmin-chart-card').count()!==9)throw Error('Garmin trend charts did not render');
+ if(!await page.evaluate(()=>window.__garminCharts.some(chart=>chart.id==='garminChartSteps')))throw Error('Garmin step chart did not receive data');
+ if(await page.locator('#garminSyncNow').isEnabled())throw Error('Garmin automatic sync was enabled without an approved API source');
+ await page.locator('#garminWorkoutList [data-workout-index="0"]').click();await page.locator('#garminActivityDialog[open]').waitFor();
+ if(!(await page.locator('#garminActivityDetail').textContent()).includes('5.0 km'))throw Error('Garmin workout detail is missing its summary metrics');
+ if(/positionLat|positionLong|123456|654321/.test(await page.locator('#healthPage').textContent()))throw Error('Garmin dashboard exposed precise route coordinates');
+ await page.locator('#garminActivityClose').click();
+ await page.setViewportSize({width:390,height:844});if(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1))throw Error('Garmin mobile layout overflows');await page.setViewportSize({width:1280,height:900});
+ if(process.env.ROGGY_GARMIN_SCREENSHOT)await page.screenshot({path:process.env.ROGGY_GARMIN_SCREENSHOT,fullPage:true});
  await page.evaluate(()=>document.querySelector('button[data-page="ai"]').click());
  await page.locator('#aiPage:not([hidden])').waitFor();
  if(!/(Setup|Not connected|AI unavailable|Connecting)/.test(await page.locator('#aiConnection').textContent()))throw Error('AI setup state missing');
@@ -72,11 +97,11 @@ try{
  if(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1))throw Error('Mobile layout overflows');
  await page.setViewportSize({width:1280,height:900});
  if(process.argv[3])await page.screenshot({path:process.argv[3],fullPage:true});
- await page.evaluate(()=>{window.__session=null;window.__authChange('SIGNED_OUT',null)});
+ await page.evaluate(()=>{window.__session=null;window.__authChanges.forEach(fn=>fn('SIGNED_OUT',null))});
  await page.locator('#privacyGate').waitFor();
  if(!(await page.locator('#privacyGate').isVisible()))throw Error('Privacy gate did not lock after sign-out');
  if(await page.locator('#importantEmailList').textContent().then(t=>t.includes('Fixture sender')))throw Error('Private state survived signout');
  if(await page.evaluate(()=>window.__reads)>4)throw Error('Reminder fetch loop');
  if(errors.length)throw Error(errors.join('; '));
- console.log('UI checks passed: Mail shelf/detail/reclassification/dismissal/refill/empty state, Calendar/manual reminder details, Today/Upcoming filtering, manual edit/complete, HTML escaping, sign-out clearing, mobile layout, no page exceptions.');
+ console.log('UI checks passed: Garmin Tracking shelf/dashboard/cards/charts/workout detail/privacy/sync gate; Mail queues; Calendar/manual reminders; HTML escaping; sign-out clearing; mobile layout; no page exceptions.');
 }finally{await browser?.close();server.close()}

@@ -2,6 +2,7 @@ const SUPABASE_URL="https://dplvxsniyqkwlmdzqbyg.supabase.co";
 const SUPABASE_KEY="sb_publishable_4WYS4v4U7PSgXesYNNJUfA_69lJaBX1";
 const KEY="roggy-lists-v1";
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{flowType:"pkce",detectSessionInUrl:true,persistSession:true,autoRefreshToken:true}});
+window.roggySupabase=sb;
 const $=id=>document.getElementById(id);
 const PROJECT_KEY="roggy-projects-v1";
 let projects=JSON.parse(localStorage.getItem(PROJECT_KEY)||"[]");
@@ -1196,7 +1197,7 @@ function setPage(page){
  else if(page==="mail"){ $("pageTitle").textContent="Mail";$("pageSubtitle").textContent="Possibly important messages.";$("addBtn").style.display="none";loadEmailQueue("mail"); }
  else if(page==="ai"){ $("pageTitle").textContent="Local AI";$("pageSubtitle").textContent="A private conversation with your PC.";$("addBtn").style.display="none"; }
  else if(page==="projects"){ $("pageTitle").textContent="Projects";$("pageSubtitle").textContent="Everything with a finish line.";renderProjects(); }
- else if(page==="health"){ $("pageTitle").textContent="Health";$("pageSubtitle").textContent="Garmin-powered wellness."; $("addBtn").style.display="none"; }
+ else if(page==="health"){ $("pageTitle").textContent="Garmin";$("pageSubtitle").textContent="Private health and activity records."; $("addBtn").style.display="none"; }
  else if(page==="vehicle"){ $("pageTitle").textContent="Vehicle";$("pageSubtitle").textContent="Maintenance and ownership."; $("addBtn").style.display="none"; }
  else if(page==="drivers"){ $("pageTitle").textContent="Bad Drivers";$("pageSubtitle").textContent="Track observations and compare demographics.";loadDrivers() }
  else if(page==="reminders"){ $("pageTitle").textContent="Reminders";$("pageSubtitle").textContent="What is coming up.";loadReminders() }
@@ -1238,6 +1239,7 @@ document.querySelectorAll("[data-add-target]").forEach(b=>b.onclick=()=>launchAd
 $("backupBtn").onclick=()=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="roggy-lists-backup.json";a.click();URL.revokeObjectURL(a.href)};
 
 const OWNER_USER_ID="9c1fcb62-644b-486a-9f87-36246e2e50de";
+window.ROGGY_OWNER_USER_ID=OWNER_USER_ID;
 function isOwnerSession(session){return !!session?.user&&session.user.id===OWNER_USER_ID}
 window.roggyGetSession=()=>sb.auth.getSession();
 function setPrivacyGate(session){

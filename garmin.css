@@ -1,0 +1,40 @@
+.garmin-main{max-width:1320px;margin:0 auto;padding:18px 16px calc(90px + env(safe-area-inset-bottom));display:grid;gap:16px;color:var(--ink,#24143d)}
+.garmin-intro{margin:0;padding:20px;border:1px solid rgba(255,255,255,.78);border-radius:24px;background:linear-gradient(135deg,rgba(255,255,255,.92),color-mix(in srgb,var(--accent-pale,#f3e8ff) 64%,white));box-shadow:0 12px 34px rgba(91,33,182,.08)}
+.garmin-intro h2{margin:4px 0 5px;font-size:clamp(23px,4vw,34px);letter-spacing:-.035em;color:var(--ink,#24143d)}
+.garmin-intro p{max-width:64ch;margin:0;color:var(--muted,#756987);font-size:13px;line-height:1.55}
+.garmin-status-card,.garmin-chart-card,.garmin-workout-card,.garmin-import-help{border:1px solid rgba(125,85,174,.13);border-radius:20px;background:rgba(255,255,255,.82);box-shadow:0 8px 26px rgba(56,32,80,.06)}
+.garmin-status-card{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:17px 18px;background:linear-gradient(120deg,rgba(255,255,255,.9),color-mix(in srgb,var(--accent-pale,#f3e8ff) 42%,white))}
+.garmin-status-copy{display:grid;gap:4px;min-width:0}.garmin-status-copy>b{font-size:15px;line-height:1.35}.garmin-status-copy>p{margin:0;color:var(--muted,#756987);font-size:11px;line-height:1.45}
+.garmin-controls{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}.garmin-controls button{min-height:40px}.garmin-controls button:disabled{opacity:.48;cursor:not-allowed}
+.garmin-delete-button{border:1px solid rgba(185,28,28,.2);border-radius:12px;padding:10px 13px;background:#fff7f7;color:#991b1b;font-size:12px;font-weight:850}
+#garminPageStatus{min-height:16px;padding:0 2px;margin:0;color:var(--muted,#756987)}
+.garmin-metric-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.garmin-metric-card{min-width:0;min-height:108px;padding:15px;border:1px solid rgba(125,85,174,.12);border-radius:18px;background:rgba(255,255,255,.87);box-shadow:0 8px 24px rgba(56,32,80,.05);display:grid;align-content:space-between;gap:10px}
+.garmin-metric-card span{font-size:10px;line-height:1.3;font-weight:850;letter-spacing:.06em;text-transform:uppercase;color:var(--muted,#756987)}
+.garmin-metric-card b{font-size:clamp(20px,2.1vw,27px);line-height:1.05;letter-spacing:-.035em;overflow-wrap:anywhere;color:var(--ink,#24143d)}
+.garmin-metric-card small{font-size:9px;line-height:1.35;color:var(--muted,#756987)}
+.garmin-section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:4px 2px 10px}
+.garmin-section-head h3{margin:3px 0;font-size:21px;letter-spacing:-.025em;color:var(--ink,#24143d)}
+.garmin-section-head p{margin:3px 0 0;color:var(--muted,#756987);font-size:11px;line-height:1.4}
+.garmin-range-label{display:grid;gap:4px;min-width:112px;color:var(--muted,#756987);font-size:10px;font-weight:800}
+.garmin-range-label select{padding:8px 10px;border:1px solid color-mix(in srgb,var(--accent,#6d28d9) 18%,#ddd);border-radius:11px;background:white;color:var(--ink,#24143d);font-size:12px}
+.garmin-chart-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}
+.garmin-chart-card{min-width:0;min-height:260px;padding:15px 15px 11px;position:relative}
+.garmin-chart-card h4{margin:0 0 12px;font-size:13px;color:var(--ink,#24143d)}
+.garmin-chart-card canvas{display:block;width:100%!important;height:208px!important}
+.garmin-chart-empty{position:absolute;left:15px;right:15px;top:50%;margin:0;transform:translateY(-30%);color:var(--muted,#756987);font-size:11px;text-align:center}
+.garmin-workout-section{min-width:0}.garmin-workout-list{display:grid;gap:8px}
+.garmin-workout-card{width:100%;padding:13px 15px;text-align:left;color:var(--ink,#24143d);display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px}
+.garmin-workout-card:hover,.garmin-workout-card:focus-visible{border-color:color-mix(in srgb,var(--accent,#6d28d9) 32%,white);box-shadow:0 8px 26px rgba(91,33,182,.12);outline:none}
+.garmin-workout-card b{font-size:13px}.garmin-workout-card span,.garmin-workout-card small{display:block;color:var(--muted,#756987);font-size:10px;line-height:1.5}.garmin-workout-card strong{font-size:11px;color:var(--accent,#6d28d9);white-space:nowrap}
+.garmin-empty-state{padding:16px;border:1px dashed rgba(125,85,174,.26);border-radius:16px;background:rgba(255,255,255,.5);color:var(--muted,#756987);font-size:12px;line-height:1.5}
+.garmin-import-help{padding:14px 16px;color:var(--muted,#756987);font-size:11px;line-height:1.6}
+.garmin-import-help summary{cursor:pointer;color:var(--ink,#24143d);font-size:12px;font-weight:850}
+.garmin-import-help p{margin:10px 0 0}.garmin-import-help code{padding:2px 4px;border-radius:5px;background:var(--accent-pale,#f3e8ff);color:var(--accent,#6d28d9);overflow-wrap:anywhere}
+.garmin-activity-dialog{max-width:min(94vw,520px);padding:0;color:var(--ink,#24143d)}.garmin-activity-detail{padding:21px}.garmin-activity-detail h3{margin:2px 0 5px}.garmin-activity-detail p{margin:0;color:var(--muted,#756987);font-size:11px}.garmin-activity-values{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:15px 0}.garmin-activity-values div{padding:11px;border-radius:12px;background:var(--accent-pale,#f3e8ff);display:grid;gap:3px}.garmin-activity-values span{font-size:9px;color:var(--muted,#756987)}.garmin-activity-values b{font-size:14px}
+html[data-mode="dark"] .garmin-status-card,html[data-mode="dark"] .garmin-chart-card,html[data-mode="dark"] .garmin-workout-card,html[data-mode="dark"] .garmin-import-help,html[data-mode="dark"] .garmin-metric-card{background:rgba(34,25,48,.88);border-color:rgba(216,180,254,.13);color:#f5efff}
+html[data-mode="dark"] .garmin-intro{background:linear-gradient(135deg,rgba(34,25,48,.94),rgba(91,33,182,.24));border-color:rgba(216,180,254,.16)}
+html[data-mode="dark"] .garmin-intro h2,html[data-mode="dark"] .garmin-metric-card b,html[data-mode="dark"] .garmin-section-head h3,html[data-mode="dark"] .garmin-chart-card h4,html[data-mode="dark"] .garmin-workout-card{color:#f5efff}
+html[data-mode="dark"] .garmin-range-label select{background:#20172c;color:#f5efff}
+@media(max-width:1000px){.garmin-metric-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.garmin-chart-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.garmin-main{padding:10px 10px calc(86px + env(safe-area-inset-bottom));gap:12px}.garmin-intro{padding:17px;border-radius:20px}.garmin-status-card{align-items:flex-start;flex-direction:column;padding:15px}.garmin-controls{width:100%;justify-content:stretch}.garmin-controls button{flex:1 1 28%;padding-inline:8px;font-size:11px}.garmin-metric-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.garmin-metric-card{min-height:96px;padding:12px;border-radius:15px}.garmin-section-head{align-items:flex-start;flex-direction:column}.garmin-range-label{width:100%;grid-template-columns:auto minmax(0,1fr);align-items:center}.garmin-range-label select{width:100%}.garmin-chart-grid{grid-template-columns:1fr;gap:9px}.garmin-chart-card{min-height:245px;padding:14px}.garmin-chart-card canvas{height:196px!important}.garmin-workout-card{padding:12px}.garmin-workout-card strong{font-size:10px}.garmin-import-help{padding:13px}}

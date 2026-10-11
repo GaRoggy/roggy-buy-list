@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="polish.css?v=109">
 <link rel="stylesheet" href="network.css?v=1">
 <link rel="stylesheet" href="pc-health.css?v=2">
+<link rel="stylesheet" href="garmin.css?v=2">
 <link rel="apple-touch-icon" href="icon.svg?v=2">
 </head>
 <body>
@@ -94,9 +95,21 @@
     </div>
   </section>
 
+  <section class="drawer-category" data-drawer-category data-category-key="tracking">
+    <button class="drawer-category-toggle" type="button" aria-expanded="false" aria-controls="drawerTracking">
+      <span class="drawer-category-leading">
+        <span class="drawer-category-icon" aria-hidden="true">♥</span>
+        <span class="drawer-category-copy"><b>Tracking</b><small>Health and activity</small></span>
+      </span>
+      <span class="drawer-category-meta"><span class="drawer-category-count">1</span><span class="drawer-category-chevron" aria-hidden="true">⌄</span></span>
+    </button>
+    <div id="drawerTracking" class="drawer-category-items" hidden>
+      <button class="page-tab drawer-page-tab" data-page="health" onclick="document.getElementById('moreToggle').checked=false"><span>Garmin</span></button>
+    </div>
+  </section>
+
   <div class="drawer-secondary-label">Coming later</div>
   <div class="under-construction-group">
-    <button class="drawer-page-tab under-construction-item" type="button" disabled><span>Health</span><small>Garmin</small></button>
     <button class="drawer-page-tab under-construction-item" type="button" disabled><span>Vehicle</span><small>Coming soon</small></button>
   </div>
 
@@ -244,7 +257,52 @@
     <p id="pcHealthPageStatus" class="status" role="status"></p>
   </main>
 </section>
-<section id="healthPage" hidden><main class="system-main"><div class="system-intro"><span class="eyebrow">GARMIN CONNECT</span><h2>Health</h2><p>Your wellness dashboard is ready for Garmin data.</p></div><div class="metric-grid"><div><span>Sleep</span><b>—</b><small>Connect data</small></div><div><span>Body Battery</span><b>—</b><small>Connect data</small></div><div><span>Resting HR</span><b>—</b><small>Connect data</small></div><div><span>Stress</span><b>—</b><small>Connect data</small></div></div><div class="system-card"><b>Health trends</b><p>Sleep, HRV, stress, activity and workouts will live here with day / week / month views and correlations.</p></div></main></section>
+<section id="healthPage" hidden>
+  <main class="garmin-main">
+    <div class="garmin-intro system-intro">
+      <span class="eyebrow">GARMIN CONNECT</span><h2>Your health and activity</h2>
+      <p>Private, read-only records from Garmin exports or an approved Garmin data connection.</p>
+    </div>
+    <section class="garmin-status-card" aria-live="polite">
+      <div class="garmin-status-copy"><span class="eyebrow">CONNECTION</span><b id="garminConnectionStatus">Checking Garmin data…</b><p id="garminFreshness">No synchronized records yet.</p></div>
+      <div class="garmin-controls">
+        <button id="garminSyncNow" class="primary" type="button" disabled title="Automatic sync needs approved Garmin API access">Sync now</button>
+        <button id="garminImportCsv" class="secondary" type="button">Import CSV</button>
+        <input id="garminCsvFile" type="file" accept=".csv,text/csv" hidden>
+        <button id="garminDeleteData" class="garmin-delete-button" type="button" disabled>Delete Garmin data</button>
+      </div>
+    </section>
+    <p id="garminPageStatus" class="status" role="status" aria-live="polite"></p>
+    <section id="garminMetricCards" class="garmin-metric-grid" aria-label="Latest Garmin measurements"></section>
+    <section class="garmin-chart-section">
+      <div class="garmin-section-head"><div><span class="eyebrow">PERSONAL HISTORY</span><h3>Health trends</h3><p>Charts use imported measurements and show the recorded values.</p></div>
+        <label class="garmin-range-label">Range<select id="garminRange"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option></select></label>
+      </div>
+      <div class="garmin-chart-grid">
+        <article class="garmin-chart-card" data-metric="resting_heart_rate"><h4>Resting heart rate</h4><canvas id="garminChartRestingHeartRate" aria-label="Resting heart rate trend"></canvas><p class="garmin-chart-empty" hidden>No resting heart rate records in this range.</p></article>
+        <article class="garmin-chart-card" data-metric="sleep_duration"><h4>Sleep duration</h4><canvas id="garminChartSleepDuration" aria-label="Sleep duration trend"></canvas><p class="garmin-chart-empty" hidden>No sleep duration records in this range.</p></article>
+        <article class="garmin-chart-card" data-metric="sleep_score"><h4>Sleep score</h4><canvas id="garminChartSleepScore" aria-label="Sleep score trend"></canvas><p class="garmin-chart-empty" hidden>No sleep score records in this range.</p></article>
+        <article class="garmin-chart-card" data-metric="hrv"><h4>HRV</h4><canvas id="garminChartHrv" aria-label="Heart rate variability trend"></canvas><p class="garmin-chart-empty" hidden>No HRV records in this range.</p></article>
+        <article class="garmin-chart-card" data-metric="body_battery"><h4>Body Battery</h4><canvas id="garminChartBodyBattery" aria-label="Body Battery trend"></canvas><p class="garmin-chart-empty" hidden>No Body Battery records in this range.</p></article>
+        <article class="garmin-chart-card" data-metric="stress"><h4>Stress</h4><canvas id="garminChartStress" aria-label="Daily stress trend"></canvas><p class="garmin-chart-empty" hidden>No stress records in this range.</p></article>
+        <article class="garmin-chart-card" data-metric="steps"><h4>Steps</h4><canvas id="garminChartSteps" aria-label="Daily steps trend"></canvas><p class="garmin-chart-empty" hidden>No step records in this range.</p></article>
+        <article class="garmin-chart-card" data-metric="calories"><h4>Calories burned</h4><canvas id="garminChartCalories" aria-label="Daily calories trend"></canvas><p class="garmin-chart-empty" hidden>No calorie records in this range.</p></article>
+        <article class="garmin-chart-card" data-metric="training_load"><h4>Training load</h4><canvas id="garminChartTrainingLoad" aria-label="Training load trend"></canvas><p class="garmin-chart-empty" hidden>No training load records in this range.</p></article>
+      </div>
+    </section>
+    <section class="garmin-workout-section">
+      <div class="garmin-section-head"><div><span class="eyebrow">ACTIVITY</span><h3>Recent workouts</h3></div></div>
+      <div id="garminWorkoutList" class="garmin-workout-list"></div>
+    </section>
+    <details class="garmin-import-help"><summary>Import an export or troubleshoot the connection</summary>
+      <p>For a CSV, select an activity export or a Garmin health report. The selected file is sent to your private Supabase function for normalization; only normalized records are retained. For local-only parsing, or for a full account archive and FIT files, extract the ZIP on the Windows desktop and run the local importer in dry-run mode first:</p>
+      <code>npm run garmin:import -- "C:\path\to\extracted-garmin-export"</code>
+      <p>After reviewing the row count, coverage, and supported metrics, add <code>--apply</code> to save the normalized records to the private Roggy database. Garmin API access remains off until Garmin approves a developer account and provides its endpoint contract.</p>
+      <p id="garminSyncHistory">Historical import status will appear here after a successful import.</p>
+    </details>
+    <dialog id="garminActivityDialog" class="garmin-activity-dialog"><div id="garminActivityDetail"></div><button id="garminActivityClose" class="secondary" type="button">Close</button></dialog>
+  </main>
+</section>
 <section id="vehiclePage" hidden><main class="system-main"><div class="vehicle-hero"><div><span class="eyebrow">MY VEHICLE</span><h2>2021 Toyota RAV4</h2><p>Maintenance, mileage, documents and accessories.</p></div><span class="vehicle-icon">◇</span></div><div class="metric-grid"><div><span>Mileage</span><b>—</b><small>Tap to add</small></div><div><span>Oil</span><b>—</b><small>No record yet</small></div><div><span>Tires</span><b>—</b><small>No record yet</small></div><div><span>Next due</span><b>—</b><small>All clear</small></div></div><div class="system-card"><b>Maintenance history</b><p>Add mileage and service records here. Upcoming mileage- and date-based maintenance will surface on Home.</p></div></main></section>
 
 <section id="aiPage" hidden>
@@ -527,7 +585,8 @@
 <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
 <script src="ai-config.js?v=45"></script>
 <script>window.ROGGY_AI_CONFIG=window.ROGGY_AI_CONFIG||Object.freeze({"bridgeUrl":"https://desktop-movehp4.tail990d14.ts.net","smartHomeUrl":"https://desktop-movehp4.tail990d14.ts.net/smart-home","transcriptTimeZone":"America/Chicago"});</script>
-<script src="app.js?v=125"></script>
+<script src="app.js?v=126"></script>
+<script type="module" src="garmin-dashboard.js?v=2"></script>
 <script src="push-notifications.js?v=3"></script>
 <script src="monitor-ui.js?v=53"></script>
 <script src="todos.js?v=65"></script>

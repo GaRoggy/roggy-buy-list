@@ -2,9 +2,11 @@
   "name": "roggy-lists",
   "private": true,
   "type": "module",
-  "engines": {"node": ">=24"},
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
-    "test": "node --test monitor/test/*.test.mjs ai/test/*.test.mjs",
+    "test": "node --experimental-strip-types --test monitor/test/*.test.mjs ai/test/*.test.mjs",
     "build": "node scripts/build.mjs",
     "ollama-bridge": "node --env-file=.env ai/bridge/server.mjs",
     "ai:configure": "node --env-file=.env scripts/configure-ai.mjs",
@@ -14,7 +16,12 @@
     "calibrate:email": "node --env-file=.env monitor/calibrate-email.mjs",
     "reclassify:email": "node --env-file=.env monitor/reclassify-email.mjs",
     "google:auth": "node --env-file=.env monitor/google-auth.mjs",
+    "garmin:import": "node --env-file-if-exists=.env monitor/garmin-import.mjs",
+    "test:garmin": "node --experimental-strip-types --test monitor/test/garmin-import.test.mjs monitor/test/health.test.mjs monitor/test/garmin-control.test.mjs",
     "gmail:setup": "node --env-file=.env monitor/setup.mjs gmail",
     "google:services": "node --env-file=.env monitor/setup.mjs google-services"
+  },
+  "dependencies": {
+    "@garmin/fitsdk": "21.217.0"
   }
 }

@@ -38,7 +38,7 @@ async function main() {
     if(!env.PLAID_ITEM_ID||!env.PLAID_ACCESS_TOKEN)throw new MonitorError('PLAID_AUTH_REQUIRED');
     await add('finance',env.PLAID_ITEM_ID,3600,true);
   }else if(mode==='brief')await add('brief','daily',900,true);
-  else if(mode==='garmin')await add('garmin','pending-official-access',1800,false);
+  else if(mode==='garmin')await add('garmin','pending-official-access',3600,false);
   else throw new MonitorError('USAGE_SETUP_GMAIL_GOOGLE_SERVICES_FINANCE_BRIEF_GARMIN_OR_LIST_CALENDARS');
   console.log('Source configuration saved. Run the worker once and inspect the dashboard status.');
 }
