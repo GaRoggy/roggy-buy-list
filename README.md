@@ -115,10 +115,10 @@ The official [Garmin Connect Developer Program](https://developer.garmin.com/gc-
 
 ### Import an official Garmin export
 
-The **Tracking → Garmin** page supports selecting a Garmin health-report or activity CSV through the deployed, JWT-verified `garmin-control` Edge Function. The selected CSV is sent to that authenticated function for normalization; only normalized, allow-listed records are retained in the existing private `monitor_records` and `monitor_sources` tables. Raw exports, filenames, and precise GPS routes are not persisted. For local-only parsing, larger account archives, and FIT files, download the official Garmin account export, extract it locally, and preview supported CSV/FIT rows with:
+The **Tracking → Garmin** page supports selecting a Garmin health-report or activity CSV through the deployed, JWT-verified `garmin-control` Edge Function. The selected CSV is sent to that authenticated function for normalization; only normalized, allow-listed records are retained in the existing private `monitor_records` and `monitor_sources` tables. Raw exports, filenames, and precise GPS routes are not persisted. For local-only parsing, larger account archives, and FIT files, download the official Garmin account export, extract its files under the Git-ignored `monitor/garmin-import/` directory, and preview supported CSV/FIT rows with:
 
 ```powershell
-npm run garmin:import -- "C:\path\to\extracted-garmin-export"
+npm run garmin:import -- "C:\Codex\roggy-buy-list\monitor\garmin-import"
 ```
 
 The command is a local dry run by default and reports row count, metrics, date coverage, and skipped-row warnings. After reviewing that preview, add `--apply` to persist normalized rows using the local monitor credentials in `.env`. The official [Garmin export instructions](https://support.garmin.com/en-US/?faq=W1TvTPW8JZ6LfJSfK512Q8) describe the ZIP export and its original FIT, activity CSV, and wellness files. ZIP extraction is intentionally a separate user step.

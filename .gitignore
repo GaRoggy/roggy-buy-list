@@ -11,3 +11,4 @@ coverage/
 *.log
 dist/
 test-results/
+monitor/garmin-import/
