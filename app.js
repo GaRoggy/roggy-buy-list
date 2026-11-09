@@ -409,6 +409,7 @@ function renderDeviceDiagnostics(){
 }
 function deviceTypeLabel(device){return smartStateLabel(device?.type||"device")}
 function deviceSubcategoryLabel(device){const value=device?.subcategory||device?.category;return value?smartStateLabel(value):""}
+function deviceSubcategoryId(device){return String(device?.subcategory||device?.category||"").trim().toLowerCase().replace(/[\s-]+/g,"_").replace(/[^a-z0-9_]/g,"")}
 function deviceBrightness(device){const value=device?.attributes?.brightness;return Number.isFinite(Number(value))?Math.max(0,Math.min(100,Math.round(Number(value)))):null}
 function devicePowerState(device){
  const raw=device?.state??device?.attributes?.power;
@@ -459,10 +460,10 @@ function deviceControlsMarkup(device){
  if(locked&&capabilities.some(x=>["power","brightness"].includes(x)))html+=`<p class="device-control-note">Sign in to control devices.</p>`;
  return html||`<div class="device-info-row"><span>State</span><b>${esc(deviceOnline(device)?smartStateLabel(device.state):"Offline")}</b></div>`;
 }
-function deviceCardMarkup(device){
+function deviceCardMarkup(device,{showSubcategory=true}={}){
  const tone=deviceStatusTone(device),id=esc(device.device_id);
  if(isFrontDoorCamera(device))return `<article class="device-card camera-device-card ${tone!=="online"?"device-offline":""}" id="device-card-${id}" data-device-card="${id}"><button type="button" class="camera-device-open" data-camera-open="front-door"><div class="device-card-head"><div><h3>Front Door Cam</h3><p>Camera · Front Door / Porch</p></div><span class="device-status-badge ${tone}">${tone==="online"?"Online":tone==="stale"?"Stale":"Offline"}</span></div><div class="device-current-state"><span>Person status</span><b>${esc(deviceStatusLine(device))}</b></div><div class="device-updated">${esc(device.attributes?.analysis_description||deviceFreshnessLine(device))}</div><span class="camera-device-link">Open camera shelf →</span></button></article>`;
- const subcategory=deviceSubcategoryLabel(device),labels=[deviceTypeLabel(device),subcategory,smartStateLabel(deviceRoomId(device))].filter(Boolean);
+ const subcategory=showSubcategory?deviceSubcategoryLabel(device):"",labels=[deviceTypeLabel(device),subcategory,smartStateLabel(deviceRoomId(device))].filter(Boolean);
  return `<article class="device-card ${tone!=="online"?"device-offline":""}" id="device-card-${id}" data-device-card="${id}"><div class="device-card-head"><div><h3>${esc(device.friendly_name||device.device_id)}</h3><p>${labels.map(esc).join(" · ")}</p></div><span class="device-status-badge ${tone}">${tone==="online"?"Online":tone==="stale"?"Stale":"Offline"}</span></div><div class="device-current-state"><span>Current state</span><b>${esc(deviceStatusLine(device))}</b></div><div class="device-controls">${deviceControlsMarkup(device)}</div><div class="device-updated">${esc(deviceFreshnessLine(device))}</div></article>`;
 }
 function canonicalRoomId(value){
@@ -495,6 +496,17 @@ function deviceRoomId(device,memberships=roomMembershipIndex()){
  return roomIdFromFriendlyName(device?.friendly_name||device?.canonical_name)||"unassigned";
 }
 function roomDevices(room){return Array.isArray(room?.devices)?room.devices:smartHomeState.devices.filter(device=>deviceRoomId(device)===(room.room_id||"unassigned"))}
+function roomDeviceSectionsMarkup(room){
+ const ordered=roomDevices(room).slice().sort((a,b)=>(deviceStatusTone(a)==="online"?1:-1)-(deviceStatusTone(b)==="online"?1:-1));
+ const categories=new Map(),uncategorized=[];
+ for(const device of ordered){const category=deviceSubcategoryId(device);if(!category){uncategorized.push(device);continue}if(!categories.has(category))categories.set(category,[]);categories.get(category).push(device)}
+ if(!categories.size)return `<div class="device-grid">${ordered.map(device=>deviceCardMarkup(device)).join("")}</div>`;
+ const roomId=canonicalRoomId(room.room_id)||"unassigned";
+ const sectionMarkup=(key,label,devices,category)=>{const headingId=`device-category-${roomId}-${key}`;return `<section class="device-subcategory-group" data-device-category="${esc(key)}" aria-labelledby="${esc(headingId)}"><div class="device-subcategory-head"><div><span class="eyebrow">${category?"CATEGORY":"OTHER DEVICES"}</span><h4 id="${esc(headingId)}">${esc(label)}</h4></div><span class="room-presence-badge">${devices.length} device${devices.length===1?"":"s"}</span></div><div class="device-grid">${devices.map(device=>deviceCardMarkup(device,{showSubcategory:false})).join("")}</div></section>`};
+ const sections=[...categories.entries()].sort((a,b)=>deviceSubcategoryLabel(a[1][0]).localeCompare(deviceSubcategoryLabel(b[1][0]),"en",{sensitivity:"base"})).map(([key,devices])=>sectionMarkup(key,deviceSubcategoryLabel(devices[0]),devices,true));
+ if(uncategorized.length)sections.push(sectionMarkup("other_devices","Other Devices",uncategorized,false));
+ return sections.join("");
+}
 function smartHomeRooms(){
  const memberships=roomMembershipIndex(),byId=new Map();
  for(const source of (smartHomeState.rooms||[])){
@@ -584,7 +596,7 @@ function renderDevicesPage(){
  if(!smartHomeState.devices.length){summary.innerHTML="";rooms.innerHTML='<div class="system-card"><b>No devices configured</b><p>Add a device to Layne’s registry and it will appear here automatically.</p></div>';return}
  const grouped=smartHomeRooms();
  summary.innerHTML=grouped.map(room=>`<button type="button" class="device-room-summary-card" data-room-jump="${esc(room.room_id)}"><span>${esc(roomDisplayName(room))}</span><b>${room.online_devices??roomDevices(room).filter(device=>deviceOnline(device)).length}/${room.device_count??roomDevices(room).length}</b><small>online · ${esc(roomHealthLine(room))}</small></button>`).join("");
- rooms.innerHTML=grouped.map(room=>{const roomState=roomPresenceLabel(room);return `<section class="device-room" id="smart-room-${esc(room.room_id)}" data-room-section="${esc(room.room_id)}"><div class="device-room-head"><div><span class="eyebrow">ROOM</span><h3>${esc(roomDisplayName(room))}</h3></div><span class="room-presence-badge ${roomState==="Offline"||roomState.includes("stale")?"offline":""}">${esc(roomState)}</span></div><div class="device-grid">${roomDevices(room).slice().sort((a,b)=>(deviceStatusTone(a)==="online"?1:-1)-(deviceStatusTone(b)==="online"?1:-1)).map(device=>deviceCardMarkup(device)).join("")}</div></section>`}).join("");
+ rooms.innerHTML=grouped.map(room=>{const roomState=roomPresenceLabel(room);return `<section class="device-room" id="smart-room-${esc(room.room_id)}" data-room-section="${esc(room.room_id)}"><div class="device-room-head"><div><span class="eyebrow">ROOM</span><h3>${esc(roomDisplayName(room))}</h3></div><span class="room-presence-badge ${roomState==="Offline"||roomState.includes("stale")?"offline":""}">${esc(roomState)}</span></div>${roomDeviceSectionsMarkup(room)}</section>`}).join("");
  bindDeviceControls();
  bindHomeDeviceLinks();
 }

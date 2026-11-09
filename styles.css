@@ -321,6 +321,9 @@ html[data-mode="dark"] .drawer-backdrop,html[data-mode="dark"] .settings-backdro
 .room-presence-badge.offline,.device-status-badge.offline{background:#fee2e2;color:#991b1b}
 .device-status-badge.online{background:#dcfce7;color:#166534}
 .device-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px}
+.device-subcategory-group{margin-top:14px;padding-top:13px;border-top:1px solid color-mix(in srgb,var(--accent) 12%,transparent)}
+.device-subcategory-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.device-subcategory-head h4{margin:2px 0 0;font-size:16px}
 .device-card{padding:15px;background:color-mix(in srgb,var(--surface) 82%,var(--accent-pale));border:1px solid color-mix(in srgb,var(--accent) 12%,transparent);border-radius:23px 15px 25px 17px;min-width:0}
 .device-card.device-offline{opacity:.82}
 .device-card.device-highlight{animation:device-card-pulse 1.5s ease both}
