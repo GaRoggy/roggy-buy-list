@@ -1915,3 +1915,26 @@ img,video,canvas{max-width:100%}
   .section-head h3{font-size:17px}
   .text-action{padding-inline:9px!important}
 }
+
+/* Compact home controls and room-wide lighting. */
+.home-control-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,235px),1fr))!important;gap:6px!important}
+.home-control-card{display:grid!important;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;padding:7px 9px!important;border-radius:12px!important;min-height:42px}
+.home-control-card.device-offline{opacity:.78}
+.home-control-copy{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+.home-control-copy b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px!important;line-height:1.2}
+.home-control-state{flex:none;color:var(--muted);font-size:10px;white-space:nowrap}
+.home-power-toggle{display:flex;gap:3px;padding:2px;border:1px solid color-mix(in srgb,var(--accent) 12%,transparent);border-radius:999px;background:color-mix(in srgb,var(--surface) 75%,transparent)}
+.home-power-toggle .device-action{min-width:39px;padding:5px 8px;border-radius:999px;font-size:10px;line-height:1.1}
+.room-light-controls{display:grid;gap:8px;margin:0 0 10px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--accent) 13%,transparent);border-radius:15px;background:color-mix(in srgb,var(--surface) 78%,var(--accent-pale))}
+.room-light-controls-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.room-light-copy{display:grid;gap:2px;min-width:0}
+.room-light-copy h4{margin:0;font-size:14px;line-height:1.2}
+.room-light-copy p{margin:1px 0 0;color:var(--muted);font-size:10px}
+.room-light-power{display:flex;flex:none;gap:5px}
+.room-light-power .device-action{min-width:52px;padding:7px 10px}
+.room-brightness-control{display:grid;gap:4px}
+.room-brightness-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.room-brightness-heading label{color:var(--muted);font-size:10px;font-weight:750}
+.room-brightness-heading output{color:var(--accent);font-size:11px;font-weight:850}
+.room-brightness-control .device-range{height:22px}
+@media(max-width:420px){.home-control-grid{grid-template-columns:1fr!important}.room-light-controls-head{align-items:flex-start}.room-light-power .device-action{min-width:46px;padding:7px 8px}}
