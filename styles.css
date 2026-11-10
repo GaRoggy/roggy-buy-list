@@ -321,6 +321,9 @@ html[data-mode="dark"] .drawer-backdrop,html[data-mode="dark"] .settings-backdro
 .room-presence-badge.offline,.device-status-badge.offline{background:#fee2e2;color:#991b1b}
 .device-status-badge.online{background:#dcfce7;color:#166534}
 .device-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px}
+.device-subcategory-group{margin-top:14px;padding-top:13px;border-top:1px solid color-mix(in srgb,var(--accent) 12%,transparent)}
+.device-subcategory-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.device-subcategory-head h4{margin:2px 0 0;font-size:16px}
 .device-card{padding:15px;background:color-mix(in srgb,var(--surface) 82%,var(--accent-pale));border:1px solid color-mix(in srgb,var(--accent) 12%,transparent);border-radius:23px 15px 25px 17px;min-width:0}
 .device-card.device-offline{opacity:.82}
 .device-card.device-highlight{animation:device-card-pulse 1.5s ease both}
@@ -1914,3 +1917,26 @@ img,video,canvas{max-width:100%}
 }
 
 .front-door-image-retry{margin:0 0 8px}
+/* Room controls on Home use status rows, matching the Network and PC cards. */
+.home-control-grid{display:grid;grid-template-columns:1fr!important;gap:0!important}
+.home-control-card{display:grid!important;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;min-height:50px;padding:6px 2px!important;border:0!important;border-top:1px solid color-mix(in srgb,var(--accent2) 12%,var(--line))!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}
+.home-control-card:first-child{border-top:0!important}
+.home-control-card.device-offline{opacity:.78}
+.home-control-copy{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;min-width:0}
+.home-control-copy b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px!important;line-height:1.2}
+.home-control-state{flex:none;color:var(--muted);font-size:11px;white-space:nowrap}
+.home-power-toggle{display:flex;gap:3px;padding:2px;border:1px solid color-mix(in srgb,var(--accent) 12%,transparent);border-radius:999px;background:color-mix(in srgb,var(--surface) 75%,transparent)}
+.home-power-toggle .device-action{min-width:42px;padding:6px 9px;border-radius:999px;font-size:11px;line-height:1.1}
+.room-light-controls{display:grid;gap:8px;margin:0 0 10px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--accent) 13%,transparent);border-radius:15px;background:color-mix(in srgb,var(--surface) 78%,var(--accent-pale))}
+.room-light-controls-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.room-light-copy{display:grid;gap:2px;min-width:0}
+.room-light-copy h4{margin:0;font-size:14px;line-height:1.2}
+.room-light-copy p{margin:1px 0 0;color:var(--muted);font-size:10px}
+.room-light-power{display:flex;flex:none;gap:5px}
+.room-light-power .device-action{min-width:52px;padding:7px 10px}
+.room-brightness-control{display:grid;gap:4px}
+.room-brightness-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.room-brightness-heading label{color:var(--muted);font-size:10px;font-weight:750}
+.room-brightness-heading output{color:var(--accent);font-size:11px;font-weight:850}
+.room-brightness-control .device-range{height:22px}
+@media(max-width:420px){.home-control-card{grid-template-columns:minmax(0,1fr) auto;gap:6px}.home-control-copy{grid-template-columns:minmax(0,1fr) auto;gap:6px}.home-control-copy b{font-size:12px!important}.home-power-toggle .device-action{min-width:38px;padding:6px 7px}.room-light-controls-head{align-items:flex-start}.room-light-power .device-action{min-width:46px;padding:7px 8px}}
