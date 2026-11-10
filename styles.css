@@ -935,17 +935,6 @@ html[data-swipe-direction="prev"] .swipe-neighbor{border-left:0;border-right:1px
 @media(max-width:500px){.swipe-edge{font-size:20px}.swipe-progress-track{left:22%;right:22%}.page-tab.active::after{left:29%;right:29%}}
 @media(prefers-reduced-motion:reduce){.is-settling .page-tab.active{animation:none!important}.swipe-dots{transition:none!important}}
 
-/* Swipe landing stability v101 */
-.swipe-land-lock{
- position:fixed!important;
- top:var(--swipe-land-top)!important;
- left:0!important;
- right:0!important;
- bottom:auto!important;
- width:100%!important;
- margin-top:0!important;
- transform:translate3d(0,0,0)!important;
-}
 .is-settling .swipe-panel,.is-settling .swipe-neighbor{overflow-anchor:none}
 
 /* Swipe HUD must never change page geometry v102 */
@@ -1940,3 +1929,17 @@ img,video,canvas{max-width:100%}
 .room-brightness-heading output{color:var(--accent);font-size:11px;font-weight:850}
 .room-brightness-control .device-range{height:22px}
 @media(max-width:420px){.home-control-card{grid-template-columns:minmax(0,1fr) auto;gap:6px}.home-control-copy{grid-template-columns:minmax(0,1fr) auto;gap:6px}.home-control-copy b{font-size:12px!important}.home-power-toggle .device-action{min-width:38px;padding:6px 7px}.room-light-controls-head{align-items:flex-start}.room-light-power .device-action{min-width:46px;padding:7px 8px}}
+
+/* Keep mobile page swipes on stable transform-only surfaces. */
+html{background:#140a29!important}
+.swipe-panel,.swipe-neighbor{
+ opacity:1!important;
+ filter:none!important;
+ contain:none!important;
+ backface-visibility:visible!important;
+ -webkit-backface-visibility:visible!important;
+}
+.swipe-panel.swipe-animating,.swipe-neighbor.swipe-animating{transition:transform 360ms cubic-bezier(.2,.76,.2,1)!important}
+.is-swiping .swipe-panel,.is-swiping .swipe-neighbor{transition:none!important}
+.mountain-panorama{filter:none!important;backface-visibility:visible!important;-webkit-backface-visibility:visible!important}
+.is-swiping .mountain-panorama,.is-settling .mountain-panorama{transition:none!important}

@@ -1599,9 +1599,9 @@ document.addEventListener("keydown",e=>{
 
 /* Primary-page live panorama navigation. PRIMARY_PAGES is the only source of
    page order/count; all gesture and background math is derived from it. */
-const SWIPE_COMMIT_RATIO=.25,SWIPE_FAST_DISTANCE_RATIO=.14,SWIPE_PARALLAX=.78,SWIPE_EDGE_RESISTANCE=.16,SWIPE_GLIDE_MS=420;
+const SWIPE_COMMIT_RATIO=.25,SWIPE_FAST_DISTANCE_RATIO=.14,SWIPE_PARALLAX=.78,SWIPE_EDGE_RESISTANCE=.16,SWIPE_GLIDE_MS=360;
 let swipeStartX=0,swipeStartY=0,swipeLastX=0,swipeTracking=false,swipeAxis=null,swipeNeighbor=null,swipeNeighborPage=null,swipePointerId=null,swipeStartTime=0,swipeLastTime=0,swipeVelocityX=0;
-let swipeVisualCurrent=null,swipeSettleTimer=null;
+let swipeVisualCurrent=null,swipeSettleTimer=null,swipeSettleCleanup=null;
 function swipeViewport(){
  const page=primaryPageElement(currentPage),rect=page?.getBoundingClientRect(),root=document.documentElement;
  return {width:Math.max(1,Math.round(root.clientWidth||document.body?.clientWidth||rect?.width||1)),height:Math.max(1,Math.round(window.visualViewport?.height||root.clientHeight||document.body?.clientHeight||1))};
@@ -1656,9 +1656,12 @@ function updateSwipeHUD(page=currentPage,progress=0,direction=0){
 }
 function swipeBlockedTarget(t){return !!t.closest("dialog,input,textarea,select,a,[contenteditable=true],.fab,.layne-chat-fab,.side-drawer")}
 function clearSwipeStyles(){
- [swipeVisualCurrent,primaryPageElement(currentPage),swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating","swipe-land-lock");el.style.removeProperty("--panel-x");el.style.removeProperty("--swipe-opacity")});
+ clearTimeout(swipeSettleTimer);swipeSettleTimer=null;
+ if(swipeSettleCleanup){swipeSettleCleanup();swipeSettleCleanup=null}
+ [swipeVisualCurrent,primaryPageElement(currentPage),swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating");el.style.removeProperty("--panel-x")});
  if(swipeNeighbor&&swipeNeighborPage!==currentPage)swipeNeighbor.hidden=true;
  swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-swiping","is-settling","swipe-ready");document.documentElement.dataset.swipeDirection="idle";
+ document.documentElement.style.removeProperty("--swipe-land-top");
  updateSwipeHUD(currentPage,0,0);
 }
 function prepareSwipeNeighbor(direction){
@@ -1681,15 +1684,15 @@ function positionSwipePanels(dx){
  swipeVisualCurrent=current;updateSwipeHUD(currentPage,progress,direction);
  const atEdge=(idx===0&&direction<0)||(idx===PRIMARY_PAGES.length-1&&direction>0);
  if(atEdge){
-  document.documentElement.classList.add("is-swiping");current.classList.add("swipe-panel");current.style.setProperty("--panel-x",(dx*SWIPE_EDGE_RESISTANCE)+"px");current.style.setProperty("--swipe-opacity","1");setMountainView(currentPage,0);return;
+  document.documentElement.classList.add("is-swiping");current.classList.add("swipe-panel");current.style.setProperty("--panel-x",(dx*SWIPE_EDGE_RESISTANCE)+"px");setMountainView(currentPage,0);return;
  }
  if(!swipeNeighbor||swipeNeighborPage!==PRIMARY_PAGES[idx+direction].id){
   if(swipeNeighbor&&swipeNeighborPage!==currentPage)swipeNeighbor.hidden=true;
   swipeNeighbor=null;swipeNeighborPage=null;if(!prepareSwipeNeighbor(direction))return;
  }
  document.documentElement.classList.add("is-swiping");
- current.classList.add("swipe-panel");current.style.setProperty("--panel-x",dx+"px");current.style.setProperty("--swipe-opacity",(1-Math.min(.08,Math.abs(dx)/width*.08)).toFixed(3));
- if(swipeNeighbor){swipeNeighbor.style.setProperty("--panel-x",(dx+direction*width)+"px");swipeNeighbor.style.setProperty("--swipe-opacity",(.94+Math.min(.06,Math.abs(dx)/width*.06)).toFixed(3))}
+ current.classList.add("swipe-panel");current.style.setProperty("--panel-x",dx+"px");
+ if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x",(dx+direction*width)+"px");
  setMountainView(currentPage,dx);
 }
 function settleSwipe(commit,dx){
@@ -1703,14 +1706,21 @@ function settleSwipe(commit,dx){
    if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x","0px");
    setMountainView(target,0);
   }));
-  clearTimeout(swipeSettleTimer);swipeSettleTimer=setTimeout(()=>{
-   const landed=swipeNeighbor;
-   if(landed){const r=landed.getBoundingClientRect();document.documentElement.style.setProperty("--swipe-land-top",r.top+"px");landed.classList.add("swipe-land-lock")}
-   if(current&&current!==landed)current.hidden=true;
-   if(landed){landed.classList.remove("swipe-neighbor","swipe-animating");landed.style.removeProperty("--panel-x");landed.style.removeProperty("--swipe-opacity")}
-   swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-settling","is-swiping","swipe-ready");syncPageNavigation(target);
-   requestAnimationFrame(()=>requestAnimationFrame(()=>{if(landed)landed.classList.remove("swipe-panel","swipe-land-lock");document.documentElement.style.removeProperty("--swipe-land-top");updateSwipeHUD(target,0,0);setMountainView(target,0)}));
-  },SWIPE_GLIDE_MS);
+  const landed=swipeNeighbor,finishCommittedSwipe=()=>{
+   clearTimeout(swipeSettleTimer);swipeSettleTimer=null;
+   if(swipeSettleCleanup){swipeSettleCleanup();swipeSettleCleanup=null}
+   if(!landed||swipeNeighbor!==landed||swipeNeighborPage!==target)return;
+   window.scrollTo(0,0);
+   const tabs=document.querySelector(".page-tabs"),headerBottom=(tabs?.getBoundingClientRect().bottom||document.querySelector("header")?.getBoundingClientRect().bottom||0)+(parseFloat(getComputedStyle(tabs||document.documentElement).marginBottom)||0);
+   document.documentElement.style.setProperty("--swipe-page-top",Math.max(0,headerBottom)+"px");
+   document.querySelectorAll(".primary-page").forEach(el=>{el.hidden=el!==landed});
+   [current,landed].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating");el.style.removeProperty("--panel-x")});
+   swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-settling","is-swiping","swipe-ready");document.documentElement.style.removeProperty("--swipe-land-top");syncPageNavigation(target);updateSwipeHUD(target,0,0);setMountainView(target,0);
+  };
+  const onTransitionEnd=event=>{if(event.target===landed&&event.propertyName==="transform")finishCommittedSwipe()};
+  landed?.addEventListener("transitionend",onTransitionEnd);
+  swipeSettleCleanup=()=>landed?.removeEventListener("transitionend",onTransitionEnd);
+  clearTimeout(swipeSettleTimer);swipeSettleTimer=setTimeout(finishCommittedSwipe,SWIPE_GLIDE_MS+120);
  }else{
   updateSwipeHUD(currentPage,0,0);
   requestAnimationFrame(()=>requestAnimationFrame(()=>{if(current)current.style.setProperty("--panel-x","0px");if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x",(direction*width)+"px");setMountainView(currentPage,0)}));
@@ -1730,9 +1740,9 @@ function finishSwipe(){
 function beginPrimarySwipe(x,y,target,pointerId=null){
  if(swipeBlockedTarget(target)||!isPrimaryPage(currentPage))return false;
  if(document.documentElement.classList.contains("is-settling")){
-   clearTimeout(swipeSettleTimer);[swipeVisualCurrent,swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating","swipe-land-lock");el.style.removeProperty("--panel-x");el.style.removeProperty("--swipe-opacity")});
+   clearSwipeStyles();
    document.querySelectorAll(".primary-page").forEach(el=>el.hidden=el!==primaryPageElement(currentPage));
-   swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-settling");syncPageNavigation(currentPage);
+   syncPageNavigation(currentPage);
  }
  clearSwipeStyles();swipeStartX=swipeLastX=x;swipeStartY=y;swipeStartTime=swipeLastTime=performance.now();swipeVelocityX=0;swipeTracking=true;swipeAxis=null;swipePointerId=pointerId;return true;
 }
