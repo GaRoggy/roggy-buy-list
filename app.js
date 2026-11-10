@@ -372,7 +372,10 @@ function renderFrontDoorEvents(){
  root.innerHTML=rows.length?rows.map(row=>`<button type="button" class="front-door-event-card" data-front-door-event="${esc(row.id)}"><span class="front-door-event-thumb" data-front-door-thumbnail="${esc(row.id)}">${frontDoorThumbnailPlaceholder(row)}</span><span class="front-door-event-copy"><b>${esc(row.short_description||"Front door scene")}</b><small>${esc(row.camera_name||"Front Door Cam")} · ${esc(cameraLocationLabel(row.location))}</small></span><time>${esc(smartTime(row.captured_at))}</time></button>`).join(""):'<div class="system-card"><b>'+ (frontDoorView==="trash"?'Recently Deleted is empty.':'No Front Door events in the last 14 days.')+'</b><p>Meaningful retained camera events will appear here automatically.</p></div>';
  root.querySelectorAll("[data-front-door-event]").forEach(button=>button.onclick=()=>openFrontDoorDetail(button.dataset.frontDoorEvent));
  if(status)status.textContent=frontDoorLoadError?"Cloud history unavailable; showing the local camera event stream.":frontDoorView==="trash"?"Trash expires at the earlier of 7 days after deletion or 14 days after capture.":"Newest events first · images retained for 14 days.";
- if(rows.length)hydrateFrontDoorThumbnails(rows,thumbnailToken).catch(()=>{});
+ if(rows.length){
+  try{hydrateFrontDoorThumbnails(rows,thumbnailToken)}
+  catch(error){console.warn("camera_frontend_thumbnail_setup_error",{message:error?.message||"unknown"})}
+ }
  renderFrontDoorSummary();
 }
 async function loadFrontDoorEvents({runCleanup=true}={}){
