@@ -1912,3 +1912,15 @@ img,video,canvas{max-width:100%}
   .section-head h3{font-size:17px}
   .text-action{padding-inline:9px!important}
 }
+
+/* Keep primary page slides composited without opacity, filter, or backface layers. */
+html{background-color:#140a29!important}
+.swipe-panel,.swipe-neighbor{opacity:1!important;filter:none!important;contain:none!important;transform-style:flat!important;backface-visibility:visible!important;-webkit-backface-visibility:visible!important;box-shadow:none!important}
+.swipe-panel{will-change:auto!important;transition:none!important;transform:translateX(var(--panel-x,0px))!important}
+.swipe-panel.swipe-animating,.swipe-neighbor.swipe-animating{transition:transform 280ms cubic-bezier(.2,.75,.25,1)!important}
+.swipe-neighbor{background:transparent!important}
+.is-swiping .swipe-panel,.is-swiping .swipe-neighbor,.is-settling .swipe-panel,.is-settling .swipe-neighbor{will-change:transform!important}
+.is-swiping .swipe-panel,.is-swiping .swipe-neighbor{transition:none!important}
+.mountain-panorama{will-change:auto!important;filter:none!important;backface-visibility:visible!important;-webkit-backface-visibility:visible!important;transition:transform 280ms cubic-bezier(.2,.75,.25,1)!important;transform:translate(var(--panorama-x,0px),var(--panorama-y,0px))!important}
+.is-swiping .mountain-panorama{will-change:transform!important;transition:none!important}
+@media(prefers-reduced-motion:reduce){.swipe-panel.swipe-animating,.swipe-neighbor.swipe-animating,.mountain-panorama{transition:none!important}}
