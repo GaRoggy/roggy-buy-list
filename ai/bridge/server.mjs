@@ -194,7 +194,7 @@ async function smartHomeDiagnostics(cfg, fetcher, signal) {
   };
   const [statusProbe, voiceProbe, layneProbe] = await Promise.all([
     safeProbe(cfg.smartHome + '/status'),
-    safeProbe(cfg.smartHome + '/diagnostics'),
+    safeProbe(cfg.smartHome + '/diagnostics/voice'),
     token ? safeProbe(cfg.localAgent + '/health', { Authorization: 'Bearer ' + token }) : Promise.resolve({ response: null }),
   ]);
   try {
