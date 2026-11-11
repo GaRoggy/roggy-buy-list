@@ -13,6 +13,6 @@ test('live transcript history cannot silently remain empty during stream startup
   assert.match(transcriptUi, /Transcript history unavailable/);
   assert.match(transcriptUi, /loadTranscriptHistory\(\)\.finally\(\(\) => refreshTranscriptHealth\(\)\)/);
   assert.match(transcriptUi, /Listening · transcript feed live/);
-  assert.match(serviceWorker, /const CACHE='roggy-lists-v83'/);
-  assert.match(serviceWorker, /ai-ui\.js\?v=46/);
+  assert.match(serviceWorker, /const CACHE='roggy-lists-v90'/);
+  assert.match(serviceWorker, /ai-ui\.js\?v=47/);
 });

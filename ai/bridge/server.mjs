@@ -47,7 +47,7 @@ function remoteFailure(payload, fallbackCode, fallbackMessage, status, operation
 }
 
 const SMART_HOME_PREFIX = '/smart-home';
-const SMART_HOME_PATH = /^\/(?:devices(?:\/[A-Za-z0-9._~%+\-]+(?:\/actions)?)?|rooms(?:\/[A-Za-z0-9._~%+\-]+)?|events\/(?:history|stream))$/;
+const SMART_HOME_PATH = /^\/(?:devices(?:\/[A-Za-z0-9._~%+\-]+(?:\/actions)?)?|rooms(?:\/[A-Za-z0-9._~%+\-]+)?|events\/(?:history|stream)|transcripts\/(?:history|stream))$/;
 const CONFIRMATION_PATH = /^\/confirmations\/[A-Za-z0-9._~%+\-]+$/;
 const CAMERA_PREFIX = '/camera';
 const CAMERA_SNAPSHOT_NAME = /^front_door_[0-9_-]+\.jpg$/;
@@ -65,9 +65,9 @@ function smartHomeRequest(reqUrl, requestMethod = null) {
   }
   if (!SMART_HOME_PATH.test(path)) throw new AIError('SMART_HOME_ROUTE_NOT_FOUND', 404);
   const isAction = path.endsWith('/actions');
-  const isStream = path === '/events/stream';
+  const isStream = path.endsWith('/stream');
   const method = isAction ? 'POST' : 'GET';
-  if (parsed.search && path === '/events/stream') return { kind: 'proxy', method, path: `/api${path}`, search: parsed.search };
+  if (parsed.search && isStream) return { kind: 'proxy', method, path: `/api${path}`, search: parsed.search };
   return { kind: 'proxy', method, path: `/api${path}`, search: parsed.search, stream: isStream };
 }
 
@@ -187,9 +187,19 @@ async function smartHomeDiagnostics(cfg, fetcher, signal) {
       return await fetcher(url, { method: 'GET', headers, redirect: 'error', signal: AbortSignal.any([signal, timeout.signal]) });
     } finally { clearTimeout(timer); }
   };
+  const token = await localAgentToken(cfg);
+  const safeProbe = async (url, headers) => {
+    try { return { response: await probe(url, headers) }; }
+    catch (error) { return { error }; }
+  };
+  const [statusProbe, voiceProbe, layneProbe] = await Promise.all([
+    safeProbe(cfg.smartHome + '/status'),
+    safeProbe(cfg.smartHome + '/diagnostics'),
+    token ? safeProbe(cfg.localAgent + '/health', { Authorization: 'Bearer ' + token }) : Promise.resolve({ response: null }),
+  ]);
   try {
-    const response = await probe(`${cfg.smartHome}/status`);
-    if (!response.ok) throw new Error(`smart_home_${response.status}`);
+    const response = statusProbe.response;
+    if (!response?.ok) throw statusProbe.error || new Error('smart_home_' + (response?.status || 'unavailable'));
     const body = await response.json();
     result.smart_home = { status: body?.status === 'ok' ? 'online' : 'degraded' };
     result.devices = Array.isArray(body?.devices) ? body.devices.map(device => ({
@@ -211,22 +221,42 @@ async function smartHomeDiagnostics(cfg, fetcher, signal) {
     ).toJSON();
     result.smart_home = { status: 'offline', reason: 'network_error', error: detail };
   }
-  const token = await localAgentToken(cfg);
+  try {
+    const response = voiceProbe.response;
+    if (!response?.ok) throw voiceProbe.error || new Error('smart_home_diagnostics_' + (response?.status || 'unavailable'));
+    const body = await response.json();
+    const bridge = body?.agent_bridge || {}, voice = body?.voice || {}, whisper = voice.whisper || {};
+    result.agent_bridge = { configured_microphones: bridge.configured_microphones };
+    result.voice = {
+      status: voice.status,
+      state: voice.state,
+      all_audio_streams_healthy: voice.all_audio_streams_healthy,
+      microphone_count: voice.microphone_count,
+      connected_microphone_count: voice.connected_microphone_count,
+      microphones: Array.isArray(voice.microphones) ? voice.microphones.map(microphone => ({
+        microphone_id: microphone.microphone_id, friendly_name: microphone.friendly_name,
+        room: microphone.room, connected: microphone.connected,
+        audio_stream_healthy: microphone.audio_stream_healthy, vad_loaded: microphone.vad_loaded,
+        last_audio_age_seconds: microphone.last_audio_age_seconds,
+      })) : [],
+      whisper: { model: whisper.model, ready: whisper.ready, active_jobs: whisper.active_jobs, queue: whisper.queue },
+    };
+  } catch {
+    result.agent_bridge = { status: 'unavailable' };
+    result.voice = { status: 'unavailable' };
+  }
   if (!token) result.layne = { status: 'unknown', reason: 'not_configured' };
-  else {
-    try {
-      const response = await probe(`${cfg.localAgent}/health`, { Authorization: `Bearer ${token}` });
-      result.layne = { status: response.ok ? 'online' : 'offline' };
-    } catch (error) {
-      const detail = error instanceof AIError ? error.toJSON() : new AIError(
-        'LAYNE_UNAVAILABLE', 503, { operation: 'layne.health', cause: error?.name || 'FetchError' },
-      ).toJSON();
-      result.layne = { status: 'offline', reason: 'network_error', error: detail };
-    }
+  else if (layneProbe.response) {
+    result.layne = { status: layneProbe.response.ok ? 'online' : 'offline' };
+  } else {
+    const error = layneProbe.error;
+    const detail = error instanceof AIError ? error.toJSON() : new AIError(
+      'LAYNE_UNAVAILABLE', 503, { operation: 'layne.health', cause: error?.name || 'FetchError' },
+    ).toJSON();
+    result.layne = { status: 'offline', reason: 'network_error', error: detail };
   }
   return result;
 }
-
 async function proxySmartHome(req, res, cfg, fetcher, signal, route) {
   const target = new URL(`${route.path}${route.search || ''}`, `${cfg.smartHome}/`);
   const headers = { Accept: req.headers.accept || 'application/json', Authorization: req.headers.authorization };
