@@ -90,8 +90,10 @@ async function refreshTranscriptHealth() {
   try { applyTranscriptHealth(await window.roggySmartHomeTranscriptStream.diagnostics()); }
   catch { transcriptStatus('Disconnected', 'offline'); }
 }
+function transcriptVisible() { return !el('homePage')?.hidden || !el('aiPage')?.hidden; }
+function placeTranscriptPanel(page) { const panel = el('liveTranscriptTitle')?.closest('.live-transcript-panel'); const host = el(page === 'home' ? 'homeTranscriptHost' : 'aiTranscriptHost'); if (panel && host && panel.parentElement !== host) host.appendChild(panel); }
 function scheduleTranscriptHistoryRetry(delay = transcriptHistoryRetryDelay) {
-  if (transcriptHistoryRetry || !signedIn || el('aiPage')?.hidden) return;
+  if (transcriptHistoryRetry || !signedIn || !transcriptVisible()) return;
   transcriptHistoryRetry = setTimeout(() => {
     transcriptHistoryRetry = null;
     loadTranscriptHistory().finally(() => refreshTranscriptHealth());
@@ -161,7 +163,7 @@ function startTranscriptPanel() {
   stream?.connect?.();
   loadTranscriptHistory().finally(() => refreshTranscriptHealth());
   refreshTranscriptHealth();
-  if (!transcriptHealthTimer) transcriptHealthTimer = setInterval(() => { if (!document.hidden && !el('aiPage')?.hidden) refreshTranscriptHealth(); }, 15000);
+  if (!transcriptHealthTimer) transcriptHealthTimer = setInterval(() => { if (!document.hidden && transcriptVisible()) refreshTranscriptHealth(); }, 15000);
 }
 function stopTranscriptPanel() {
   if (transcriptHealthTimer) { clearInterval(transcriptHealthTimer); transcriptHealthTimer = null; }
@@ -255,12 +257,12 @@ el('aiStop').onclick = () => generation?.abort();
 el('aiClear').onclick = () => { clearConversation(); if (signedIn) refresh(); };
 el('aiRefresh').onclick = refresh;
 el('aiModel').onchange = () => { try { localStorage.setItem('roggy-ai-model', el('aiModel').value); } catch {} controls(); };
-window.addEventListener('roggy-page', e => { if (e.detail.page === 'ai') { refresh(); startTranscriptPanel(); } else stopTranscriptPanel(); });
+window.addEventListener('roggy-page', e => { if (e.detail.page === 'ai' || e.detail.page === 'home') { placeTranscriptPanel(e.detail.page); if (e.detail.page === 'ai') refresh(); startTranscriptPanel(); } else stopTranscriptPanel(); });
 function authChanged(session) {
   const authorized = isOwnerSession(session);
   if (!authorized) { checking?.abort(); checking = null; clearConversation(); online = false; status('Sign in required', 'offline'); stopTranscriptPanel(); }
   signedIn = authorized; controls(); if (signedIn && !el('aiPage').hidden) refresh();
-  if (signedIn && !el('aiPage').hidden) startTranscriptPanel();
+  if (signedIn && transcriptVisible()) { placeTranscriptPanel(!el('homePage').hidden ? 'home' : 'ai'); startTranscriptPanel(); }
 }
 window.addEventListener('roggy-auth', e => { if (!e.detail.signedIn) authChanged(null); else setTimeout(() => sb.auth.getSession().then(({data}) => authChanged(data.session)).catch(() => authChanged(null)), 0); });
 sb.auth.getSession().then(({ data }) => authChanged(data.session)).catch(() => authChanged(null));

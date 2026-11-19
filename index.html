@@ -208,6 +208,12 @@
     </section><section class="home-section device-status-section"><div class="section-head"><div><span class="eyebrow">SMART HOME</span><h3>Lights & Controls</h3></div><button class="text-action" data-home-jump="devices">Device shelf</button></div><div id="homeDeviceStatus" class="home-device-status"></div><p id="homeControlStatus" class="status" role="status"></p></section>
     <section class="home-section email-section"><div class="section-head"><div><span class="eyebrow">EMAIL</span><h3>Action Required</h3></div><span class="mail-filter-badge">Last 21 days</span></div><div id="importantEmailList" class="important-email-list"></div></section>
     <section class="home-section front-door-home-section"><div class="section-head"><div><span class="eyebrow">FRONT DOOR CAM</span><h3>Camera status</h3></div><button class="text-action" data-home-jump="front-door">Open shelf</button></div><div class="front-door-dashboard-card"><div class="front-door-dashboard-copy"><b id="homeFrontDoorState">—</b><p id="homeFrontDoorDescription">Loading camera status…</p><small id="homeFrontDoorAnalysisTime">—</small></div><div class="front-door-frame-wrap compact"><img id="homeFrontDoorFrame" class="front-door-frame" alt="Front Door camera live view" hidden><div id="homeFrontDoorFrameEmpty" class="quiet-state">Sign in to view the private camera.</div></div></div><p id="homeFrontDoorStatus" class="front-door-status" role="status"></p></section>
+    <div id="homeTranscriptHost" class="home-section">      <section class="live-transcript-panel" aria-labelledby="liveTranscriptTitle">
+        <div class="live-transcript-heading"><div><span class="eyebrow">LIVE VOICE</span><h3 id="liveTranscriptTitle">What Layne hears</h3></div><span id="liveTranscriptStatus" class="live-transcript-status" data-state="offline" role="status">Disconnected</span></div>
+        <div class="live-transcript-toolbar"><label class="live-transcript-filter" for="liveTranscriptFilter">Microphone<select id="liveTranscriptFilter"><option value="all">All microphones</option></select></label><button type="button" id="liveTranscriptLatest" class="secondary">Jump to latest</button></div>
+        <div id="liveTranscriptLog" class="live-transcript-log" role="log" aria-live="polite" aria-label="Live Whisper transcript"></div>
+        <p id="liveTranscriptEmpty" class="live-transcript-empty">Nothing heard in the last 5 minutes.</p>
+      </section></div>
   </main>
 </section>
 
@@ -332,18 +338,13 @@
         <label for="aiPrompt">Message</label><textarea id="aiPrompt" rows="3" maxlength="12000" placeholder="Ask your local AI…" autocomplete="off" required aria-describedby="aiKeyboard"></textarea>
         <div class="ai-compose-actions"><small id="aiKeyboard">Enter for a new line · Ctrl/⌘ + Enter to send</small><span id="aiGenerating" role="status" hidden>Generating…</span><button id="aiStop" type="button" hidden>Stop</button><button id="aiSend" class="ai-send" type="submit" disabled>Send ↗</button></div>
       </form>
-      <section class="live-transcript-panel" aria-labelledby="liveTranscriptTitle">
-        <div class="live-transcript-heading"><div><span class="eyebrow">LIVE VOICE</span><h3 id="liveTranscriptTitle">What Layne hears</h3></div><span id="liveTranscriptStatus" class="live-transcript-status" data-state="offline" role="status">Disconnected</span></div>
-        <div class="live-transcript-toolbar"><label class="live-transcript-filter" for="liveTranscriptFilter">Microphone<select id="liveTranscriptFilter"><option value="all">All microphones</option></select></label><button type="button" id="liveTranscriptLatest" class="secondary">Jump to latest</button></div>
-        <div id="liveTranscriptLog" class="live-transcript-log" role="log" aria-live="polite" aria-label="Live Whisper transcript"></div>
-        <p id="liveTranscriptEmpty" class="live-transcript-empty">Nothing heard in the last 5 minutes.</p>
-      </section>
+      <div id="aiTranscriptHost"></div>
     </section>
   </main>
 </section>
 
 <section id="listsPage">
-  <nav class="sub-tabs"><button class="sub-tab active" data-view="active">Active</button><button class="sub-tab" data-view="deleted">Recently Deleted <span id="deletedCount"></span></button></nav>
+  <nav class="sub-tabs"><button class="sub-tab active" data-view="active">Active</button><button class="sub-tab" data-view="bought" hidden>Bought</button><button class="sub-tab" data-view="deleted">Recently Deleted <span id="deletedCount"></span></button></nav>
   <main>
     <section id="summary" class="summary"></section>
     <section class="toolbar">
@@ -415,10 +416,10 @@
       <button id="newTodoBtn" class="wide-action todo-add-top">＋ Add Task</button>
     </section>
     <nav class="todo-filters" aria-label="Task filters">
-      <button class="todo-filter active" data-todo-filter="open">Open</button>
-      <button class="todo-filter" data-todo-filter="high">High priority</button>
-      <button class="todo-filter" data-todo-filter="done">Done</button>
-      <button class="todo-filter" data-todo-filter="all">All</button>
+      <button class="todo-filter active" data-todo-filter="open">To Do</button>
+      <button class="todo-filter" data-todo-filter="chores">Chores</button>
+      <button class="todo-filter" data-todo-filter="done">Completed</button>
+      <button class="todo-filter" data-todo-filter="deleted">Deleted</button>
     </nav>
     <section id="todoStatus" class="status"></section>
     <section id="todoList" class="todo-list"></section>
@@ -601,16 +602,16 @@
 <script>window.ROGGY_AI_CONFIG=window.ROGGY_AI_CONFIG||Object.freeze({"bridgeUrl":"https://desktop-movehp4.tail990d14.ts.net","smartHomeUrl":"https://desktop-movehp4.tail990d14.ts.net/smart-home","transcriptTimeZone":"America/Chicago"});</script>
 <script src="list-completion.js?v=1"></script>
 <script src="owner-auth-redirect.js?v=1"></script>
-<script src="app.js?v=134"></script>
+<script src="app.js?v=135"></script>
 <script type="module" src="lighting-ui.js?v=1"></script>
 <script type="module" src="routines.js?v=1"></script>
 <script src="laynegarmin-manager.js?v=2"></script>
 <script type="module" src="garmin-dashboard.js?v=2"></script>
 <script src="push-notifications.js?v=3"></script>
 <script src="monitor-ui.js?v=53"></script>
-<script src="todos.js?v=66"></script>
+<script src="todos.js?v=67"></script>
 <script type="module" src="network.js?v=1"></script>
 <script type="module" src="pc-health.js?v=4"></script>
-<script type="module" src="ai-ui.js?v=47"></script>
+<script type="module" src="ai-ui.js?v=48"></script>
 <script src="polish.js?v=109"></script>
 </body></html>

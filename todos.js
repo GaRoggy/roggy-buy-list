@@ -26,15 +26,18 @@ function renderTodos(){
   if(!$("todoList"))return;
   if(ListCompletion.deferRender($("todoList"),renderTodos))return;
   let rows=[...todos];
-  if(todoFilter==="open")rows=rows.filter(x=>x.status==="open");
+  rows=rows.filter(x=>todoFilter==="deleted"?!!x.deleted_at:!x.deleted_at);
+  if(todoFilter==="open")rows=rows.filter(x=>x.status==="open"&&x.category!=="Chores");
+  else if(todoFilter==="chores")rows=rows.filter(x=>x.status==="open"&&x.category==="Chores");
   else if(todoFilter==="done")rows=rows.filter(x=>x.status==="done");
-  else if(todoFilter==="high")rows=rows.filter(x=>x.status==="open"&&x.priority==="high");
-  rows.sort((a,b)=>(a.status==="done")-(b.status==="done")||todoPriorityRank(a.priority)-todoPriorityRank(b.priority)||String(a.due_date||"9999").localeCompare(String(b.due_date||"9999")));
+  else if(todoFilter==="high")rows=rows.filter(x=>!x.deleted_at&&x.status==="open"&&x.priority==="high");
+  rows.sort((a,b)=>todoFilter==="done"?new Date(b.completed_at||b.updated_at||0)-new Date(a.completed_at||a.updated_at||0):todoFilter==="deleted"?new Date(b.deleted_at)-new Date(a.deleted_at):(a.status==="done")-(b.status==="done")||todoPriorityRank(a.priority)-todoPriorityRank(b.priority)||String(a.due_date||"9999").localeCompare(String(b.due_date||"9999")));
   $("todoList").innerHTML=rows.length?rows.map(x=>{
     const email=x.email_url?'<a class="todo-email" href="'+esc(x.email_url)+'" target="_blank" rel="noopener noreferrer" title="'+esc(x.email_subject||"Open email")+'">✉ Email</a>':"";
     const notes=x.notes?'<p class="todo-notes">'+esc(x.notes)+'</p>':"";
     return '<div class="completion-row"><article class="todo-card '+(x.status==="done"?"todo-done":"")+'" data-todo-id="'+esc(x.id)+'"><button type="button" class="todo-check" data-todo-toggle="'+esc(x.id)+'" aria-pressed="'+(x.status==="done")+'" '+(pendingTodoUpdates.has(x.id)?'disabled ':'')+'aria-label="'+(x.status==="done"?"Mark open":"Mark complete")+'">'+ListCompletion.icon()+'</button><div class="todo-body"><div class="todo-title-row"><h3>'+esc(x.title)+'</h3><div class="todo-buy-priority"><button type="button" class="prioritybtn icon-action" data-todo-priority="'+esc(x.id)+'" data-dir="up">↑</button><span class="badge todo-priority '+esc(x.priority)+'">'+esc(x.priority)+'</span><button type="button" class="prioritybtn icon-action" data-todo-priority="'+esc(x.id)+'" data-dir="down">↓</button></div></div><div class="todo-meta">'+(x.category?'<span>'+esc(x.category)+'</span>':"")+todoDueLabel(x)+todoCompletedLabel(x)+email+'</div>'+notes+'</div><button type="button" class="todo-delete" data-todo-delete="'+esc(x.id)+'" aria-label="Delete task">×</button></article></div>';
   }).join(""):todoEmptyHTML;
+  if(todoFilter==="deleted"){document.querySelectorAll("#todoList [data-todo-toggle],#todoList [data-todo-priority]").forEach(b=>b.hidden=true);document.querySelectorAll("#todoList [data-todo-delete]").forEach(b=>{b.textContent="↶";b.setAttribute("aria-label","Restore task")});}
   document.querySelectorAll("[data-todo-toggle]").forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();toggleTodo(b.dataset.todoToggle,b)});
   document.querySelectorAll("[data-todo-delete]").forEach(b=>b.onclick=()=>deleteTodo(b.dataset.todoDelete));document.querySelectorAll("[data-todo-priority]").forEach(b=>b.onclick=()=>changeTodoPriority(b.dataset.todoPriority,b.dataset.dir));
   renderHomeHighTodos();
@@ -58,11 +61,11 @@ async function toggleTodo(id,button){
   renderTodos();
 }
 async function deleteTodo(id){
-  const {error}=await sb.from("todos").delete().eq("id",id);if(error){$("todoStatus").textContent=error.message;return}
-  todos=todos.filter(x=>x.id!==id);renderTodos();
+  const x=todos.find(t=>t.id===id);if(!x)return;const deleted_at=x.deleted_at?null:new Date().toISOString();const {error}=await sb.from("todos").update({deleted_at}).eq("id",id);if(error){$("todoStatus").textContent=error.message;return}
+  x.deleted_at=deleted_at;renderTodos();
 }
 document.querySelectorAll(".todo-filter").forEach(b=>b.onclick=()=>{todoFilter=b.dataset.todoFilter;document.querySelectorAll(".todo-filter").forEach(z=>z.classList.toggle("active",z===b));renderTodos()});
-$("newTodoBtn").onclick=()=>$("todoDialog").showModal();
+$("newTodoBtn").onclick=()=>{if(todoFilter==="chores")$("todoCategory").value="Chores";$("todoDialog").showModal()};
 $("todoForm").addEventListener("submit",async e=>{
   if(e.submitter?.value==="cancel")return;
   e.preventDefault();
