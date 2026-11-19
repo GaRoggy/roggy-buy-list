@@ -76,7 +76,8 @@ function renderHomeCard(data = statusData) {
   const message = $("homeNetworkMessage");
   const metric = $("homeNetworkMetric");
   if (state === "unknown") {
-    if (message) message.textContent = data?.status === "STALE" ? "Monitor needs attention" : "Sign in to check internet health";
+    const status = String(data?.status || "").toUpperCase();
+    if (message) message.textContent = status === "STALE" ? "Monitor needs attention" : status === "MONITOR_UNAVAILABLE" ? "NetworkWatch temporarily unavailable" : "Sign in to check internet health";
     if (metric) metric.textContent = "—";
   } else {
     if (message) message.textContent = `${STATE_LABELS[state]} · ${dateTime(data?.updated_at || data?.last_measurement_at)}`;
@@ -195,7 +196,7 @@ function loadHomeNetworkCard() {
   if (homePromise) return homePromise;
   homePromise = (async () => {
     try { statusData = await networkFetch("/network/status"); renderHomeCard(); }
-    catch (error) { statusData = { status: error.code === "AUTHENTICATION_REQUIRED" ? "AUTH_REQUIRED" : "MONITOR_UNAVAILABLE", stale: true }; renderHomeCard(); }
+    catch (error) { statusData = { status: error.code === "AUTHENTICATION_REQUIRED" ? "AUTH_REQUIRED" : "MONITOR_UNAVAILABLE", stale: true, error: { code: error.code } }; renderHomeCard(); }
   })().finally(() => { homePromise = null; });
   return homePromise;
 }
@@ -270,7 +271,18 @@ window.addEventListener("roggy-page", event => {
   else stopRefresh();
 });
 window.addEventListener("roggy-auth", () => {
+  startRefresh();
   if (activePage === "network") loadNetworkPage().catch(() => {});
   else if (activePage === "home") loadHomeNetworkCard().catch(() => {});
 });
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return;
+  startRefresh();
+  if (activePage === "network") loadNetworkPage().catch(() => {});
+  else if (activePage === "home") loadHomeNetworkCard().catch(() => {});
+});
+// The app dispatches its initial page event before module scripts are ready.
+// Start the bounded, singleton-guarded refresh loop here as well so a transient
+// auth or bridge failure cannot leave the Home card permanently stuck.
+startRefresh();
 loadHomeNetworkCard().catch(() => {});

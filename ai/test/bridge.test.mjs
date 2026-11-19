@@ -28,6 +28,21 @@ async function fixture(t, opts = {}) {
     if (url.endsWith('/health')) return result({ status: 'ok' });
     if (url.endsWith('/api/devices')) return result({ devices: [{ device_id: 'fixture_light', friendly_name: 'Fixture Light', room: 'living_room', capabilities: ['power'], availability: 'online', online: true, state: 'on', freshness: 'fresh' }] });
     if (url.endsWith('/api/rooms')) return result({ rooms: [{ room_id: 'living_room', friendly_name: 'Living Room', device_count: 1, online_devices: 1 }] });
+    if (url.includes('/api/garmin/')) {
+      const target = new URL(url);
+      if (target.pathname === '/api/garmin/pair' && options.method === 'POST') {
+        return result({ device_id: 'simulator_fixture', access_token: 'paired_fixture_access', refresh_token: 'paired_fixture_refresh' });
+      }
+      if (target.pathname === '/api/garmin/token/refresh' && options.method === 'POST') {
+        return result({ access_token: 'paired_fixture_access_2', refresh_token: 'paired_fixture_refresh_2' });
+      }
+      if (options.headers.Authorization !== 'Bearer paired_fixture_access') return new Response('', { status: 401 });
+      if (target.pathname === '/api/garmin/transcripts') return result({ entries: [], next_cursor: null });
+      if (target.pathname === '/api/garmin/lists') return result({ entries: [] });
+      if (target.pathname === '/api/garmin/lists/actions') return result({ updated: true });
+      if (target.pathname === '/api/garmin/lights') return result({ devices: [] });
+      return result({ route: target.pathname });
+    }
     if (url.includes('/api/events/history')) return result({ events: [] });
     if (url.endsWith('/internal/camera/front_door')) return result({
       camera_id: 'front_door', camera_name: 'Front Door Cam', snapshot_directory: 'C:\\Codex\\LocalAgent\\data\\camera_snapshots\\front_door',
@@ -169,6 +184,119 @@ test('authenticated smart-home traffic stays behind the owner bridge', async t =
   assert.equal(upstream.options.headers.Authorization, 'Bearer valid');
   assert.equal((await f.request('/smart-home/commands', { text: 'status' })).status, 200);
   assert.equal((await f.request('/smart-home/devices/fixture_light/actions', { action: 'power', value: 'off' })).status, 200);
+});
+test('native proxy delivers fixed-length command JSON while transcript streams stay open', async t => {
+  const body = { text: 'Layne, turn off the alarm 🔕' };
+  const upstream = http.createServer(async (req, res) => {
+    if (req.url === '/auth/v1/user') {
+      res.end(JSON.stringify({ id: owner }));
+    } else if (req.url === '/api/transcripts/stream?last_event_id=sample') {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write(': connected\n\n');
+    } else {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const bytes = Buffer.concat(chunks);
+      const valid = req.url === '/api/commands' && req.method === 'POST' &&
+        Number(req.headers['content-length']) === bytes.length &&
+        !req.headers['transfer-encoding'] && bytes.toString() === JSON.stringify(body);
+      res.writeHead(valid ? 200 : 400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ valid }));
+    }
+  });
+  upstream.listen(0, '127.0.0.1'); await once(upstream, 'listening');
+  const target = `http://127.0.0.1:${upstream.address().port}`;
+  const cfg = { ...config(env), supabase: target, smartHome: target };
+  const bridge = createBridge(cfg, { logger: () => {} });
+  bridge.listen(0, '127.0.0.1'); await once(bridge, 'listening');
+  const url = `http://127.0.0.1:${bridge.address().port}`;
+  cfg.hosts.add(new URL(url).host);
+  const controller = new AbortController();
+  t.after(() => {
+    controller.abort();
+    bridge.stop(); bridge.closeAllConnections();
+    upstream.close(); upstream.closeAllConnections();
+  });
+  const headers = { Authorization: 'Bearer valid' };
+  const streams = await Promise.all(Array.from({ length: 4 }, () =>
+    fetch(url + '/smart-home/transcripts/stream?last_event_id=sample', { headers, signal: controller.signal })));
+  for (const stream of streams) assert.equal(stream.status, 200);
+  const response = await fetch(url + '/smart-home/commands', {
+    method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { valid: true });
+});
+test('Garmin watch routes use the strict bridge allowlist and paired credentials', async t => {
+  const f = await fixture(t);
+  const pair = await f.request('/smart-home/api/garmin/pair', { code: 'fixture-code', device_name: 'simulator' }, null);
+  assert.equal(pair.status, 200);
+  const pairCall = f.calls.find(call => call.url.endsWith('/api/garmin/pair'));
+  assert.equal(pairCall.options.method, 'POST');
+  assert.equal(pairCall.options.headers.Authorization, undefined);
+  assert.equal(pairCall.options.headers['Content-Type'], 'application/json');
+  assert.deepEqual(JSON.parse(pairCall.options.body), { code: 'fixture-code', device_name: 'simulator' });
+  const refresh = await f.request('/smart-home/api/garmin/token/refresh', { refresh_token: 'fixture-refresh' }, null);
+  assert.equal(refresh.status, 200);
+  const refreshCall = f.calls.find(call => call.url.endsWith('/api/garmin/token/refresh'));
+  assert.equal(refreshCall.options.method, 'POST');
+  assert.equal(refreshCall.options.headers.Authorization, undefined);
+  assert.deepEqual(JSON.parse(refreshCall.options.body), { refresh_token: 'fixture-refresh' });
+  const metadata = await f.request('/smart-home/api/garmin/transcripts?limit=10&cursor=next_cursor', null, 'paired_fixture_access');
+  assert.equal(metadata.status, 200);
+  const transcriptCall = f.calls.find(call => call.url.includes('/api/garmin/transcripts?'));
+  assert.equal(transcriptCall.options.headers.Authorization, 'Bearer paired_fixture_access');
+  assert.equal(transcriptCall.options.headers['Content-Type'], undefined);
+  assert.equal(new URL(transcriptCall.url).searchParams.get('limit'), '10');
+  assert.equal(new URL(transcriptCall.url).searchParams.get('cursor'), 'next_cursor');
+  const readCases = [
+    ['/smart-home/api/garmin/lights', '/api/garmin/lights'],
+    ['/smart-home/api/garmin/lights/light-1', '/api/garmin/lights/light-1'],
+    ['/smart-home/api/garmin/lists?collection=tasks&limit=5&offset=0', '/api/garmin/lists'],
+    ['/smart-home/api/garmin/lists/tasks/task-1', '/api/garmin/lists/tasks/task-1'],
+    ['/smart-home/api/garmin/agenda?limit=4&offset=0', '/api/garmin/agenda'],
+    ['/smart-home/api/garmin/agenda/reminder-1', '/api/garmin/agenda/reminder-1'],
+    ['/smart-home/api/garmin/front-door?limit=4&offset=0', '/api/garmin/front-door'],
+    ['/smart-home/api/garmin/front-door/event-1', '/api/garmin/front-door/event-1'],
+    ['/smart-home/api/garmin/transcripts/event-1', '/api/garmin/transcripts/event-1'],
+  ];
+  for (const [path, targetPath] of readCases) {
+    const response = await f.request(path, null, 'paired_fixture_access');
+    assert.equal(response.status, 200, path);
+    assert.equal(new URL(f.calls.at(-1).url).pathname, targetPath);
+  }
+  const denied = await f.request('/smart-home/api/garmin/transcripts?limit=10', null, null);
+  assert.equal(denied.status, 401);
+  assert.equal(f.calls.filter(call => call.url.endsWith('/auth/v1/user')).length, 0);
+
+  const listAction = await f.request('/smart-home/api/garmin/lists/actions', { collection: 'tasks', id: 'task-1', action: 'status' }, 'paired_fixture_access');
+  assert.equal(listAction.status, 200);
+  const actionCall = f.calls.find(call => call.url.endsWith('/api/garmin/lists/actions'));
+  assert.equal(actionCall.options.headers.Authorization, 'Bearer paired_fixture_access');
+  assert.deepEqual(JSON.parse(actionCall.options.body), { collection: 'tasks', id: 'task-1', action: 'status' });
+  const mutationCases = [
+    ['/smart-home/api/garmin/lights/light-1/actions', { action: 'increase_brightness', step: 10 }, '/api/garmin/lights/light-1/actions'],
+    ['/smart-home/api/garmin/lists', { collection: 'tasks', title: 'Fixture task' }, '/api/garmin/lists'],
+    ['/smart-home/api/garmin/agenda/actions', { id: 'reminder-1', action: 'complete' }, '/api/garmin/agenda/actions'],
+  ];
+  for (const [path, body, targetPath] of mutationCases) {
+    const response = await f.request(path, body, 'paired_fixture_access');
+    assert.equal(response.status, 200, path);
+    const upstream = f.calls.at(-1);
+    assert.equal(upstream.options.method, 'POST');
+    assert.equal(upstream.options.headers.Authorization, 'Bearer paired_fixture_access');
+    assert.equal(new URL(upstream.url).pathname, targetPath);
+  }
+  const before = f.calls.filter(call => call.url.includes('/api/garmin/')).length;
+  assert.equal((await f.request('/smart-home/api/garmin/transcripts', { unexpected: true }, 'paired_fixture_access')).status, 405);
+  assert.equal((await f.request('/smart-home/api/garmin/lists?collection=tasks&limit=999', null, 'paired_fixture_access')).status, 400);
+  assert.equal((await f.request('/smart-home/api/garmin/lists?collection=tasks&offset=0&offset=1', null, 'paired_fixture_access')).status, 400);
+  assert.equal((await f.request('/smart-home/api/garmin/transcripts/private%2Fid', null, 'paired_fixture_access')).status, 404);
+  assert.equal((await f.request('/smart-home/api/garmin/lights/device%ZZ', null, 'paired_fixture_access')).status, 404);
+  assert.equal((await f.request('/smart-home/api/garmin/admin/devices', null, 'paired_fixture_access')).status, 404);
+  assert.equal(f.calls.filter(call => call.url.includes('/api/garmin/')).length, before);
+
+  assert.equal((await f.request('/smart-home/devices', null, null)).status, 401);
 });
 test('authenticated network traffic stays behind the owner bridge and exposes safe data only', async t => {
   const f = await fixture(t, { cfg: { localAgentApiToken: 'agent-fixture' } });

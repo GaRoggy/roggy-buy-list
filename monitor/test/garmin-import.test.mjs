@@ -4,12 +4,12 @@ import { mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Encoder, Profile } from '@garmin/fitsdk';
-import { normalizeGarminCsv, normalizeGarminFitMessages, validateImportedRecords } from '../../supabase/functions/_shared/garmin-normalize.js';
-import { decodeFit, persistGarminExport, readGarminExport } from '../garmin-import.mjs';
+import { GARMIN_EXPORT_MAX_RECORDS, normalizeGarminCsv, normalizeGarminFitMessages, validateImportedRecords } from '../../supabase/functions/_shared/garmin-normalize.js';
+import { decodeFit, MAX_IMPORT_ACTIVITY_RECORDS, persistGarminExport, readGarminExport } from '../garmin-import.mjs';
 
 test('Garmin CSV export maps only present metrics and keeps zero distinct from missing', async () => {
   const csv = 'Date,Steps,Active Calories,Distance (mi),Sleep Duration,Sleep Score,Activity Type,Total Time,Avg HR,Calories\n' +
-    '2026-10-09,8450,0,3.1,7:12:00,82,Running,00:35:00,150,350\n';
+    '2026-10-09T12:00:00,8450,0,3.1,7:12:00,82,Running,00:35:00,150,350\n';
   const result = await normalizeGarminCsv(csv, { sourceTimezone: 'America/Chicago' });
   const metrics = result.records.filter(row => row.kind === 'health_measurement');
   const get = name => metrics.find(row => row.payload.metric === name)?.payload.value;
@@ -27,6 +27,30 @@ test('Garmin CSV export maps only present metrics and keeps zero distinct from m
   assert.doesNotMatch(JSON.stringify(result.records), /positionLat|positionLong|latitude|longitude/i);
 });
 
+test('CSV intensity-minute categories remain distinct source measurements', async () => {
+  const result = await normalizeGarminCsv(
+    'Date,Moderate Intensity Minutes,Vigorous Intensity Minutes\n2026-10-09,40,15\n',
+    { sourceTimezone: 'UTC' });
+  const metrics = Object.fromEntries(result.records.map(record => [record.payload.metric, record.payload.value]));
+  assert.deepEqual(metrics, { moderate_intensity_minutes: 40, vigorous_intensity_minutes: 15 });
+  assert.ok(result.records.every(record => record.payload.aggregation === 'daily_total'));
+  assert.ok(result.records.every(record => record.payload.time_resolution === 'calendar_day'));
+  assert.ok(result.records.every(record => record.payload.source_timestamp === '2026-10-09'));
+  const validated = validateImportedRecords(result.records);
+  assert.ok(validated.every(record => record.payload.time_resolution === 'calendar_day'));
+});
+
+test('date-only daily CSV rows keep calendar-day precision and do not invent a workout start time', async () => {
+  const result = await normalizeGarminCsv(
+    'Date,Steps,Activity Type,Total Time\n2026-10-09,8450,Running,00:35:00\n',
+    { sourceTimezone: 'America/Chicago' });
+  const measurement = result.records.find(record => record.kind === 'health_measurement');
+  assert.equal(measurement.payload.time_resolution, 'calendar_day');
+  assert.equal(measurement.payload.source_timestamp, '2026-10-09');
+  assert.equal(result.records.some(record => record.kind === 'garmin_activity'), false);
+  assert.match(result.warnings[0], /no start time/);
+});
+
 test('CSV handles quotes and resolves a repeated local fall-back time deterministically', async () => {
   const quoted = await normalizeGarminCsv('Date,Activity Type,Calories\n"11/01/2026 01:30 AM","Run, Trail",200\n', { sourceTimezone: 'America/Chicago' });
   const parsed = await normalizeGarminCsv('Date,Steps\n11/01/2026 01:30 AM,20\n', { sourceTimezone: 'America/Chicago' });
@@ -41,7 +65,7 @@ test('CSV handles quotes and resolves a repeated local fall-back time determinis
 test('official Garmin FIT SDK decoding extracts summary data without coordinates', async () => {
   const encoder = new Encoder();
   encoder.writeMesg({ mesgNum: Profile.MesgNum.MONITORING, timestamp: new Date('2026-10-09T17:00:00Z'),
-    activityType: 'walking', cycles: 3100, distance: 4800, calories: 1800, activeCalories: 350,
+    activityType: 'walking', cycles: 1550, distance: 4800, calories: 1800, activeCalories: 350,
     activeTime: 3600000, heartRate: 61 });
   encoder.writeMesg({ mesgNum: Profile.MesgNum.SESSION, timestamp: new Date('2026-10-09T18:00:00Z'),
     startTime: new Date('2026-10-09T17:20:00Z'), totalElapsedTime: 2400, totalTimerTime: 2300,
@@ -53,7 +77,7 @@ test('official Garmin FIT SDK decoding extracts summary data without coordinates
   const steps = decoded.find(row => row.payload?.metric === 'steps');
   const activity = decoded.find(row => row.kind === 'garmin_activity');
   assert.equal(heartRate.payload.value, 61);
-  assert.equal(steps, undefined);
+  assert.equal(steps.payload.value, 3100);
   assert.equal(activity.payload.activity_type, 'run');
   assert.equal(activity.payload.distance_meters, 5000);
   assert.equal(activity.payload.gps_included, false);
@@ -72,9 +96,35 @@ test('sleep-level FIT messages yield only measured stage durations', async () =>
   assert.equal(values.sleep_duration, 3600);
 });
 
+test('FIT wellness monitoring counters, stress, and body battery retain actual source values', async () => {
+  const messages = {
+    monitoringMesgs: [
+      { timestamp: new Date('2026-10-13T10:00:00Z'), activityType: 'walking', steps: 900, calories: 40, distance: 600, moderateActivityMinutes: 4 },
+      { timestamp: new Date('2026-10-13T12:00:00Z'), activityType: 'walking', steps: 1800, calories: 80, distance: 1200 },
+      { timestamp: new Date('2026-10-13T12:00:00Z'), activityType: 'running', steps: 300, calories: 50, distance: 500 },
+    ],
+    stressLevelMesgs: [{ stressLevelTime: new Date('2026-10-13T11:00:00Z'), stressLevelValue: 34 }],
+    hsaBodyBatteryDataMesgs: [{ timestamp: new Date('2026-10-13T09:00:00Z'), processingInterval: 60,
+      level: [52, 54], charged: [0, 2], uncharged: [1, 0] }],
+  };
+  const rows = (await normalizeGarminFitMessages(messages)).filter(row => row.kind === 'health_measurement');
+  const get = metric => rows.filter(row => row.payload.metric === metric);
+  assert.equal(get('steps').length, 1);
+  assert.equal(get('steps')[0].payload.value, 2100);
+  assert.equal(get('calories')[0].payload.value, 130);
+  assert.equal(get('distance')[0].payload.value, 1700);
+  assert.equal(get('moderate_intensity_minutes').length, 0);
+  assert.equal(get('vigorous_intensity_minutes').length, 0);
+  assert.equal(get('stress')[0].payload.value, 34);
+  assert.deepEqual(get('body_battery').map(row => row.payload.value), [52, 54]);
+  assert.equal(get('body_battery_charge').reduce((sum, row) => sum + row.payload.value, 0), 2);
+  assert.equal(get('body_battery_drain').reduce((sum, row) => sum + row.payload.value, 0), 1);
+  assert.ok(rows.every(row => row.payload.time_resolution === 'fit_utc'));
+});
+
 test('re-exporting a corrected CSV keeps stable identities for matching days and activities', async () => {
-  const original = await normalizeGarminCsv('Date,Steps,Activity Type,Activity ID,Total Time,Distance\n2026-10-09,8450,Running,12345,00:35:00,5\n', { sourceTimezone: 'UTC' });
-  const expanded = await normalizeGarminCsv('Date,Steps,Activity Type,Activity ID,Total Time,Distance\n2026-10-09,9000,Running,12345,00:35:00,5\n2026-10-10,6000,Walking,67890,00:25:00,2\n', { sourceTimezone: 'UTC' });
+  const original = await normalizeGarminCsv('Date,Steps,Activity Type,Activity ID,Total Time,Distance\n2026-10-09T12:00:00Z,8450,Running,12345,00:35:00,5\n', { sourceTimezone: 'UTC' });
+  const expanded = await normalizeGarminCsv('Date,Steps,Activity Type,Activity ID,Total Time,Distance\n2026-10-09T12:00:00Z,9000,Running,12345,00:35:00,5\n2026-10-10T12:00:00Z,6000,Walking,67890,00:25:00,2\n', { sourceTimezone: 'UTC' });
   const oldSteps = original.records.find(row => row.payload?.metric === 'steps');
   const newSteps = expanded.records.find(row => row.payload?.metric === 'steps');
   const oldActivity = original.records.find(row => row.kind === 'garmin_activity');
@@ -98,6 +148,35 @@ test('extracted export folder dry-run merges overlapping CSV rows by stable iden
   assert.deepEqual(preview.metrics, ['steps']);
   assert.equal(preview.warnings, 1);
   assert.equal(preview.coverage.from, '2026-10-09T12:00:00.000Z');
+});
+
+test('local export reader accepts histories above 10000 records while shared validation stays capped by default', async t => {
+  const folder = await mkdtemp(join(tmpdir(), 'garmin-large-import-test-'));
+  t.after(() => rm(folder, { recursive: true, force: true }));
+  const first = Date.parse('2026-01-01T00:00:00Z');
+  const lines = ['Date,Steps'];
+  for (let index = 0; index < 10001; index++) {
+    lines.push(`${new Date(first + index * 1000).toISOString()},${index % 100000}`);
+  }
+  await writeFile(join(folder, 'health.csv'), lines.join('\n'));
+
+  const preview = await readGarminExport(folder, { sourceTimezone: 'UTC' });
+  assert.equal(preview.records.length, 10001);
+  assert.equal(GARMIN_EXPORT_MAX_RECORDS, 120000);
+  assert.throws(() => validateImportedRecords(preview.records), /GARMIN_IMPORT_RECORD_LIMIT/);
+});
+
+test('local export writes reject histories beyond Layne reader bounds before database access', async () => {
+  const stamp = '2026-10-09T17:00:00.000Z';
+  const activities = Array.from({ length: MAX_IMPORT_ACTIVITY_RECORDS + 1 }, (_, index) => ({
+    kind: 'garmin_activity', external_id: `export:${index.toString(16).padStart(24, 'a')}:activity:${stamp}`,
+    occurred_at: stamp, status: 'processed',
+    payload: { activity_type: 'run', start_time: stamp, gps_included: false },
+  }));
+  const calls = [];
+  const store = { env: { MONITOR_USER_ID: '00000000-0000-0000-0000-000000000001' }, async api(...args) { calls.push(args); } };
+  await assert.rejects(() => persistGarminExport(activities, store), /GARMIN_IMPORT_READER_LIMIT/);
+  assert.deepEqual(calls, []);
 });
 
 test('import validation strips unexpected fields and rejects GPS or unbounded records', async () => {

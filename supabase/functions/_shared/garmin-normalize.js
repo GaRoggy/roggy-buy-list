@@ -3,7 +3,8 @@
 export const GARMIN_METRIC_UNITS = Object.freeze({
   steps: 'count', step_goal: 'count', distance: 'meters', floors_climbed: 'floors',
   active_calories: 'kcal', resting_calories: 'kcal', calories: 'kcal',
-  intensity_minutes: 'minutes', sedentary_minutes: 'minutes', active_minutes: 'minutes',
+  intensity_minutes: 'minutes', moderate_intensity_minutes: 'minutes', vigorous_intensity_minutes: 'minutes',
+  sedentary_minutes: 'minutes', active_minutes: 'minutes',
   heart_rate: 'bpm', resting_heart_rate: 'bpm', minimum_heart_rate: 'bpm', maximum_heart_rate: 'bpm',
   hrv: 'ms', hrv_weekly_average: 'ms', stress: 'score', body_battery: 'score',
   body_battery_high: 'score', body_battery_low: 'score', body_battery_charge: 'points', body_battery_drain: 'points',
@@ -15,12 +16,31 @@ export const GARMIN_METRIC_UNITS = Object.freeze({
   elevation_gain: 'meters', cadence: 'steps/min', training_effect: 'score',
 });
 
+// The local, reviewed export importer can cover the LocalAgent reader's
+// 100k-measurement + 20k-activity bounds. Browser and control-function callers
+// retain the 10k default unless they explicitly request the local cap.
+export const GARMIN_EXPORT_MAX_RECORDS = 120_000;
+const DEFAULT_GARMIN_RECORD_LIMIT = 10_000;
+const GARMIN_TIME_RESOLUTIONS = new Set([
+  'calendar_day', 'explicit_offset', 'local_timezone',
+  'ambiguous_local_time_earlier_occurrence', 'fit_utc',
+]);
+
+function recordLimit(value = DEFAULT_GARMIN_RECORD_LIMIT) {
+  if (!Number.isSafeInteger(value) || value < 1 || value > GARMIN_EXPORT_MAX_RECORDS) {
+    throw new Error('GARMIN_IMPORT_RECORD_LIMIT');
+  }
+  return value;
+}
+
 const CSV_METRICS = [
   ['steps','count',['steps','step_count','total_steps']], ['step_goal','count',['step_goal','steps_goal']],
   ['distance','meters',['distance','total_distance']], ['floors_climbed','floors',['floors','floors_climbed','floors_ascended']],
   ['active_calories','kcal',['active_calories','active_calories_burned']], ['resting_calories','kcal',['resting_calories','resting_calories_burned']],
   ['calories','kcal',['calories','total_calories','calories_burned','total_calories_burned']],
-  ['intensity_minutes','minutes',['intensity_minutes','moderate_intensity_minutes','vigorous_intensity_minutes']],
+  ['intensity_minutes','minutes',['intensity_minutes','total_intensity_minutes']],
+  ['moderate_intensity_minutes','minutes',['moderate_intensity_minutes','moderate_minutes']],
+  ['vigorous_intensity_minutes','minutes',['vigorous_intensity_minutes','vigorous_minutes']],
   ['sedentary_minutes','minutes',['sedentary_minutes','sedentary_time']], ['active_minutes','minutes',['active_minutes','active_time']],
   ['heart_rate','bpm',['heart_rate','average_heart_rate','avg_heart_rate']],
   ['resting_heart_rate','bpm',['resting_heart_rate','resting_hr','rhr']],
@@ -43,6 +63,7 @@ const CSV_METRICS = [
 const FIELD_LIMITS = Object.freeze({
   steps:[0,100000], step_goal:[0,100000], distance:[0,1000000], floors_climbed:[0,1000],
   active_calories:[0,20000], resting_calories:[0,10000], calories:[0,30000], intensity_minutes:[0,1440],
+  moderate_intensity_minutes:[0,1440], vigorous_intensity_minutes:[0,1440],
   sedentary_minutes:[0,1440], active_minutes:[0,1440], heart_rate:[20,250], resting_heart_rate:[20,200],
   minimum_heart_rate:[20,250], maximum_heart_rate:[20,250], hrv:[0,500], hrv_weekly_average:[0,500],
   stress:[0,100], body_battery:[0,100], body_battery_high:[0,100], body_battery_low:[0,100],
@@ -134,7 +155,9 @@ function localTimestamp(value, timeZone) {
   let match = raw.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
   if (!match) match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ ,]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i);
   if (!match) return null;
-  let [, a, b, c, h='12', min='0', sec='0', ampm] = match;
+  let [, a, b, c, h, min='0', sec='0', ampm] = match;
+  const calendarDay = h === undefined;
+  if (calendarDay) h = '12'; // Stable database anchor; source_timestamp remains the date.
   let year, month, day;
   if (String(a).length === 4) { year=Number(a); month=Number(b); day=Number(c); }
   else { year=Number(c); month=Number(a); day=Number(b); }
@@ -151,7 +174,7 @@ function localTimestamp(value, timeZone) {
   }
   if (!candidates.size) return null; // Reject nonexistent local times at DST jumps.
   const epochs=[...candidates].sort((x,y)=>x-y);
-  return {date:new Date(epochs[0]),resolution:epochs.length>1?'ambiguous_local_time_earlier_occurrence':'local_timezone'};
+  return {date:new Date(epochs[0]),resolution:calendarDay?'calendar_day':epochs.length>1?'ambiguous_local_time_earlier_occurrence':'local_timezone'};
 }
 async function hashText(text) {
   const bytes=new TextEncoder().encode(text), digest=await globalThis.crypto.subtle.digest('SHA-256',bytes);
@@ -171,9 +194,11 @@ function firstValue(row, headers, names) {
   for (const name of names) { const key=headerKey(name), index=headers.findIndex(h=>headerKey(h)===key || headerKey(h).startsWith(key+'_')); if(index>=0 && String(row[index]??'').trim()) return {value:row[index],header:headers[index]}; }
   return null;
 }
-async function activityRecord({row,headers,rawTimestamp,date,timeZone}) {
+async function activityRecord({row,headers,rawTimestamp,date,timeZone,timeResolution}) {
   const type=firstValue(row,headers,['activity type','sport','activity']);
   if (!type) return null;
+  // A date-only row does not establish the workout start time.
+  if (timeResolution==='calendar_day') return { skipped_date_only: true };
   const fields={};
   const values=[
     ['duration_seconds',['duration','total time','time','elapsed time','moving time'],'duration'],
@@ -196,7 +221,7 @@ async function activityRecord({row,headers,rawTimestamp,date,timeZone}) {
   const identity=providerId?`activity|${start}|${String(providerId.value).trim()}`:`activity|${start}|${activityType}`;
   const activityKey=await hashText(identity);
   return {kind:'garmin_activity',external_id:`export:${activityKey}:activity:${start}`,occurred_at:start,status:'processed',
-    payload:{activity_type:activityType,start_time:start,...fields,source_format:'garmin_export',source_timestamp:String(rawTimestamp||start).slice(0,80),source_timezone:timeZone,gps_included:false}};
+    payload:{activity_type:activityType,start_time:start,...fields,source_format:'garmin_export',source_timestamp:String(rawTimestamp||start).slice(0,80),source_timezone:timeZone,time_resolution:timeResolution,gps_included:false}};
 }
 function canonicalActivityType(value) {
   const raw=String(value||'').toLowerCase();
@@ -204,7 +229,8 @@ function canonicalActivityType(value) {
   return match?.[0]||'other';
 }
 
-export async function normalizeGarminCsv(text, { sourceTimezone='UTC' } = {}) {
+export async function normalizeGarminCsv(text, { sourceTimezone='UTC', maxRecords=DEFAULT_GARMIN_RECORD_LIMIT } = {}) {
+  maxRecords = recordLimit(maxRecords);
   if (text.length>8*1024*1024) throw new Error('GARMIN_CSV_TOO_LARGE');
   let timeZone; try { timeZone=Intl.DateTimeFormat('en-US',{timeZone:sourceTimezone}).resolvedOptions().timeZone; } catch { throw new Error('INVALID_TIMEZONE'); }
   const rows=parseCsv(text); if(rows.length<2) return {records:[],warnings:['No data rows found.']};
@@ -216,20 +242,23 @@ export async function normalizeGarminCsv(text, { sourceTimezone='UTC' } = {}) {
     const row=rows[rowIndex]; if(!row.some(x=>String(x||'').trim()))continue;
     const rawTimestamp=row[dateIndex]; const parsed=localTimestamp(rawTimestamp,timeZone);
     if(!parsed){warnings.push(`Row ${rowIndex+1}: unparseable or nonexistent local timestamp.`);continue;}
-    const activity=await activityRecord({row,headers,rawTimestamp,date:parsed.date,timeZone});
+    const hasActivityType=Boolean(firstValue(row,headers,['activity type','sport','activity']));
+    const activityResult=await activityRecord({row,headers,rawTimestamp,date:parsed.date,timeZone,timeResolution:parsed.resolution});
+    const activity=activityResult?.skipped_date_only?null:activityResult;
+    if(activityResult?.skipped_date_only)warnings.push(`Row ${rowIndex+1}: workout summary skipped because the source provides a date but no start time.`);
     if(activity)output.push(activity);
     for(let col=0;col<headers.length;col++){
-      const mapping=metricForHeader(headers[col],!!activity); if(!mapping)continue;
+      const mapping=metricForHeader(headers[col],hasActivityType); if(!mapping)continue;
       // Activity-summary fields belong to the workout record; do not turn an
       // exercise's heart rate, calories or distance into all-day health data.
-      if(activity&&ACTIVITY_ONLY_METRICS.has(mapping.metric))continue;
+      if(hasActivityType&&ACTIVITY_ONLY_METRICS.has(mapping.metric))continue;
       let value=mapping.metric.endsWith('_duration')?durationSeconds(row[col],headers[col]):mapping.metric==='distance'?distanceMeters(row[col],headers[col]):numeric(row[col]);
       if(mapping.metric==='activity_duration' && value===null)value=durationSeconds(row[col],headers[col]);
-      const aggregation=['steps','distance','calories','active_calories','resting_calories','floors_climbed','intensity_minutes','sedentary_minutes','active_minutes'].includes(mapping.metric)?'daily_total':'observation';
+      const aggregation=['steps','distance','calories','active_calories','resting_calories','floors_climbed','intensity_minutes','moderate_intensity_minutes','vigorous_intensity_minutes','sedentary_minutes','active_minutes'].includes(mapping.metric)?'daily_total':'observation';
       const record=await makeMeasurement({metric:mapping.metric,value,unit:mapping.unit,date:parsed.date,header:headers[col],rawTimestamp,timeZone,aggregation,timeResolution:parsed.resolution});
       if(record)output.push(record);
     }
-    if(output.length>10000)throw new Error('GARMIN_IMPORT_RECORD_LIMIT');
+    if(output.length>maxRecords)throw new Error('GARMIN_IMPORT_RECORD_LIMIT');
   }
   const unique=new Map(); for(const record of output)unique.set(`${record.kind}:${record.external_id}`,record);
   return {records:[...unique.values()],warnings:warnings.slice(0,100)};
@@ -240,10 +269,37 @@ async function fitMeasurement(metric, value, unit, timestamp, sourceMetric, time
   const date=fitDate(timestamp); if(!date)return null;
   return makeMeasurement({metric,value,unit,date,header:sourceMetric,rawTimestamp:date.toISOString(),timeZone,aggregation,timeResolution:'fit_utc',sourceFormat:'garmin_fit'});
 }
+function fitLocalDay(stamp, timeZone) {
+  const parts=new Intl.DateTimeFormat('en-US',{timeZone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(stamp);
+  const values=Object.fromEntries(parts.map(part=>[part.type,part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+async function monitoringDailyMetrics(items, metric, unit, field, timeZone) {
+  const perDay=new Map();
+  for(const item of items||[]){
+    const stamp=fitDate(item.timestamp||item.localTimestamp),value=item[field];
+    if(!stamp||!Number.isFinite(value)||value<0)continue;
+    const day=fitLocalDay(stamp,timeZone),activityType=String(item.activityType??'all');
+    const key=`${day}|${activityType}`,previous=perDay.get(key);
+    if(!previous||stamp>previous.stamp)perDay.set(key,{day,stamp,value});
+  }
+  const byDay=new Map();
+  for(const row of perDay.values()){
+    const current=byDay.get(row.day)||{value:0,stamp:row.stamp};
+    current.value+=row.value;if(row.stamp>current.stamp)current.stamp=row.stamp;
+    byDay.set(row.day,current);
+  }
+  const records=[];
+  for(const [day,row]of byDay){
+    const record=await fitMeasurement(metric,row.value,unit,row.stamp,`monitoring.${field}.daily.${day}`,timeZone,'daily_total');
+    if(record)records.push(record);
+  }
+  return records;
+}
 async function fitActivity(item, timeZone) {
   const start=fitDate(item.startTime||item.timestamp); if(!start)return null;
   const seconds=(key)=>Number.isFinite(item[key])?item[key]:undefined;
-  const payload={activity_type:canonicalActivityType(item.sport||item.subSport||'other'),start_time:start.toISOString(),source_format:'garmin_fit',source_timestamp:start.toISOString(),source_timezone:timeZone,gps_included:false};
+  const payload={activity_type:canonicalActivityType(item.sport||item.subSport||'other'),start_time:start.toISOString(),source_format:'garmin_fit',source_timestamp:start.toISOString(),source_timezone:timeZone,time_resolution:'fit_utc',gps_included:false};
   const fields={duration_seconds:seconds('totalElapsedTime'),distance_meters:seconds('totalDistance'),calories_kcal:seconds('totalCalories'),
     average_hr_bpm:seconds('avgHeartRate'),max_hr_bpm:seconds('maxHeartRate'),average_speed_mps:seconds('avgSpeed'),
     elevation_gain_m:seconds('totalAscent'),avg_cadence:seconds('avgCadence'),training_effect:seconds('totalTrainingEffect')};
@@ -272,20 +328,46 @@ export async function normalizeGarminFitMessages(messages, { sourceTimezone='UTC
   let timeZone; try { timeZone=Intl.DateTimeFormat('en-US',{timeZone:sourceTimezone}).resolvedOptions().timeZone; } catch { timeZone='UTC'; }
   const rows=[];
   const add=async(metric,value,unit,stamp,field,aggregation='observation')=>{const record=await fitMeasurement(metric,value,unit,stamp,field,timeZone,aggregation);if(record)rows.push(record);};
+  // Garmin FIT monitoring counters are accumulated separately by activity
+  // type. Keep only each type's last counter for the source-local day, then
+  // combine those disjoint counters once into an explicit daily total.
+  for(const [metric,unit,field]of [
+    ['steps','count','steps'],['calories','kcal','calories'],['distance','meters','distance'],
+  ])rows.push(...await monitoringDailyMetrics(messages.monitoringMesgs,metric,unit,field,timeZone));
   for(const item of messages.monitoringMesgs||[]){
     const stamp=item.timestamp||item.localTimestamp;
-    // The FIT monitoring message accumulates counters by activity type. Keep
-    // interval heart-rate observations, but leave daily totals to explicit
-    // wellness CSV summaries until those subtype counters can be combined.
     if(Number.isFinite(item.heartRate))await add('heart_rate',item.heartRate,'bpm',stamp,'monitoring.heartRate');
   }
-  for(const item of messages.monitoringHrDataMesgs||[])if(Number.isFinite(item.restingHeartRate))await add('resting_heart_rate',item.restingHeartRate,'bpm',item.timestamp,'monitoringHrData.restingHeartRate');
+  for(const item of messages.monitoringHrDataMesgs||[]){
+    const current=Number.isFinite(item.currentDayRestingHeartRate);
+    const value=current?item.currentDayRestingHeartRate:item.restingHeartRate;
+    if(Number.isFinite(value))await add('resting_heart_rate',value,'bpm',item.timestamp,
+      `monitoringHrData.${current?'currentDayRestingHeartRate':'restingHeartRate'}`);
+  }
   for(const item of messages.hrvValueMesgs||[])if(Number.isFinite(item.value))await add('hrv',item.value,'ms',item.timestamp,'hrvValue.value');
   for(const item of messages.hrvStatusSummaryMesgs||[]){
     if(Number.isFinite(item.lastNightAverage))await add('hrv',item.lastNightAverage,'ms',item.timestamp,'hrvStatusSummary.lastNightAverage');
     if(Number.isFinite(item.weeklyAverage))await add('hrv_weekly_average',item.weeklyAverage,'ms',item.timestamp,'hrvStatusSummary.weeklyAverage');
   }
   for(const item of messages.respirationRateMesgs||[])if(Number.isFinite(item.respirationRate))await add('respiration',item.respirationRate,'breaths/min',item.timestamp,'respirationRate.respirationRate');
+  for(const item of messages.stressLevelMesgs||[]){
+    const stamp=item.stressLevelTime||item.timestamp;
+    if(Number.isFinite(item.stressLevelValue))await add('stress',item.stressLevelValue,'score',stamp,'stressLevel.stressLevelValue');
+  }
+  for(const item of messages.spo2DataMesgs||[]){
+    if(Number.isFinite(item.readingSpo2))await add('spo2',item.readingSpo2,'percent',item.timestamp,'spo2Data.readingSpo2');
+  }
+  for(const item of messages.hsaBodyBatteryDataMesgs||[]){
+    const start=fitDate(item.timestamp),interval=Number.isFinite(item.processingInterval)?item.processingInterval:0;
+    if(!start)continue;
+    for(let index=0;index<(item.level||[]).length;index++){
+      if(index>0&&interval<=0)continue; // No per-sample time may be inferred from an unspaced array.
+      const stamp=new Date(start.getTime()+index*interval*1000);
+      if(Number.isFinite(item.level[index]))await add('body_battery',item.level[index],'score',stamp,'hsaBodyBatteryData.level');
+      if(Number.isFinite(item.charged?.[index]))await add('body_battery_charge',item.charged[index],'points',stamp,'hsaBodyBatteryData.charged','interval_total');
+      if(Number.isFinite(item.uncharged?.[index]))await add('body_battery_drain',item.uncharged[index],'points',stamp,'hsaBodyBatteryData.uncharged','interval_total');
+    }
+  }
   for(const item of messages.sleepAssessmentMesgs||[])if(Number.isFinite(item.overallSleepScore))await add('sleep_score',item.overallSleepScore,'score',item.timestamp,'sleepAssessment.overallSleepScore');
   rows.push(...await sleepStageMetrics(messages.sleepLevelMesgs,timeZone));
   for(const item of messages.sessionMesgs||[]){const record=await fitActivity(item,timeZone);if(record)rows.push(record);}
@@ -293,9 +375,10 @@ export async function normalizeGarminFitMessages(messages, { sourceTimezone='UTC
   return [...unique.values()];
 }
 
-export function validateImportedRecords(input) {
-  if(!Array.isArray(input)||input.length>10000)throw new Error('GARMIN_IMPORT_RECORD_LIMIT');
-  const allowedActivity=new Set(['activity_type','start_time','duration_seconds','distance_meters','calories_kcal','average_hr_bpm','max_hr_bpm','average_speed_mps','elevation_gain_m','avg_cadence','training_effect','source_format','source_timestamp','source_timezone','gps_included']);
+export function validateImportedRecords(input, { maxRecords=DEFAULT_GARMIN_RECORD_LIMIT } = {}) {
+  maxRecords = recordLimit(maxRecords);
+  if(!Array.isArray(input)||input.length>maxRecords)throw new Error('GARMIN_IMPORT_RECORD_LIMIT');
+  const allowedActivity=new Set(['activity_type','start_time','duration_seconds','distance_meters','calories_kcal','average_hr_bpm','max_hr_bpm','average_speed_mps','elevation_gain_m','avg_cadence','training_effect','source_format','source_timestamp','source_timezone','time_resolution','gps_included']);
   return input.map(record=>{
     if(!record||!['health_measurement','garmin_activity'].includes(record.kind)||typeof record.external_id!=='string'||record.external_id.length>180||!/^export:[a-f0-9]{24}:(?:[a-z0-9_.:-]{1,120})$/i.test(record.external_id))throw new Error('INVALID_GARMIN_RECORD');
     const date=new Date(record.occurred_at);if(Number.isNaN(date.getTime())||date.toISOString()!==record.occurred_at)throw new Error('INVALID_GARMIN_TIMESTAMP');
@@ -305,10 +388,11 @@ export function validateImportedRecords(input) {
       if(!limits||payload.unit!==GARMIN_METRIC_UNITS[metric]||!Number.isFinite(payload.value)||payload.value<limits[0]||payload.value>limits[1])throw new Error('INVALID_GARMIN_MEASUREMENT');
       if(!['observation','daily_total','interval_total'].includes(payload.aggregation||'observation'))throw new Error('INVALID_GARMIN_AGGREGATION');
       const safe={metric,value:payload.value,unit:payload.unit,source_metric:String(payload.source_metric||metric).slice(0,80),source_format:String(payload.source_format||'garmin_export').slice(0,24),source_timestamp:String(payload.source_timestamp||record.occurred_at).slice(0,80),source_timezone:String(payload.source_timezone||'UTC').slice(0,80),aggregation:payload.aggregation||'observation'};
-      if(payload.time_resolution)safe.time_resolution=String(payload.time_resolution).slice(0,48);
+      if(payload.time_resolution){const resolution=String(payload.time_resolution);if(!GARMIN_TIME_RESOLUTIONS.has(resolution))throw new Error('INVALID_GARMIN_TIME_RESOLUTION');safe.time_resolution=resolution;}
       return {...record,status:'processed',payload:safe};
     }
     if(Object.keys(payload).some(key=>!allowedActivity.has(key))||payload.gps_included!==false||typeof payload.activity_type!=='string')throw new Error('INVALID_GARMIN_ACTIVITY');
+    if(payload.time_resolution&&!GARMIN_TIME_RESOLUTIONS.has(String(payload.time_resolution)))throw new Error('INVALID_GARMIN_TIME_RESOLUTION');
     const activityLimits={duration_seconds:[1,604800],distance_meters:[0,1000000],calories_kcal:[0,30000],average_hr_bpm:[20,250],max_hr_bpm:[20,250],average_speed_mps:[0,100],elevation_gain_m:[0,100000],avg_cadence:[0,400],training_effect:[0,10]};
     for(const [key,[minimum,maximum]]of Object.entries(activityLimits)){
       const value=payload[key];if(value!==undefined&&(!Number.isFinite(value)||value<minimum||value>maximum))throw new Error('INVALID_GARMIN_ACTIVITY_FIELD');

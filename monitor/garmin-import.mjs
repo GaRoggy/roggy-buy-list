@@ -3,21 +3,34 @@ import { extname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Decoder, Stream } from '@garmin/fitsdk';
 import { config, MonitorError, Store } from './core.mjs';
-import { normalizeGarminCsv, normalizeGarminFitMessages, validateImportedRecords } from '../supabase/functions/_shared/garmin-normalize.js';
+import { GARMIN_EXPORT_MAX_RECORDS, normalizeGarminCsv, normalizeGarminFitMessages, validateImportedRecords } from '../supabase/functions/_shared/garmin-normalize.js';
 
 const MAX_FILES = 20000;
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 1024 * 1024 * 1024;
+const MAX_IMPORT_RECORDS = GARMIN_EXPORT_MAX_RECORDS;
+export const MAX_IMPORT_HEALTH_RECORDS = 100_000;
+export const MAX_IMPORT_ACTIVITY_RECORDS = 20_000;
 const IMPORT_SOURCE_ID = 'official-export-import';
 
-export async function decodeFit(bytes, { sourceTimezone = 'UTC' } = {}) {
+function validateExportSet(records) {
+  const safe = validateImportedRecords(records, { maxRecords: MAX_IMPORT_RECORDS });
+  const measurements = safe.filter(record => record.kind === 'health_measurement').length;
+  const activities = safe.length - measurements;
+  if (measurements > MAX_IMPORT_HEALTH_RECORDS || activities > MAX_IMPORT_ACTIVITY_RECORDS) {
+    throw new MonitorError('GARMIN_IMPORT_READER_LIMIT', { terminal: true });
+  }
+  return safe;
+}
+
+export async function decodeFit(bytes, { sourceTimezone = 'UTC', maxRecords = MAX_IMPORT_RECORDS } = {}) {
   const stream = Stream.fromBuffer(bytes);
   const decoder = new Decoder(stream);
   if (!decoder.isFIT() || !decoder.checkIntegrity()) throw new MonitorError('GARMIN_FIT_INTEGRITY_FAILED', { terminal: true });
   const { messages, errors } = decoder.read();
   if (errors?.length) throw new MonitorError('GARMIN_FIT_DECODE_FAILED', { terminal: true });
   const records = await normalizeGarminFitMessages(messages, { sourceTimezone });
-  return validateImportedRecords(records);
+  return validateImportedRecords(records, { maxRecords });
 }
 
 async function listFiles(rootPath) {
@@ -59,10 +72,10 @@ export async function readGarminExport(inputPath, { sourceTimezone = 'UTC' } = {
     const bytes = await readFile(path);
     const extension = extname(path).toLowerCase();
     let parsed;
-    if (extension === '.fit') parsed = { records: await decodeFit(bytes, { sourceTimezone }), warnings: [] };
+    if (extension === '.fit') parsed = { records: await decodeFit(bytes, { sourceTimezone, maxRecords: MAX_IMPORT_RECORDS }), warnings: [] };
     else {
-      const result = await normalizeGarminCsv(bytes.toString('utf8'), { sourceTimezone });
-      parsed = { records: validateImportedRecords(result.records), warnings: result.warnings };
+      const result = await normalizeGarminCsv(bytes.toString('utf8'), { sourceTimezone, maxRecords: MAX_IMPORT_RECORDS });
+      parsed = { records: validateImportedRecords(result.records, { maxRecords: MAX_IMPORT_RECORDS }), warnings: result.warnings };
     }
     filesRead++;
     warnings += parsed.warnings?.length || 0;
@@ -70,11 +83,11 @@ export async function readGarminExport(inputPath, { sourceTimezone = 'UTC' } = {
       const previous = records.get(`${record.kind}:${record.external_id}`);
       if (previous && JSON.stringify(previous.payload) !== JSON.stringify(record.payload)) warnings++;
       records.set(`${record.kind}:${record.external_id}`, record);
-      if (records.size > 10000) throw new MonitorError('GARMIN_IMPORT_RECORD_LIMIT', { terminal: true });
+      if (records.size > MAX_IMPORT_RECORDS) throw new MonitorError('GARMIN_IMPORT_RECORD_LIMIT', { terminal: true });
     }
   }
   if (!filesRead || !records.size) throw new MonitorError('GARMIN_EXPORT_NO_SUPPORTED_RECORDS', { terminal: true });
-  const imported = [...records.values()].sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
+  const imported = validateExportSet([...records.values()]).sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
   return { records: imported, files_read: filesRead, warnings,
     coverage: { from: imported[0].occurred_at, through: imported.at(-1).occurred_at },
     metrics: [...new Set(imported.filter(row => row.kind === 'health_measurement').map(row => row.payload.metric))].sort(),
@@ -99,7 +112,7 @@ async function ensureImportSource(store) {
 }
 
 export async function persistGarminExport(records, store = new Store(config())) {
-  const safeRecords = validateImportedRecords(records);
+  const safeRecords = validateExportSet(records);
   if (!safeRecords.length) throw new MonitorError('GARMIN_EXPORT_NO_SUPPORTED_RECORDS', { terminal: true });
   const sourceId = await ensureImportSource(store);
   const rows = safeRecords.map(record => ({ user_id: store.env.MONITOR_USER_ID, source_id: sourceId,

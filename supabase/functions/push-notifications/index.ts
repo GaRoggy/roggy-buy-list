@@ -350,16 +350,20 @@ async function saveCameraEvent(user: User, value: unknown): Promise<Json> {
   });
   let push: Json;
   try {
-    push = { attempted: true, ...(await sendPushNotification(user.id, notificationInput({
+    const result = await sendPushNotification(user.id, notificationInput({
       title: 'Front Door Cam',
       body: event.short_description,
       url: `/roggy-buy-list/?page=front-door&event=${encodeURIComponent(String(event.event_key))}`,
       tag: `front-door-${event.event_key}`,
-    }))) };
+    }));
+    const failed = Number(result.failed) || 0;
+    const sent = Number(result.sent) || 0;
+    push = { attempted: true, ...result, delivered: sent > 0, retryable: failed > 0 };
   } catch (error) {
     const code = error instanceof PushError ? error.code : 'PUSH_SEND_FAILED';
-    push = { attempted: true, delivered: false, error: code };
-    console.error(JSON.stringify({ event: 'camera_event_push_failed', user_id: user.id, error_code: code }));
+    const retryable = error instanceof PushError ? error.retryable : true;
+    push = { attempted: true, delivered: false, error: code, retryable };
+    console.error(JSON.stringify({ event: 'camera_event_push_failed', user_id: user.id, error_code: code, retryable }));
   }
   console.info(JSON.stringify({ event: 'camera_event_persisted', user_id: user.id, event_key: event.event_key }));
   return { ok: true, event_key: event.event_key, push };

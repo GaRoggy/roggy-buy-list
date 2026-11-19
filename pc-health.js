@@ -271,5 +271,15 @@ window.addEventListener("roggy-page", event => {
   else if (activePage === "home") { startRefresh(); loadHome().catch(() => {}); }
   else stopRefresh();
 });
-window.addEventListener("roggy-auth", () => { if (activePage === "pc-health") loadPage().catch(() => {}); else if (activePage === "home") loadHome().catch(() => {}); });
+window.addEventListener("roggy-auth", () => { startRefresh(); if (activePage === "pc-health") loadPage().catch(() => {}); else if (activePage === "home") loadHome().catch(() => {}); });
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return;
+  startRefresh();
+  if (activePage === "pc-health") loadPage().catch(() => {});
+  else if (activePage === "home") loadHome().catch(() => {});
+});
+// The app dispatches its initial page event before module scripts are ready.
+// Start the bounded, singleton-guarded refresh loop here as well so a transient
+// auth or bridge failure cannot leave the Home card permanently stuck.
+startRefresh();
 loadHome().catch(() => {});

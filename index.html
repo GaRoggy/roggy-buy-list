@@ -6,12 +6,15 @@
 <meta name="theme-color" content="#6d28d9">
 <title>Roggy Lists</title>
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="styles.css?v=122">
+<link rel="stylesheet" href="styles.css?v=123">
 <link rel="stylesheet" href="todos.css?v=61">
 <link rel="stylesheet" href="polish.css?v=109">
-<link rel="stylesheet" href="network.css?v=1">
+<link rel="stylesheet" href="network.css?v=2">
 <link rel="stylesheet" href="pc-health.css?v=2">
 <link rel="stylesheet" href="garmin.css?v=2">
+<link rel="stylesheet" href="laynegarmin-manager.css?v=1">
+<link rel="stylesheet" href="lighting.css?v=1">
+<link rel="stylesheet" href="routines.css?v=1">
 <link rel="apple-touch-icon" href="icon.svg?v=2">
 </head>
 <body>
@@ -69,12 +72,13 @@
     <button class="drawer-category-toggle" type="button" aria-expanded="false" aria-controls="drawerSystem">
       <span class="drawer-category-leading">
         <span class="drawer-category-icon" aria-hidden="true">⌁</span>
-        <span class="drawer-category-copy"><b>System</b><small>Network, PC & camera</small></span>
+        <span class="drawer-category-copy"><b>System</b><small>Network, PC, camera &amp; routines</small></span>
       </span>
-      <span class="drawer-category-meta"><span class="drawer-category-count">3</span><span class="drawer-category-chevron" aria-hidden="true">⌄</span></span>
+      <span class="drawer-category-meta"><span class="drawer-category-count">4</span><span class="drawer-category-chevron" aria-hidden="true">⌄</span></span>
     </button>
     <div id="drawerSystem" class="drawer-category-items" hidden>
       <button class="page-tab drawer-page-tab" data-page="network" onclick="document.getElementById('moreToggle').checked=false"><span>Network</span></button>
+      <button class="page-tab drawer-page-tab" data-page="routines" onclick="document.getElementById('moreToggle').checked=false"><span>Routines</span></button>
       <button class="page-tab drawer-page-tab" data-page="pc-health" onclick="document.getElementById('moreToggle').checked=false"><span>PC Health</span></button>
       <button class="page-tab drawer-page-tab" data-page="front-door" onclick="document.getElementById('moreToggle').checked=false"><span>Camera</span></button>
     </div>
@@ -124,20 +128,8 @@
   <div class="settings-head"><div><b>Settings</b><span>Make it yours.</span></div><label for="settingsToggle" class="drawer-close" aria-label="Close settings" tabindex="0">✕</label></div>
   <section class="setting-group">
     <h3>Color</h3>
-    <div id="themeColors" class="theme-colors">
-      <button type="button" class="color-choice" data-theme="purple" aria-label="Purple" title="Purple" style="--swatch:#7c3aed"></button>
-      <button type="button" class="color-choice" data-theme="blue" aria-label="Blue" title="Blue" style="--swatch:#2563eb"></button>
-      <button type="button" class="color-choice" data-theme="cyan" aria-label="Cyan" title="Cyan" style="--swatch:#0891b2"></button>
-      <button type="button" class="color-choice" data-theme="teal" aria-label="Teal" title="Teal" style="--swatch:#0d9488"></button>
-      <button type="button" class="color-choice" data-theme="green" aria-label="Green" title="Green" style="--swatch:#16a34a"></button>
-      <button type="button" class="color-choice" data-theme="lime" aria-label="Lime" title="Lime" style="--swatch:#65a30d"></button>
-      <button type="button" class="color-choice" data-theme="yellow" aria-label="Yellow" title="Yellow" style="--swatch:#ca8a04"></button>
-      <button type="button" class="color-choice" data-theme="orange" aria-label="Orange" title="Orange" style="--swatch:#ea580c"></button>
-      <button type="button" class="color-choice" data-theme="red" aria-label="Red" title="Red" style="--swatch:#dc2626"></button>
-      <button type="button" class="color-choice" data-theme="pink" aria-label="Pink" title="Pink" style="--swatch:#db2777"></button>
-      <button type="button" class="color-choice" data-theme="rose" aria-label="Rose" title="Rose" style="--swatch:#e11d48"></button>
-      <button type="button" class="color-choice" data-theme="slate" aria-label="Slate" title="Slate" style="--swatch:#475569"></button>
-    </div>
+    <p>Drag the wheel to color your whole app.</p>
+    <div class="theme-wheel-wrap"><div id="appThemeWheel" class="light-wheel" tabindex="0" role="slider" aria-label="App color" aria-valuemin="0" aria-valuemax="360"><canvas width="360" height="360" aria-hidden="true"></canvas><span class="wheel-thumb" aria-hidden="true"><span></span></span></div></div><output id="themeColorValue" class="theme-color-value"></output>
   </section>
   <section class="setting-group">
     <h3>Appearance</h3>
@@ -155,6 +147,22 @@
       <button type="button" class="size-choice" data-size="large">Large</button>
     </div>
     <p>Changes text, controls, spacing, cards, and the rest of the interface together.</p>
+  </section>
+  <section class="setting-group laynegarmin-manager">
+    <h3>LayneGarmin devices</h3>
+    <p>Pair your fēnix with Layne services. Transcript permission is off until you enable it for a paired watch.</p>
+    <label class="laynegarmin-device-label" for="layneGarminDeviceName">Device name</label>
+    <div class="laynegarmin-pair-controls">
+      <input id="layneGarminDeviceName" type="text" maxlength="48" value="fēnix 7S Pro" autocomplete="off">
+      <button id="layneGarminCreateCode" class="primary" type="button">Create pairing code</button>
+    </div>
+    <p id="layneGarminPairingCode" class="laynegarmin-pair-code" role="status" hidden></p>
+    <div class="laynegarmin-list-head">
+      <span>Paired watches</span>
+      <button id="layneGarminRefresh" class="secondary" type="button">Load devices</button>
+    </div>
+    <p id="layneGarminManagerStatus" role="status" aria-live="polite"></p>
+    <div id="layneGarminDeviceList" class="laynegarmin-device-list"></div>
   </section>
   <section class="setting-group push-setting-group">
     <h3>Notifications</h3>
@@ -192,6 +200,7 @@
     <section class="home-focus-strip"><button type="button" data-focus-jump="todos"><span>Tasks</span><b id="focusTaskCount">—</b><small>open</small></button><button type="button" data-focus-jump="reminders"><span>Today</span><b id="focusTodayCount">—</b><small>events</small></button><button type="button" data-focus-jump="projects"><span>Projects</span><b id="focusProjectCount">—</b><small>active</small></button></section>
     <section id="homeNetworkSection" class="home-section network-home-section" aria-labelledby="homeNetworkTitle"><button id="homeNetworkCard" class="network-home-card" type="button"><span class="network-status-dot" data-state="unknown" aria-hidden="true"></span><span class="network-home-copy"><span class="eyebrow">NETWORK</span><b id="homeNetworkTitle">Internet</b><small id="homeNetworkMessage">Checking current health…</small></span><span class="network-home-metric" id="homeNetworkMetric">—</span><span class="network-chevron" aria-hidden="true">›</span></button></section>
     <section id="homePcHealthSection" class="home-section pc-health-home-section" aria-labelledby="homePcHealthTitle"><button id="homePcHealthCard" class="pc-health-home-card" type="button"><span class="pc-health-status-dot" data-state="unknown" aria-hidden="true"></span><span class="pc-health-home-copy"><span class="eyebrow">PC HEALTH</span><b id="homePcHealthTitle">PC</b><small id="homePcHealthMessage">Checking current health…</small></span><span class="pc-health-home-metric" id="homePcHealthMetric">—</span><span class="network-chevron" aria-hidden="true">›</span></button></section>
+    <section id="homeVoiceSection" class="home-section network-home-section voice-home-section" aria-labelledby="homeVoiceTitle"><button id="homeVoiceCard" class="network-home-card voice-home-card" type="button"><span class="network-status-dot" data-state="unknown" aria-hidden="true"></span><span class="network-home-copy"><span class="eyebrow">LAYNE VOICE</span><b id="homeVoiceTitle">Voice</b><small id="homeVoiceMessage">Checking voice status…</small></span><span class="network-chevron" aria-hidden="true">›</span></button></section>
     <section class="home-primary-grid">
       <section id="homeHighTodos" class="home-section high-todos-section" hidden><div class="section-head"><div><span class="eyebrow">HIGH PRIORITY</span><h3>Tasks</h3></div><button id="homeHighTodosAll" class="text-action" type="button">See all</button></div><div id="homeHighTodoList" class="home-high-todo-list"></div></section>
       <section id="homeTimeline" class="home-timeline"></section>
@@ -222,6 +231,7 @@
   </main>
 </section>
 <section id="projectDetailPage" hidden><main class="system-main project-detail-main"><button id="projectBackBtn" class="project-back">← Projects</button><div id="projectDetailContent"></div></main></section>
+<section id="routinesPage" hidden><main class="system-main routine-main"><div class="system-intro"><span class="eyebrow">YOUR HOME, ON AUTOPILOT</span><h2>Routines</h2><p>See what happened, what Layne said, and what comes next.</p></div><p id="routinesStatus" class="status" role="status"></p><div id="routinesList" class="routines-list"></div></main></section>
 <section id="devicesPage" hidden><main class="system-main device-main"><div class="system-intro"><span class="eyebrow">SMART HOME</span><h2>Devices</h2><p>Live state and controls from Layne’s registered device integrations.</p></div><section id="deviceDiagnostics" class="device-diagnostics" aria-live="polite"></section><section id="deviceRoomSummary" class="device-room-summary"></section><section id="deviceStatus" class="status"></section><section id="deviceRooms" class="device-rooms"></section></main></section>
 <section id="networkPage" hidden>
   <main class="system-main network-main">
@@ -264,7 +274,7 @@
       <p>Private, read-only records from Garmin exports or an approved Garmin data connection.</p>
     </div>
     <section class="garmin-status-card" aria-live="polite">
-      <div class="garmin-status-copy"><span class="eyebrow">CONNECTION</span><b id="garminConnectionStatus">Checking Garmin data…</b><p id="garminFreshness">No synchronized records yet.</p></div>
+      <div class="garmin-status-copy"><span class="eyebrow">CONNECTION</span><b id="garminConnectionStatus">Checking Garmin data…</b><p id="garminFreshness">No synchronized records yet.</p><p id="garminLastSync">No successful Garmin import or sync yet.</p></div>
       <div class="garmin-controls">
         <button id="garminSyncNow" class="primary" type="button" disabled title="Automatic sync needs approved Garmin API access">Sync now</button>
         <button id="garminImportCsv" class="secondary" type="button">Import CSV</button>
@@ -280,6 +290,7 @@
       </div>
       <div class="garmin-chart-grid">
         <article class="garmin-chart-card" data-metric="resting_heart_rate"><h4>Resting heart rate</h4><canvas id="garminChartRestingHeartRate" aria-label="Resting heart rate trend"></canvas><p class="garmin-chart-empty" hidden>No resting heart rate records in this range.</p></article>
+        <article class="garmin-chart-card" data-metric="heart_rate"><h4>Heart rate</h4><canvas id="garminChartHeartRate" aria-label="Average daily heart rate trend"></canvas><p class="garmin-chart-empty" hidden>No heart rate records in this range.</p></article>
         <article class="garmin-chart-card" data-metric="sleep_duration"><h4>Sleep duration</h4><canvas id="garminChartSleepDuration" aria-label="Sleep duration trend"></canvas><p class="garmin-chart-empty" hidden>No sleep duration records in this range.</p></article>
         <article class="garmin-chart-card" data-metric="sleep_score"><h4>Sleep score</h4><canvas id="garminChartSleepScore" aria-label="Sleep score trend"></canvas><p class="garmin-chart-empty" hidden>No sleep score records in this range.</p></article>
         <article class="garmin-chart-card" data-metric="hrv"><h4>HRV</h4><canvas id="garminChartHrv" aria-label="Heart rate variability trend"></canvas><p class="garmin-chart-empty" hidden>No HRV records in this range.</p></article>
@@ -287,6 +298,8 @@
         <article class="garmin-chart-card" data-metric="stress"><h4>Stress</h4><canvas id="garminChartStress" aria-label="Daily stress trend"></canvas><p class="garmin-chart-empty" hidden>No stress records in this range.</p></article>
         <article class="garmin-chart-card" data-metric="steps"><h4>Steps</h4><canvas id="garminChartSteps" aria-label="Daily steps trend"></canvas><p class="garmin-chart-empty" hidden>No step records in this range.</p></article>
         <article class="garmin-chart-card" data-metric="calories"><h4>Calories burned</h4><canvas id="garminChartCalories" aria-label="Daily calories trend"></canvas><p class="garmin-chart-empty" hidden>No calorie records in this range.</p></article>
+        <article class="garmin-chart-card" data-metric="active_calories"><h4>Active calories</h4><canvas id="garminChartActiveCalories" aria-label="Daily active calories trend"></canvas><p class="garmin-chart-empty" hidden>No active calorie records in this range.</p></article>
+        <article class="garmin-chart-card" data-metric="intensity_minutes"><h4>Intensity minutes</h4><canvas id="garminChartIntensityMinutes" aria-label="Daily intensity minutes trend"></canvas><p class="garmin-chart-empty" hidden>No intensity minute records in this range.</p></article>
         <article class="garmin-chart-card" data-metric="training_load"><h4>Training load</h4><canvas id="garminChartTrainingLoad" aria-label="Training load trend"></canvas><p class="garmin-chart-empty" hidden>No training load records in this range.</p></article>
       </div>
     </section>
@@ -298,7 +311,7 @@
       <p>For a CSV, select an activity export or a Garmin health report. The selected file is sent to your private Supabase function for normalization; only normalized records are retained. For local-only parsing, or for a full account archive and FIT files, extract the ZIP on the Windows desktop and run the local importer in dry-run mode first:</p>
       <code>npm run garmin:import -- "C:\path\to\extracted-garmin-export"</code>
       <p>After reviewing the row count, coverage, and supported metrics, add <code>--apply</code> to save the normalized records to the private Roggy database. Garmin API access remains off until Garmin approves a developer account and provides its endpoint contract.</p>
-      <p id="garminSyncHistory">Historical import status will appear here after a successful import.</p>
+      <p>Successful import and sync times are shown in the connection card above.</p>
     </details>
     <dialog id="garminActivityDialog" class="garmin-activity-dialog"><div id="garminActivityDetail"></div><button id="garminActivityClose" class="secondary" type="button">Close</button></dialog>
   </main>
@@ -585,13 +598,17 @@
 <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
 <script src="ai-config.js?v=45"></script>
 <script>window.ROGGY_AI_CONFIG=window.ROGGY_AI_CONFIG||Object.freeze({"bridgeUrl":"https://desktop-movehp4.tail990d14.ts.net","smartHomeUrl":"https://desktop-movehp4.tail990d14.ts.net/smart-home","transcriptTimeZone":"America/Chicago"});</script>
-<script src="app.js?v=126"></script>
+<script src="owner-auth-redirect.js?v=1"></script>
+<script src="app.js?v=132"></script>
+<script type="module" src="lighting-ui.js?v=1"></script>
+<script type="module" src="routines.js?v=1"></script>
+<script src="laynegarmin-manager.js?v=2"></script>
 <script type="module" src="garmin-dashboard.js?v=2"></script>
 <script src="push-notifications.js?v=3"></script>
 <script src="monitor-ui.js?v=53"></script>
 <script src="todos.js?v=65"></script>
 <script type="module" src="network.js?v=1"></script>
 <script type="module" src="pc-health.js?v=4"></script>
-<script type="module" src="ai-ui.js?v=46"></script>
+<script type="module" src="ai-ui.js?v=47"></script>
 <script src="polish.js?v=109"></script>
 </body></html>

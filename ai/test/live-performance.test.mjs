@@ -15,6 +15,12 @@ test('camera status failure cannot re-enter the Home/Devices render loop', () =>
 test('live dashboard reads have singleton request guards and bounded event refresh', () => {
   assert.match(pcHealth, /if \(homePromise\) return homePromise;/);
   assert.match(network, /if \(homePromise\) return homePromise;/);
+  assert.match(pcHealth, /document\.addEventListener\("visibilitychange"/);
+  assert.match(network, /document\.addEventListener\("visibilitychange"/);
+  assert.match(pcHealth, /startRefresh\(\);\s*loadHome\(\)\.catch/);
+  assert.match(network, /startRefresh\(\);\s*loadHomeNetworkCard\(\)\.catch/);
   assert.match(source, /if\(smartHomeRefreshTimer\)return;/);
   assert.match(source, /smartHomeStreamRetryDelayMs=Math\.min\(delay\*2,120000\)/);
+  assert.match(source, /document\.addEventListener\("visibilitychange",\(\)=>\{[\s\S]*loadSmartHome\(\{silent:true\}\)/);
+  assert.match(source, /loadFrontDoorState\(\{silent:true,force:true\}\)/);
 });

@@ -4,16 +4,21 @@ const GARMIN_CONTROL='garmin-control';
 const GARMIN_SOURCE_IMPORT='official-export-import';
 const GARMIN_METRICS=[
   ['steps','Steps'],['body_battery','Body Battery'],['heart_rate','Last recorded heart rate'],
-  ['resting_heart_rate','Resting heart rate'],['sleep_duration','Last recorded sleep'],['sleep_score','Sleep score'],
-  ['hrv','HRV'],['stress','Stress'],['calories','Calories burned'],['training_readiness','Training readiness'],
+  ['resting_heart_rate','Resting heart rate'],['sleep_duration','Sleep duration'],['sleep_score','Sleep score'],
+  ['deep_sleep_duration','Deep sleep'],['light_sleep_duration','Light sleep'],['rem_sleep_duration','REM sleep'],
+  ['awake_duration','Awake during sleep'],['hrv','HRV'],['stress','Stress'],['calories','Calories burned'],
+  ['active_calories','Active calories'],['intensity_minutes','Intensity minutes'],['training_readiness','Training readiness'],
 ];
 const ACTIVITY_API_SOURCE='approved-api';
 const GARMIN_CHARTS=[
   ['resting_heart_rate','Resting heart rate','bpm','garminChartRestingHeartRate'],
+  ['heart_rate','Average heart rate','bpm','garminChartHeartRate'],
   ['sleep_duration','Sleep duration','seconds','garminChartSleepDuration'],['sleep_score','Sleep score','score','garminChartSleepScore'],
   ['hrv','HRV','ms','garminChartHrv'],['body_battery','Body Battery','score','garminChartBodyBattery'],
   ['stress','Stress','score','garminChartStress'],['steps','Steps','count','garminChartSteps'],
-  ['calories','Calories burned','kcal','garminChartCalories'],['training_load','Training load','score','garminChartTrainingLoad'],
+  ['calories','Calories burned','kcal','garminChartCalories'],['active_calories','Active calories','kcal','garminChartActiveCalories'],
+  ['intensity_minutes','Intensity minutes','minutes','garminChartIntensityMinutes'],
+  ['training_load','Training load','score','garminChartTrainingLoad'],
 ];
 const chartInstances=new Map();
 let healthRecords=[],activityRecords=[],sourceRows=[],loading=false;
@@ -50,21 +55,23 @@ function formatMetric(metric,value){
   if(metric==='distance')return value>=1000?`${(value/1000).toFixed(1)} km`:`${Math.round(value)} m`;
   if(metric==='steps')return Math.round(value).toLocaleString();
   if(metric==='calories'||metric==='active_calories'||metric==='resting_calories')return `${Math.round(value).toLocaleString()} kcal`;
-  const unit=({heart_rate:'bpm',resting_heart_rate:'bpm',hrv:'ms',body_battery:'',stress:'',sleep_score:'',training_readiness:'',training_load:'',respiration:' breaths/min',spo2:'%',steps:'',fitness_age:' yrs'})[metric];
+  const unit=({heart_rate:'bpm',resting_heart_rate:'bpm',hrv:'ms',body_battery:'',stress:'',sleep_score:'',training_readiness:'',training_load:'',intensity_minutes:' min',respiration:' breaths/min',spo2:'%',steps:'',fitness_age:' yrs'})[metric];
   const digits=Math.abs(value)<10&&value%1!==0?1:0;
   return `${Number(value.toFixed(digits)).toLocaleString()}${unit===undefined?'':unit?` ${unit}`:''}`;
 }
 function metricDetail(metric,row){
-  if(!row)return 'Not present in imported data';
-  const source=row.payload?.source_format==='garmin_fit'?'FIT export':row.payload?.source_format==='garmin_export'?'Garmin export':'Garmin record';
+  if(!row)return 'Not present in imported Garmin records';
+  const format=row.payload?.source_format;
+  const source=format==='garmin_fit'?'FIT export':format==='garmin_export'?'Garmin export':
+    ['approved_api','garmin_health_api','garmin_activity_api'].includes(format)?'Approved Garmin API':'Garmin record';
   return `${formatTimestamp(row.occurred_at)} · ${source}`;
 }
 function renderMetricCards(){
   const root=$('garminMetricCards');if(!root)return;
   root.innerHTML=GARMIN_METRICS.map(([metric,label])=>{
-    const row=latestMetric(metric),value=row?formatMetric(metric,row.payload.value):'—';
+    const row=latestMetric(metric),value=row?formatMetric(metric,row.payload.value):'No data';
     const cardLabel=metric==='steps'&&row&&dateKey(row.occurred_at)===dateKey(new Date())?"Today's steps":metric==='steps'?'Latest recorded steps':label;
-    return `<article class="garmin-metric-card"><span>${esc(cardLabel)}</span><b>${esc(value)}</b><small>${esc(metricDetail(metric,row))}</small></article>`;
+    return `<article class="garmin-metric-card${row?'':' garmin-metric-card--empty'}" data-metric="${esc(metric)}" data-availability="${row?'recorded':'missing'}"><span>${esc(cardLabel)}</span><b>${esc(value)}</b><small>${esc(metricDetail(metric,row))}</small></article>`;
   }).join('');
 }
 function metricUnit(metric){return GARMIN_CHARTS.find(item=>item[0]===metric)?.[2]||''}
@@ -79,7 +86,8 @@ function dailySeries(metric,days){
   return [...byDay.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([date,list])=>{
     list.sort((a,b)=>a.timestamp.localeCompare(b.timestamp));
     const interval=list.filter(item=>item.aggregation==='interval_total');
-    const value=interval.length?interval.reduce((sum,item)=>sum+item.value,0):list.at(-1).value;
+    const value=interval.length?interval.reduce((sum,item)=>sum+item.value,0):
+      ['heart_rate','stress','respiration','spo2'].includes(metric)?list.reduce((sum,item)=>sum+item.value,0)/list.length:list.at(-1).value;
     return {date,value};
   });
 }
@@ -142,7 +150,7 @@ function renderConnection(){
   if(sync){sync.disabled=!apiEnabled;sync.title=apiEnabled?'Queue a manual Garmin sync':'Automatic sync needs approved Garmin API access';}
   if(remove)remove.disabled=!sourceRows.some(source=>source.kind==='garmin')&&!healthRecords.length&&!activityRecords.length;
   const successful=sourceRows.filter(source=>source.kind==='garmin'&&source.last_success_at).map(source=>source.last_success_at).sort().at(-1);
-  const history=$('garminSyncHistory');if(history)history.textContent=successful?`Last successful import or sync: ${formatTimestamp(successful)}.`:'No completed import or automatic sync is recorded.';
+  const lastSync=$('garminLastSync');if(lastSync)lastSync.textContent=successful?`Last successful import or sync: ${formatTimestamp(successful)}.`:'No successful Garmin import or sync yet.';
 }
 async function loadGarminDashboard(){
   if(loading)return;loading=true;setStatus('Loading private Garmin records…');
@@ -150,16 +158,21 @@ async function loadGarminDashboard(){
     if(!sb){setStatus('The Roggy database client is unavailable.');return;}
     const {data:{session}}=await sb.auth.getSession();
     if(!isOwner(session)){healthRecords=[];activityRecords=[];sourceRows=[];renderMetricCards();renderCharts();renderWorkouts();renderConnection();setStatus('Sign in with the Roggy owner account to view private Garmin data.');return;}
-    const cutoff=new Date(Date.now()-90*86400000).toISOString();
-    const [healthResult,activityResult,sourceResult]=await Promise.all([
-      sb.from('monitor_records').select('id,kind,external_id,occurred_at,synced_at,status,payload').eq('user_id',session.user.id).eq('kind','health_measurement').eq('status','processed').gte('occurred_at',cutoff).order('occurred_at',{ascending:false}).limit(6000),
-      sb.from('monitor_records').select('id,kind,external_id,occurred_at,synced_at,status,payload').eq('user_id',session.user.id).eq('kind','garmin_activity').eq('status','processed').order('occurred_at',{ascending:false}).limit(200),
-      sb.from('monitor_sources').select('id,kind,external_id,enabled,interval_seconds,last_attempt_at,last_success_at,records_processed,error_code,config').eq('user_id',session.user.id).eq('kind','garmin').limit(20),
-    ]);
-    const error=healthResult.error||activityResult.error||sourceResult.error;if(error)throw error;
-    healthRecords=Array.isArray(healthResult.data)?healthResult.data:[];
-    activityRecords=Array.isArray(activityResult.data)?activityResult.data:[];
+    const sourceResult=await sb.from('monitor_sources').select('id,kind,external_id,enabled,interval_seconds,last_attempt_at,last_success_at,records_processed,error_code,config').eq('user_id',session.user.id).eq('kind','garmin').limit(20);
+    if(sourceResult.error)throw sourceResult.error;
     sourceRows=Array.isArray(sourceResult.data)?sourceResult.data:[];
+    const garminSourceIds=sourceRows.map(source=>source.id).filter(id=>typeof id==='string'&&id.length<=64);
+    if(!garminSourceIds.length){healthRecords=[];activityRecords=[];}
+    else{
+      const cutoff=new Date(Date.now()-90*86400000).toISOString();
+      const [healthResult,activityResult]=await Promise.all([
+        sb.from('monitor_records').select('id,source_id,kind,external_id,occurred_at,synced_at,status,payload').eq('user_id',session.user.id).in('source_id',garminSourceIds).eq('kind','health_measurement').eq('status','processed').gte('occurred_at',cutoff).order('occurred_at',{ascending:false}).limit(6000),
+        sb.from('monitor_records').select('id,source_id,kind,external_id,occurred_at,synced_at,status,payload').eq('user_id',session.user.id).in('source_id',garminSourceIds).eq('kind','garmin_activity').eq('status','processed').order('occurred_at',{ascending:false}).limit(200),
+      ]);
+      const error=healthResult.error||activityResult.error;if(error)throw error;
+      healthRecords=Array.isArray(healthResult.data)?healthResult.data:[];
+      activityRecords=Array.isArray(activityResult.data)?activityResult.data:[];
+    }
     renderMetricCards();renderCharts();renderWorkouts();renderConnection();
     setStatus(healthRecords.length||activityRecords.length?'':'No Garmin records are available yet. Import a Garmin CSV or extracted FIT export to begin.');
   }catch(error){setStatus(error?.message==='Failed to fetch'?'Garmin data could not be reached. Check the private Supabase connection.':'Garmin data could not be loaded. Sign in again or check the Roggy database connection.');}
