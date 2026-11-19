@@ -1483,7 +1483,7 @@ window.roggyLights={
  devices:()=>smartHomeState.devices,rooms:()=>smartHomeRooms(),roomId:deviceRoomId,category:deviceSubcategoryId,
  label:smartStateLabel,roomName:id=>roomDisplayName(smartHomeRooms().find(r=>r.room_id===id)||{room_id:id}),
  roomDevices,deviceCard:deviceCardMarkup,power:devicePowerState,brightness:deviceBrightness,usable:deviceUsable,
- allowed:()=>smartHomeControlAllowed,fetch:smartHomeFetch,refresh:()=>loadSmartHome({silent:true}),render:()=>renderDevicesPage(),
+ allowed:()=>smartHomeControlAllowed,fetch:smartHomeFetch,refresh:async()=>{if(smartHomeLoading)await smartHomeLoading;return loadSmartHome({silent:true})},render:()=>renderDevicesPage(),
  optimistic(id,body){
   const d=smartHomeState.devices.find(d=>d.device_id===id);if(!d)return;
   const a={...(d.attributes||{})};

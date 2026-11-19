@@ -11,4 +11,5 @@ coverage/
 *.log
 dist/
 test-results/
+tools/node-v*.exe
 monitor/garmin-import/
