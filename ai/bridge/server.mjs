@@ -155,6 +155,13 @@ function smartHomeRequest(reqUrl, requestMethod = null) {
     if (!['GET', 'POST'].includes(requestMethod)) throw new AIError('METHOD_NOT_ALLOWED', 405);
     return { kind: 'proxy', method: requestMethod, path };
   }
+  if (/^\/completions(?:\/[A-Za-z0-9._~%+\-]+)?$/.test(path)) {
+    if (requestMethod !== 'GET') throw new AIError('METHOD_NOT_ALLOWED', 405);
+    const stream = path === '/completions/stream';
+    const allowed = stream ? ['after'] : path === '/completions' ? ['limit','before'] : [];
+    if ([...parsed.searchParams.keys()].some(k => !allowed.includes(k)) || [...parsed.searchParams.values()].some(v => !/^\d{1,14}$/.test(v))) throw new AIError('SMART_HOME_QUERY_INVALID',400);
+    return {kind:'proxy',method:'GET',path:`/api${path}`,search:parsed.search,stream};
+  }
   if (/^\/routines(?:\/[A-Za-z0-9_-]+\/(?:history|runs\/[A-Za-z0-9_-]+|run|cancel))?$/.test(path)) {
     const method = /\/(?:run|cancel)$/.test(path) ? 'POST' : 'GET';
     if (requestMethod !== method) throw new AIError('METHOD_NOT_ALLOWED', 405);

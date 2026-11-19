@@ -3,7 +3,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const zone='America/Chicago',dateKey=value=>new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value));
 const time=value=>new Intl.DateTimeFormat(undefined,{timeZone:zone,hour:'numeric',minute:'2-digit',second:'2-digit'}).format(new Date(value));
 const date=value=>new Intl.DateTimeFormat(undefined,{timeZone:zone,month:'short',day:'numeric',year:'numeric'}).format(new Date(value));
-const reason=r=>r.reason==='initiated_by_user'?'Initiated by user':'Scheduled / automatic';
+const reason=r=>r.reason==='test'?'Test':r.reason==='initiated_by_user'?'Initiated by user':'Scheduled / automatic';
 let state={routines:[],runs:[]},selected=null,tab='today',history=[],total=0,loading=false,generation=0,guidePage=0;
 const dialog=document.createElement('dialog');dialog.id='routineDialog';dialog.className='routine-dialog';dialog.setAttribute('aria-labelledby','routineTitle');document.body.append(dialog);
 const eventDialog=document.createElement('dialog');eventDialog.id='routineEventDialog';eventDialog.className='routine-dialog routine-event-dialog';eventDialog.setAttribute('aria-labelledby','routineEventTitle');document.body.append(eventDialog);

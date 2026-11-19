@@ -1,3 +1,3 @@
-export const staticFiles = ['index.html', 'lighting-ui.js', 'lighting-model.mjs', 'lighting.css', 'routines.js', 'routines.css', 'app.js', 'push-notifications.js', 'monitor-ui.js', 'styles.css', 'manifest.json', 'icon.svg', 'sw.js',
+export const staticFiles = ['index.html', 'layne-activity.js', 'activity-model.mjs', 'layne-activity.css', 'lighting-ui.js', 'lighting-model.mjs', 'lighting.css', 'routines.js', 'routines.css', 'app.js', 'push-notifications.js', 'monitor-ui.js', 'styles.css', 'manifest.json', 'icon.svg', 'sw.js',
   'assets/mountain-panorama.jpg', 'ai-config.js', 'owner-auth-redirect.js', 'ai-ui.js', 'network.js', 'network-model.mjs', 'network.css', 'pc-health.js', 'pc-health.css',
   'garmin-dashboard.js', 'garmin.css', 'laynegarmin-manager.js', 'laynegarmin-manager.css', 'transcript.js', 'ai/browser/provider.js', 'ai/shared/protocol.js', 'todos.js', 'todos.css', 'polish.js', 'polish.css', 'list-completion.js', 'list-completion.css'];

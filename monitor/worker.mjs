@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { config, Store, failure, backoff, log, MonitorError } from './core.mjs';
 import { collect } from './collectors.mjs';
 import { normalizeRecords } from './events.mjs';
+import { recordCompletedJob } from './completion-history.mjs';
 import { flushUnifiedEventOutbox, normalizeUnifiedEvent } from './unified-events.mjs';
 import { acquireProcessLock } from '../ai/shared/single-instance.mjs';
 
@@ -78,6 +79,7 @@ export async function runJob(store, claim, collector = collect, logger = log) {
     }
     await logger('job_succeeded', { job_id: job.id, records_processed: count,
       events_processed: eventsProcessed, duration_ms: Date.now() - started });
+    await recordCompletedJob(job,source,count,Date.now()-started);
     if (Number(job.attempts) > 1) {
       await enqueueCanonicalEvent(store, {
         event_id: `background-job:${job.id}:recovered`,

@@ -86,6 +86,7 @@ async function fixture(t, opts = {}) {
     if (url.includes('/internal/pc-health/history')) return result({ samples: [{ timestamp: '2026-10-05T04:00:00Z', cpuPercent: 18, ramPercent: 63.4 }], sampleIntervalSeconds: 7, windowMinutes: 30 });
     if (url.includes('/internal/pc-health/events')) return result({ events: [], count: 0 });
     if (url.endsWith('/api/commands')) return result({ message: 'Layne command accepted' });
+    if (url.includes('/api/completions')) return result({items:[{id:'completion-fixture',title:'Fixture task completed'}],cursor:1});
     if (url.endsWith('/api/devices/fixture_light/actions')) return result({ success: true });
     if (opts.offline) throw Error('sensitive Ollama detail');
     if (url.endsWith('/api/tags')) return result({ models: [{ name: 'fixture:local' }, { name: 'remote:cloud' }, { name: 'hidden:alias', remote_model: 'remote' }] });
@@ -184,6 +185,17 @@ test('authenticated smart-home traffic stays behind the owner bridge', async t =
   assert.equal(upstream.options.headers.Authorization, 'Bearer valid');
   assert.equal((await f.request('/smart-home/commands', { text: 'status' })).status, 200);
   assert.equal((await f.request('/smart-home/devices/fixture_light/actions', { action: 'power', value: 'off' })).status, 200);
+});
+test('completion history stays owner-only and only supports bounded read routes', async t=>{
+  const f=await fixture(t);
+  assert.equal((await f.request('/smart-home/completions?limit=50',null,'')).status,401);
+  assert.equal((await f.request('/smart-home/completions?limit=50',null,'other')).status,403);
+  const response=await f.request('/smart-home/completions?limit=50&before=3',null);
+  assert.equal(response.status,200);assert.equal((await response.json()).items[0].id,'completion-fixture');
+  assert.equal((await f.request('/smart-home/completions',{})).status,405);
+  assert.equal((await f.request('/smart-home/completions?source=unbounded',null)).status,400);
+  assert.equal((await f.request('/smart-home/completions?before=-1',null)).status,400);
+  assert.ok(f.calls.some(c=>c.url.includes('/api/completions?limit=50&before=3')));
 });
 test('native proxy delivers fixed-length command JSON while transcript streams stay open', async t => {
   const body = { text: 'Layne, turn off the alarm 🔕' };
