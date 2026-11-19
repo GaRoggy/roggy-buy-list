@@ -199,6 +199,12 @@
     </section><section class="home-section device-status-section"><div class="section-head"><div><span class="eyebrow">SMART HOME</span><h3>Lights & Controls</h3></div><button class="text-action" data-home-jump="devices">Device shelf</button></div><div id="homeDeviceStatus" class="home-device-status"></div><p id="homeControlStatus" class="status" role="status"></p></section>
     <section class="home-section email-section"><div class="section-head"><div><span class="eyebrow">EMAIL</span><h3>Action Required</h3></div><span class="mail-filter-badge">Last 21 days</span></div><div id="importantEmailList" class="important-email-list"></div></section>
     <section class="home-section front-door-home-section"><div class="section-head"><div><span class="eyebrow">FRONT DOOR CAM</span><h3>Camera status</h3></div><button class="text-action" data-home-jump="front-door">Open shelf</button></div><div class="front-door-dashboard-card"><div class="front-door-dashboard-copy"><b id="homeFrontDoorState">—</b><p id="homeFrontDoorDescription">Loading camera status…</p><small id="homeFrontDoorAnalysisTime">—</small></div><div class="front-door-frame-wrap compact"><img id="homeFrontDoorFrame" class="front-door-frame" alt="Front Door camera live view" hidden><div id="homeFrontDoorFrameEmpty" class="quiet-state">Sign in to view the private camera.</div></div></div><p id="homeFrontDoorStatus" class="front-door-status" role="status"></p></section>
+    <div id="homeTranscriptHost" class="home-section">      <section class="live-transcript-panel" aria-labelledby="liveTranscriptTitle">
+        <div class="live-transcript-heading"><div><span class="eyebrow">LIVE VOICE</span><h3 id="liveTranscriptTitle">What Layne hears</h3></div><span id="liveTranscriptStatus" class="live-transcript-status" data-state="offline" role="status">Disconnected</span></div>
+        <div class="live-transcript-toolbar"><label class="live-transcript-filter" for="liveTranscriptFilter">Microphone<select id="liveTranscriptFilter"><option value="all">All microphones</option></select></label><button type="button" id="liveTranscriptLatest" class="secondary">Jump to latest</button></div>
+        <div id="liveTranscriptLog" class="live-transcript-log" role="log" aria-live="polite" aria-label="Live Whisper transcript"></div>
+        <p id="liveTranscriptEmpty" class="live-transcript-empty">Nothing heard in the last 5 minutes.</p>
+      </section></div>
   </main>
 </section>
 
@@ -319,12 +325,7 @@
         <label for="aiPrompt">Message</label><textarea id="aiPrompt" rows="3" maxlength="12000" placeholder="Ask your local AI…" autocomplete="off" required aria-describedby="aiKeyboard"></textarea>
         <div class="ai-compose-actions"><small id="aiKeyboard">Enter for a new line · Ctrl/⌘ + Enter to send</small><span id="aiGenerating" role="status" hidden>Generating…</span><button id="aiStop" type="button" hidden>Stop</button><button id="aiSend" class="ai-send" type="submit" disabled>Send ↗</button></div>
       </form>
-      <section class="live-transcript-panel" aria-labelledby="liveTranscriptTitle">
-        <div class="live-transcript-heading"><div><span class="eyebrow">LIVE VOICE</span><h3 id="liveTranscriptTitle">What Layne hears</h3></div><span id="liveTranscriptStatus" class="live-transcript-status" data-state="offline" role="status">Disconnected</span></div>
-        <div class="live-transcript-toolbar"><label class="live-transcript-filter" for="liveTranscriptFilter">Microphone<select id="liveTranscriptFilter"><option value="all">All microphones</option></select></label><button type="button" id="liveTranscriptLatest" class="secondary">Jump to latest</button></div>
-        <div id="liveTranscriptLog" class="live-transcript-log" role="log" aria-live="polite" aria-label="Live Whisper transcript"></div>
-        <p id="liveTranscriptEmpty" class="live-transcript-empty">Nothing heard in the last 5 minutes.</p>
-      </section>
+      <div id="aiTranscriptHost"></div>
     </section>
   </main>
 </section>
@@ -594,6 +595,6 @@
 <script src="todos.js?v=67"></script>
 <script type="module" src="network.js?v=1"></script>
 <script type="module" src="pc-health.js?v=4"></script>
-<script type="module" src="ai-ui.js?v=47"></script>
+<script type="module" src="ai-ui.js?v=48"></script>
 <script src="polish.js?v=109"></script>
 </body></html>
