@@ -1,0 +1,15 @@
+/* Put row spacing inside the animated layout, including the last few pixels. */
+#list.list,.todo-list{row-gap:0;align-content:start}
+#list{--completion-gap:11px}
+.todo-list{--completion-gap:10px}
+.completion-row{min-width:0;margin-bottom:var(--completion-gap);display:flow-root}
+.completion-row:last-child{margin-bottom:0}
+.completion-running{pointer-events:none}
+.completion-running>.card,.completion-running>.todo-card{transform-origin:50% 0;transition:none!important;will-change:transform,opacity}
+.completion-empty{min-width:0;overflow:hidden}
+.completion-check{display:block;width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.completion-check path{stroke-dasharray:1;stroke-dashoffset:1}
+.todo-check{display:grid;place-items:center;padding:0}
+.todo-done .completion-check path,.completion-checked .completion-check path{stroke-dashoffset:0}
+.completion-checked{display:grid;place-items:center;padding:0;border-radius:50%;color:var(--accent,#7c3aed);background:color-mix(in srgb,var(--accent,#7c3aed) 15%,transparent);border-color:var(--accent,#7c3aed)}
+html.list-completing,html.list-completing body{overflow-anchor:none}

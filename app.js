@@ -145,7 +145,8 @@ const SMART_HOME_API=(window.ROGGY_SMART_HOME_API||window.ROGGY_AI_CONFIG?.smart
 const CAMERA_API=(window.ROGGY_AI_CONFIG?.bridgeUrl||"").replace(/\/$/,"");
 let smartHomeState={devices:[],rooms:[],events:[],diagnostics:null,voice:null},smartHomeLoaded=false,smartHomeUnavailable=false,smartHomeFailure=null,smartHomeLoading=null,smartHomeRefreshTimer=null,smartHomeRefreshQueued=false,smartHomeLastRefreshAt=0,smartHomeStreamPromise=null,smartHomeStreamAbort=null,smartHomeStreamRetry=null,smartHomeStreamRetryDelayMs=15000,smartHomeLastEventId="",smartHomeStreamStatus="disconnected",smartHomeTranscriptStreamPromise=null,smartHomeTranscriptStreamAbort=null,smartHomeTranscriptStreamRetry=null,smartHomeTranscriptStreamRetryDelayMs=1000,smartHomeTranscriptLastEventId="",smartHomeTranscriptStreamStatus="disconnected",smartHomeControlAllowed=false,smartHomeAccessToken="",smartHomePendingActions=new Map(),smartHomeActionSequence=0;
 let layneChatMessages=[],layneChatBusy=false,layneChatError="",laynePendingAction=null,layneSessionId=null;
-let frontDoorEvents=[],frontDoorView="active",frontDoorLoaded=false,frontDoorLoading=null,frontDoorLoadError="",frontDoorFrameBusy=false,frontDoorFrameUrls=new Map(),frontDoorThumbnailUrls=new Map(),frontDoorThumbnailToken=0,frontDoorDeepLinkKey="",frontDoorDetailImageUrl="",frontDoorState=null,frontDoorStateLoading=null,frontDoorStateAttempted=false,frontDoorStateRetryTimer=null,frontDoorStateRetryDelayMs=5000,frontDoorAnalyzeBusy=false,frontDoorAnalyzeError="";
+let frontDoorEvents=[],frontDoorView="active",frontDoorLoaded=false,frontDoorLoading=null,frontDoorLoadError="",frontDoorFrameBusy=false,frontDoorFrameUrls=new Map(),frontDoorThumbnailUrls=new Map(),frontDoorThumbnailLoads=new Map(),frontDoorThumbnailQueue=[],frontDoorThumbnailQueued=new Set(),frontDoorThumbnailObserver=null,frontDoorThumbnailActive=0,frontDoorThumbnailToken=0,frontDoorRenderSignature="",frontDoorDeepLinkKey="",frontDoorDetailImageUrl="",frontDoorDetailRequestToken=0,frontDoorState=null,frontDoorStateLoading=null,frontDoorStateAttempted=false,frontDoorStateRetryTimer=null,frontDoorStateRetryDelayMs=5000,frontDoorAnalyzeBusy=false,frontDoorAnalyzeError="";
+const FRONT_DOOR_THUMBNAIL_CONCURRENCY=3,FRONT_DOOR_THUMBNAIL_CACHE_LIMIT=60;
 
 
 function esc(s=""){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
@@ -171,8 +172,11 @@ async function smartHomeFetch(path,options={}){
 async function cameraBinary(path){
  if(!CAMERA_API)throw Object.assign(new Error("Camera bridge is not configured"),{code:"bridge_not_configured"});
  if(!smartHomeAccessToken)throw Object.assign(new Error("Sign in to view the private camera"),{code:"authentication_required",status:401});
- const response=await fetch(CAMERA_API+path,{cache:"no-store",headers:{Accept:"image/*",Authorization:`Bearer ${smartHomeAccessToken}`}});
-  if(!response.ok){console.warn("camera_frontend_image_error",{stage:"camera_image_request",path,status:response.status});throw Object.assign(new Error(`Camera request failed (${response.status})`),{status:response.status});}
+ const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),15000);let response;
+ try{response=await fetch(CAMERA_API+path,{cache:"no-store",headers:{Accept:"image/*",Authorization:`Bearer ${smartHomeAccessToken}`},signal:controller.signal})}
+ catch(error){if(error?.name==="AbortError")throw Object.assign(new Error("Camera image request timed out"),{code:"camera_timeout",status:504});throw Object.assign(new Error("Secure camera bridge could not be reached"),{code:"camera_connection_failed",cause:error?.name})}
+ finally{clearTimeout(timeout)}
+ if(!response.ok){console.warn("camera_frontend_image_error",{stage:"camera_image_request",status:response.status});throw Object.assign(new Error(`Camera request failed (${response.status})`),{status:response.status,code:"camera_image_request_failed"});}
  return response.blob();
 }
 async function cameraJson(path,options={}){
@@ -287,37 +291,91 @@ function frontDoorLocalRows(payload){
 function frontDoorThumbnailPlaceholder(row,message){
  return `<span class="front-door-event-thumb-placeholder">${esc(message|| (row.snapshot_name?"Loading snapshot…":"Snapshot unavailable"))}</span>`;
 }
-function revokeFrontDoorThumbnailImages(){frontDoorThumbnailUrls.forEach(url=>URL.revokeObjectURL(url));frontDoorThumbnailUrls.clear();frontDoorThumbnailToken++}
-async function hydrateFrontDoorThumbnails(rows,token){
- await Promise.all(rows.filter(row=>row.snapshot_name).map(async row=>{
-  try{
-   const blob=await cameraBinary(`/camera/front-door/image/${encodeURIComponent(row.snapshot_name)}`),url=URL.createObjectURL(blob);
-   if(token!==frontDoorThumbnailToken){URL.revokeObjectURL(url);return}
-   const target=[...document.querySelectorAll("[data-front-door-thumbnail]")].find(node=>node.dataset.frontDoorThumbnail===String(row.id));
-   if(!target){URL.revokeObjectURL(url);return}
-    const image=new Image();image.className="front-door-event-thumb-image";image.alt=`${row.short_description||"Front Door event"} snapshot`;image.onload=()=>{};image.onerror=()=>{console.warn("camera_frontend_image_error",{stage:"camera_thumbnail_decode",snapshot:row.snapshot_name});URL.revokeObjectURL(url);frontDoorThumbnailUrls.delete(String(row.id));target.innerHTML=frontDoorThumbnailPlaceholder(row,"Snapshot unavailable")};image.src=url;
-   frontDoorThumbnailUrls.set(String(row.id),url);target.replaceChildren(image);
+function cameraImageErrorMessage(error){
+ const status=Number(error?.status)||0;
+ if(error?.code==="camera_timeout")return "The camera image request timed out. Check the secure camera connection and retry.";
+ if(status===401||status===403)return "The secure camera session was rejected. Sign in again, then retry.";
+ if(status===404)return "The camera host could not find this saved image.";
+ if(status===502||status===503||status===504)return "The camera image service is temporarily unavailable. Retry in a moment.";
+ if(error?.code==="camera_connection_failed")return "The secure camera bridge could not be reached. Check the connection and retry.";
+ return status?`The snapshot could not be loaded (HTTP ${status}).` : "The secure camera connection failed. Retry when it is available.";
+}
+function revokeFrontDoorThumbnailImages(){
+ frontDoorThumbnailObserver?.disconnect();frontDoorThumbnailObserver=null;frontDoorThumbnailQueue=[];frontDoorThumbnailQueued.clear();frontDoorThumbnailLoads.clear();
+ frontDoorThumbnailUrls.forEach(url=>URL.revokeObjectURL(url));frontDoorThumbnailUrls.clear();frontDoorThumbnailToken++;frontDoorRenderSignature="";
+}
+function frontDoorThumbnailTarget(rowId){return [...document.querySelectorAll("[data-front-door-thumbnail]")].find(node=>node.dataset.frontDoorThumbnail===String(rowId))||null}
+function frontDoorThumbnailUrl(snapshotName){
+ const url=frontDoorThumbnailUrls.get(snapshotName);if(!url)return null;
+ frontDoorThumbnailUrls.delete(snapshotName);frontDoorThumbnailUrls.set(snapshotName,url);return url;
+}
+function cacheFrontDoorThumbnail(snapshotName,url){
+ const prior=frontDoorThumbnailUrls.get(snapshotName);if(prior&&prior!==url)URL.revokeObjectURL(prior);
+ frontDoorThumbnailUrls.delete(snapshotName);frontDoorThumbnailUrls.set(snapshotName,url);
+ while(frontDoorThumbnailUrls.size>FRONT_DOOR_THUMBNAIL_CACHE_LIMIT){const [oldName,oldUrl]=frontDoorThumbnailUrls.entries().next().value;frontDoorThumbnailUrls.delete(oldName);URL.revokeObjectURL(oldUrl)}
+}
+function showFrontDoorThumbnail(target,row,url){
+ const image=new Image();image.className="front-door-event-thumb-image";image.alt=`${row.short_description||"Front Door event"} snapshot`;
+ image.onerror=()=>{if(frontDoorThumbnailUrls.get(row.snapshot_name)===url){frontDoorThumbnailUrls.delete(row.snapshot_name);URL.revokeObjectURL(url)};target.innerHTML=frontDoorThumbnailPlaceholder(row,"Preview could not be displayed. Open the event to retry.")};
+ image.src=url;target.replaceChildren(image);
+}
+function pumpFrontDoorThumbnailQueue(){
+ while(frontDoorThumbnailActive<FRONT_DOOR_THUMBNAIL_CONCURRENCY&&frontDoorThumbnailQueue.length){
+  const job=frontDoorThumbnailQueue.shift();frontDoorThumbnailQueued.delete(job.snapshotName);
+  if(job.token!==frontDoorThumbnailToken||!frontDoorThumbnailTarget(job.row.id))continue;
+  frontDoorThumbnailActive++;let task;
+  task=(async()=>{
+   try{
+    const blob=await cameraBinary(`/camera/front-door/image/${encodeURIComponent(job.snapshotName)}`);
+    if(job.token!==frontDoorThumbnailToken)return;
+    const url=URL.createObjectURL(blob);cacheFrontDoorThumbnail(job.snapshotName,url);
+    const target=frontDoorThumbnailTarget(job.row.id);if(target)showFrontDoorThumbnail(target,job.row,url);
    }catch(error){
-    if(token!==frontDoorThumbnailToken)return;
-    console.warn("camera_frontend_image_error",{stage:"camera_thumbnail_request",snapshot:row.snapshot_name,error:error?.message||"unknown"});
-    const target=[...document.querySelectorAll("[data-front-door-thumbnail]")].find(node=>node.dataset.frontDoorThumbnail===String(row.id));
-   if(target)target.innerHTML=frontDoorThumbnailPlaceholder(row,"Snapshot unavailable");
-  }
- }));
+    if(job.token!==frontDoorThumbnailToken)return;
+    const target=frontDoorThumbnailTarget(job.row.id);if(target)target.innerHTML=frontDoorThumbnailPlaceholder(job.row,"Preview could not load. Open the event to retry.");
+    console.warn("camera_frontend_image_error",{stage:"camera_thumbnail_request",status:error?.status||0,code:error?.code||"request_failed"});
+   }
+  })().finally(()=>{if(frontDoorThumbnailLoads.get(job.snapshotName)===task)frontDoorThumbnailLoads.delete(job.snapshotName);frontDoorThumbnailActive=Math.max(0,frontDoorThumbnailActive-1);pumpFrontDoorThumbnailQueue()});
+  frontDoorThumbnailLoads.set(job.snapshotName,task);
+ }
+}
+function queueFrontDoorThumbnail(row,token){
+ const snapshotName=String(row?.snapshot_name||"");if(!snapshotName||token!==frontDoorThumbnailToken)return;
+ const target=frontDoorThumbnailTarget(row.id);if(!target)return;
+ const cached=frontDoorThumbnailUrl(snapshotName);if(cached){showFrontDoorThumbnail(target,row,cached);return}
+ if(frontDoorThumbnailLoads.has(snapshotName)||frontDoorThumbnailQueued.has(snapshotName))return;
+ frontDoorThumbnailQueue.push({row,snapshotName,token});frontDoorThumbnailQueued.add(snapshotName);pumpFrontDoorThumbnailQueue();
+}
+function hydrateFrontDoorThumbnails(rows,token){
+ frontDoorThumbnailObserver?.disconnect();frontDoorThumbnailObserver=null;
+ const candidates=rows.filter(row=>row.snapshot_name&&frontDoorThumbnailTarget(row.id));
+ if("IntersectionObserver" in window){
+  frontDoorThumbnailObserver=new IntersectionObserver(entries=>entries.forEach(entry=>{if(!entry.isIntersecting)return;const row=candidates.find(item=>String(item.id)===entry.target.dataset.frontDoorThumbnail);frontDoorThumbnailObserver?.unobserve(entry.target);if(row)queueFrontDoorThumbnail(row,token)}),{rootMargin:"320px 0px"});
+ }
+ candidates.forEach(row=>{
+  const target=frontDoorThumbnailTarget(row.id),cached=frontDoorThumbnailUrl(row.snapshot_name);
+  if(cached){showFrontDoorThumbnail(target,row,cached);return}
+  if(frontDoorThumbnailObserver)frontDoorThumbnailObserver.observe(target);else queueFrontDoorThumbnail(row,token);
+ });
 }
 function renderFrontDoorEvents(){
  const root=$("frontDoorEventList"),status=$("frontDoorEventStatus");if(!root)return;
  document.querySelectorAll(".front-door-view-tab").forEach(button=>button.classList.toggle("active",button.dataset.frontDoorView===frontDoorView));
- revokeFrontDoorThumbnailImages();
- if(!smartHomeControlAllowed){root.innerHTML='<div class="system-card"><b>Sign in to view Front Door events.</b><p>Camera metadata and snapshots stay owner-only.</p></div>';if(status)status.textContent="";return}
- if(!frontDoorLoaded){root.innerHTML='<div class="system-card"><b>Loading Front Door events…</b></div>';return}
- if(frontDoorLoadError&&!frontDoorEvents.length){root.innerHTML=`<div class="system-card front-door-event-error"><b>Front Door events are unavailable.</b><p>${esc(frontDoorLoadError)}</p><button type="button" class="secondary" data-front-door-retry>Try again</button></div>`;root.querySelector("[data-front-door-retry]").onclick=()=>{frontDoorLoaded=false;frontDoorLoadError="";renderFrontDoorEvents();loadFrontDoorEvents({runCleanup:false}).catch(()=>{})};if(status)status.textContent="";renderFrontDoorSummary();return}
+ if(!smartHomeControlAllowed){revokeFrontDoorThumbnailImages();root.innerHTML='<div class="system-card"><b>Sign in to view Front Door events.</b><p>Camera metadata and snapshots stay owner-only.</p></div>';if(status)status.textContent="";return}
+ if(!frontDoorLoaded){frontDoorRenderSignature="";root.innerHTML='<div class="system-card"><b>Loading Front Door events…</b></div>';return}
+ if(frontDoorLoadError&&!frontDoorEvents.length){frontDoorRenderSignature="";root.innerHTML=`<div class="system-card front-door-event-error"><b>Front Door events are unavailable.</b><p>${esc(frontDoorLoadError)}</p><button type="button" class="secondary" data-front-door-retry>Try again</button></div>`;root.querySelector("[data-front-door-retry]").onclick=()=>{frontDoorLoaded=false;frontDoorLoadError="";renderFrontDoorEvents();loadFrontDoorEvents({runCleanup:false}).catch(()=>{})};if(status)status.textContent="";renderFrontDoorSummary();return}
  const rows=frontDoorRows();
+ const signature=JSON.stringify([frontDoorView,frontDoorLoadError,rows.map(row=>[row.id,row.event_key,row.captured_at,row.snapshot_name,row.short_description,row.full_description,row.deleted_at,row.trash_expires_at,row.analysis])]);
+ if(signature===frontDoorRenderSignature){renderFrontDoorSummary();return}
+ frontDoorRenderSignature=signature;
  const thumbnailToken=frontDoorThumbnailToken;
  root.innerHTML=rows.length?rows.map(row=>`<button type="button" class="front-door-event-card" data-front-door-event="${esc(row.id)}"><span class="front-door-event-thumb" data-front-door-thumbnail="${esc(row.id)}">${frontDoorThumbnailPlaceholder(row)}</span><span class="front-door-event-copy"><b>${esc(row.short_description||"Front door scene")}</b><small>${esc(row.camera_name||"Front Door Cam")} · ${esc(cameraLocationLabel(row.location))}</small></span><time>${esc(smartTime(row.captured_at))}</time></button>`).join(""):'<div class="system-card"><b>'+ (frontDoorView==="trash"?'Recently Deleted is empty.':'No Front Door events in the last 14 days.')+'</b><p>Meaningful retained camera events will appear here automatically.</p></div>';
  root.querySelectorAll("[data-front-door-event]").forEach(button=>button.onclick=()=>openFrontDoorDetail(button.dataset.frontDoorEvent));
  if(status)status.textContent=frontDoorLoadError?"Cloud history unavailable; showing the local camera event stream.":frontDoorView==="trash"?"Trash expires at the earlier of 7 days after deletion or 14 days after capture.":"Newest events first · images retained for 14 days.";
- if(rows.length)hydrateFrontDoorThumbnails(rows,thumbnailToken).catch(()=>{});
+ if(rows.length){
+  try{hydrateFrontDoorThumbnails(rows,thumbnailToken)}
+  catch(error){console.warn("camera_frontend_thumbnail_setup_error",{message:error?.message||"unknown"})}
+ }
  renderFrontDoorSummary();
 }
 async function loadFrontDoorEvents({runCleanup=true}={}){
@@ -344,7 +402,19 @@ async function loadFrontDoorEvents({runCleanup=true}={}){
  })().finally(()=>{frontDoorLoading=null});
  return frontDoorLoading;
 }
-function revokeFrontDoorDetailImage(){if(frontDoorDetailImageUrl){URL.revokeObjectURL(frontDoorDetailImageUrl);frontDoorDetailImageUrl=""}}
+function revokeFrontDoorDetailImage(){frontDoorDetailRequestToken++;if(frontDoorDetailImageUrl){URL.revokeObjectURL(frontDoorDetailImageUrl);frontDoorDetailImageUrl=""}}
+async function loadFrontDoorDetailImage(row){
+ const dialog=$("frontDoorDetailDialog"),image=$("frontDoorDetailImage"),imageStatus=$("frontDoorDetailImageStatus"),retry=$("frontDoorDetailImageRetry");if(!dialog||!image||!imageStatus)return;
+ const token=++frontDoorDetailRequestToken;image.hidden=true;imageStatus.hidden=false;imageStatus.textContent="Loading private snapshot…";if(retry)retry.hidden=true;
+ try{
+  const blob=await cameraBinary(`/camera/front-door/image/${encodeURIComponent(row.snapshot_name)}`);
+  if(token!==frontDoorDetailRequestToken||dialog.dataset.frontDoorEventId!==String(row.id))return;
+  frontDoorDetailImageUrl=URL.createObjectURL(blob);image.onload=null;image.onerror=()=>{if(token!==frontDoorDetailRequestToken)return;if(frontDoorDetailImageUrl){URL.revokeObjectURL(frontDoorDetailImageUrl);frontDoorDetailImageUrl=""}image.hidden=true;imageStatus.hidden=false;imageStatus.textContent="The camera returned a file that is not a readable photo.";if(retry)retry.hidden=false};image.src=frontDoorDetailImageUrl;image.hidden=false;imageStatus.hidden=true;
+ }catch(error){
+  if(token!==frontDoorDetailRequestToken||dialog.dataset.frontDoorEventId!==String(row.id))return;
+  console.warn("camera_frontend_image_error",{stage:"camera_detail_request",status:error?.status||0,code:error?.code||"request_failed"});imageStatus.textContent=cameraImageErrorMessage(error);imageStatus.hidden=false;if(retry)retry.hidden=false;
+ }
+}
 function revokeFrontDoorFrameImages(){frontDoorFrameUrls.forEach(url=>URL.revokeObjectURL(url));frontDoorFrameUrls.clear()}
 function frontDoorEventFacts(row){
  const analysis=row.analysis&&typeof row.analysis==="object"?row.analysis:{};
@@ -359,9 +429,8 @@ function frontDoorEventDiagnostics(row){
 }
 async function openFrontDoorDetail(id){
  const row=frontDoorEvents.find(item=>String(item.id)===String(id));if(!row)return;
- const dialog=$("frontDoorDetailDialog"),image=$("frontDoorDetailImage"),imageStatus=$("frontDoorDetailImageStatus"),restore=$("frontDoorDetailRestore"),remove=$("frontDoorDetailDelete");if(!dialog)return;
- revokeFrontDoorDetailImage();image.hidden=true;imageStatus.hidden=false;imageStatus.textContent="Loading private snapshot…";$('frontDoorDetailTitle').textContent=row.short_description||"Front Door event";$('frontDoorDetailMeta').innerHTML=`<span>${esc(smartTime(row.captured_at))}</span><span>${esc(row.camera_name||"Front Door Cam")}</span><span>${esc(cameraLocationLabel(row.location))}</span>`;$('frontDoorDetailDescription').textContent=row.full_description||row.summary||"No description available.";$('frontDoorDetailFacts').innerHTML=frontDoorEventFacts(row);$('frontDoorDetailDiagnostics').innerHTML=frontDoorEventDiagnostics(row);restore.hidden=!row.deleted_at;remove.hidden=!!row.deleted_at;dialog.dataset.frontDoorEventId=row.id;dialog.showModal();
-  try{const blob=await cameraBinary(`/camera/front-door/image/${encodeURIComponent(row.snapshot_name)}`);frontDoorDetailImageUrl=URL.createObjectURL(blob);image.src=frontDoorDetailImageUrl;image.hidden=false;imageStatus.hidden=true}catch(error){console.warn("camera_frontend_image_error",{stage:"camera_detail_request",snapshot:row.snapshot_name,error:error?.message||"unknown"});imageStatus.textContent="Snapshot unavailable; the 14-day image retention window may have elapsed.";}
+ const dialog=$("frontDoorDetailDialog"),restore=$("frontDoorDetailRestore"),remove=$("frontDoorDetailDelete"),retry=$("frontDoorDetailImageRetry");if(!dialog)return;
+ revokeFrontDoorDetailImage();$('frontDoorDetailTitle').textContent=row.short_description||"Front Door event";$('frontDoorDetailMeta').innerHTML=`<span>${esc(smartTime(row.captured_at))}</span><span>${esc(row.camera_name||"Front Door Cam")}</span><span>${esc(cameraLocationLabel(row.location))}</span>`;$('frontDoorDetailDescription').textContent=row.full_description||row.summary||"No description available.";$('frontDoorDetailFacts').innerHTML=frontDoorEventFacts(row);$('frontDoorDetailDiagnostics').innerHTML=frontDoorEventDiagnostics(row);restore.hidden=!row.deleted_at;remove.hidden=!!row.deleted_at;dialog.dataset.frontDoorEventId=row.id;if(retry)retry.onclick=()=>loadFrontDoorDetailImage(row);dialog.showModal();loadFrontDoorDetailImage(row).catch(()=>{});
  if(row.source==="local_runtime"){restore.hidden=true;remove.hidden=true}
  restore.onclick=()=>updateFrontDoorDeletion(row,false);remove.onclick=()=>updateFrontDoorDeletion(row,true);
 }
@@ -373,7 +442,7 @@ async function updateFrontDoorDeletion(row,deleted){
  if(error){$("frontDoorDetailImageStatus").hidden=false;$("frontDoorDetailImageStatus").textContent="Could not update this event.";return}
  const fresh=frontDoorEvents.find(item=>String(item.id)===String(row.id));if(fresh){fresh.deleted_at=value;fresh.trash_expires_at=deleted?new Date(Math.min(Date.now()+7*86400000,new Date(fresh.captured_at).getTime()+14*86400000)).toISOString():null}
  await recordActivityEvent({event_id:`website:camera_event:${row.id}:${deleted?"deleted":"restored"}:${Date.now()}`,event_type:deleted?"camera_event_deleted":"camera_event_restored",category:"camera",title:deleted?"A camera event was moved to trash":"A camera event was restored",summary:deleted?"A front-door camera event was moved to the private trash view.":"A front-door camera event was restored from the private trash view.",importance:.38,room:"porch",device_id:"front_door_cam",related_entity:String(row.id),metadata:{action:deleted?"delete":"restore"}});
- $("frontDoorDetailDialog").close();renderFrontDoorEvents();
+ revokeFrontDoorDetailImage();$("frontDoorDetailDialog").close();renderFrontDoorEvents();
 }
 async function refreshFrontDoorFrame(){
  const emptyHome=$("homeFrontDoorFrameEmpty"),emptyPage=$("frontDoorFrameEmpty"),home=$("homeFrontDoorFrame"),page=$("frontDoorFrame"),status=$("homeFrontDoorStatus"),live=$("frontDoorLiveStatus");
@@ -507,6 +576,19 @@ function deviceRoomId(device,memberships=roomMembershipIndex()){
 function roomDevices(room){return Array.isArray(room?.devices)?room.devices:smartHomeState.devices.filter(device=>deviceRoomId(device)===(room.room_id||"unassigned"))}
 function roomLightDevices(room){return room?roomDevices(room).filter(device=>!isFrontDoorCamera(device)&&device.capabilities?.includes("power")):[]}
 function roomDimmableDevices(room){return roomLightDevices(room).filter(device=>device.capabilities?.includes("brightness"))}
+function homeRoomLightStatus(lights){
+ if(!lights.length)return "No lights";
+ const known=lights.filter(device=>deviceUsable(device)&&["on","off"].includes(devicePowerState(device)));
+ if(!known.length)return lights.every(device=>!deviceOnline(device))?"Offline":"Unavailable";
+ const onCount=known.filter(device=>devicePowerState(device)==="on").length,unavailable=lights.length-known.length;
+ if(onCount===known.length&&known.length===lights.length)return "On";
+ if(onCount===0&&known.length===lights.length)return "Off";
+ return `${onCount} of ${lights.length} on${unavailable?` · ${unavailable} unavailable`:""}`;
+}
+function homeRoomLightRowMarkup(room,label,lights,group){
+ const roomId=canonicalRoomId(room.room_id)||"unassigned",status=homeRoomLightStatus(lights),canControl=smartHomeControlAllowed&&lights.some(deviceUsable),allOn=lights.length>0&&lights.every(device=>deviceUsable(device)&&devicePowerState(device)==="on"),allOff=lights.length>0&&lights.every(device=>deviceUsable(device)&&devicePowerState(device)==="off");
+ return `<article class="home-control-card ${lights.some(device=>!deviceUsable(device))?"device-offline":""}"><div class="home-control-copy"><b>${esc(label)}</b><span class="home-control-state" aria-label="Current status: ${esc(status)}">${esc(status)}</span></div><div class="home-power-toggle" role="group" aria-label="${esc(label)} power"><button type="button" class="device-action ${allOff?"selected":""}" data-home-room-id="${esc(roomId)}" data-home-room-group="${esc(group)}" data-home-room-value="off" aria-pressed="${allOff}" ${!canControl?"disabled":""}>Off</button><button type="button" class="device-action ${allOn?"selected":""}" data-home-room-id="${esc(roomId)}" data-home-room-group="${esc(group)}" data-home-room-value="on" aria-pressed="${allOn}" ${!canControl?"disabled":""}>On</button></div></article>`;
+}
 function roomLightControlsMarkup(room,{showHeading=true}={}){
  const roomId=canonicalRoomId(room.room_id)||"unassigned",lights=roomLightDevices(room),available=lights.filter(deviceUsable),dimmable=roomDimmableDevices(room),availableDimmable=dimmable.filter(deviceUsable);
  if(!lights.length&&!dimmable.length)return "";
@@ -602,17 +684,23 @@ function restoreDeviceSnapshot(deviceId,previous){
  const device=smartHomeState.devices.find(item=>item.device_id===deviceId);if(!device||!previous)return;
  Object.assign(device,previous);renderHomeDeviceStatus();renderDevicesPage();
 }
-async function sendRoomPower(roomId,value){
- return sendRoomLightAction(roomId,{action:"power",value},"power","room lights");
+async function sendRoomPower(roomId,value,lightsOverride=null,statusId="deviceStatus"){
+ return sendRoomLightAction(roomId,{action:"power",value},"power","room lights",{lightsOverride,statusId});
+}
+async function sendHomeRoomPower(roomId,group,value){
+ const room=smartHomeRooms().find(item=>item.room_id===roomId);if(!room)return;
+ const allLights=roomLightDevices(room),lights=group==="mood_lighting"?allLights.filter(device=>deviceSubcategoryId(device)==="mood_lighting"):allLights;
+ return sendRoomPower(roomId,value,lights,"homeControlStatus");
 }
 async function sendRoomBrightness(roomId,value){
  return sendRoomLightAction(roomId,{action:"brightness",value},"brightness","room brightness");
 }
-async function sendRoomLightAction(roomId,body,capability,label){
- if(!smartHomeControlAllowed){const status=$("deviceStatus");if(status)status.textContent="Sign in to control devices.";return}
- const room=smartHomeRooms().find(item=>item.room_id===roomId),lights=(capability==="brightness"?roomDimmableDevices(room):roomLightDevices(room)),available=lights.filter(deviceUsable);
- if(!available.length){const status=$("deviceStatus");if(status)status.textContent="No available lights to control in this room.";return}
- const status=$("deviceStatus"),actions=available.map(device=>({device,action:beginDeviceAction(device.device_id,body)}));if(status)status.textContent=`Updating ${label}…`;
+async function sendRoomLightAction(roomId,body,capability,label,{lightsOverride=null,statusId="deviceStatus"}={}){
+ const status=$(statusId);
+ if(!smartHomeControlAllowed){if(status)status.textContent="Sign in to control devices.";return}
+ const room=smartHomeRooms().find(item=>item.room_id===roomId),lights=lightsOverride||(capability==="brightness"?roomDimmableDevices(room):roomLightDevices(room)),available=lights.filter(deviceUsable);
+ if(!available.length){if(status)status.textContent="No available lights to control in this room.";return}
+ const actions=available.map(device=>({device,action:beginDeviceAction(device.device_id,body)}));if(status)status.textContent=`Updating ${label}…`;
  const results=await Promise.allSettled(actions.map(({device})=>smartHomeFetch(`/devices/${encodeURIComponent(device.device_id)}/actions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})));
  const succeeded=[],failed=[];
  results.forEach((result,index)=>{const item=actions[index];if(result.status==="fulfilled")succeeded.push(item);else{failed.push(item);if(actionStillCurrent(item.device.device_id,item.action.version)){smartHomePendingActions.delete(item.device.device_id);restoreDeviceSnapshot(item.device.device_id,item.action.previous)}}});
@@ -637,9 +725,15 @@ function renderHomeDeviceStatus(){
  smartHomeState.devices=smartHomeState.devices.map(pendingDeviceState);
  if(smartHomeUnavailable){root.innerHTML=`<div class="quiet-state"><b>Smart Home</b><br>${esc(smartFailureKind(smartHomeFailure)==="authentication"?"Authentication failed.":"Bridge or smart-home service unavailable.")}</div>`;return}
  if(!smartHomeLoaded){root.innerHTML='<div class="quiet-state">Loading controls…</div>';return}
- const controllable=smartHomeState.devices.filter(device=>!isFrontDoorCamera(device)&&(device.capabilities||[]).includes("power"));
- if(!controllable.length){root.innerHTML='<div class="quiet-state">No controllable devices configured.</div>';return}
- root.innerHTML=`<div class="home-control-grid">${controllable.map(device=>{const id=esc(device.device_id),state=devicePowerState(device),status=devicePowerStatusLabel(device),canControl=deviceUsable(device)&&smartHomeControlAllowed;return `<article class="home-control-card ${deviceStatusTone(device)!=="online"?"device-offline":""}"><div class="home-control-copy"><b>${esc(device.friendly_name||device.device_id)}</b><span class="home-control-state" aria-label="Current status: ${esc(status)}">${esc(status)}</span></div><div class="home-power-toggle" role="group" aria-label="${esc(device.friendly_name||device.device_id)} power"><button type="button" class="device-action ${state==="off"?"selected":""}" data-device-id="${id}" data-device-action="power" data-device-value="off" aria-pressed="${state==="off"}" ${!canControl?"disabled":""}>Off</button><button type="button" class="device-action ${state==="on"?"selected":""}" data-device-id="${id}" data-device-action="power" data-device-value="on" aria-pressed="${state==="on"}" ${!canControl?"disabled":""}>On</button></div></article>`}).join("")}</div>`;
+ const rooms=smartHomeRooms().filter(room=>roomLightDevices(room).length);
+ if(!rooms.length){root.innerHTML='<div class="quiet-state">No controllable room lights configured.</div>';return}
+ const rows=rooms.flatMap(room=>{
+  const lights=roomLightDevices(room),roomName=roomDisplayName(room);
+  if(room.room_id!=="living_room")return [homeRoomLightRowMarkup(room,roomName,lights,"whole_room")];
+  const moodLights=lights.filter(device=>deviceSubcategoryId(device)==="mood_lighting");
+  return [homeRoomLightRowMarkup(room,`${roomName} · Mood Lighting`,moodLights,"mood_lighting"),homeRoomLightRowMarkup(room,`${roomName} · Whole Room`,lights,"whole_room")];
+ });
+ root.innerHTML=`<div class="home-control-grid">${rows.join("")}</div>`;
  bindDeviceControls();
 }
 function renderDevicesPage(){
@@ -665,6 +759,7 @@ function bindDeviceControls(){
  document.querySelectorAll("[data-device-action=brightness]").forEach(input=>{input.oninput=()=>{const output=document.querySelector(`[data-device-brightness-output="${CSS.escape(input.dataset.deviceId)}"]`);if(output)output.textContent=input.value+"%"};input.onchange=()=>sendDeviceAction(input.dataset.deviceId,{action:"brightness",value:Number(input.value)})});
  document.querySelectorAll("[data-room-action=power]").forEach(button=>button.onclick=()=>sendRoomPower(button.dataset.roomId,button.dataset.roomValue));
  document.querySelectorAll("[data-room-action=brightness]").forEach(input=>{input.oninput=()=>{const output=document.querySelector(`[data-room-brightness-output="${CSS.escape(input.dataset.roomId)}"]`);if(output)output.textContent=input.value+"%"};input.onchange=()=>sendRoomBrightness(input.dataset.roomId,Number(input.value))});
+ document.querySelectorAll("[data-home-room-id]").forEach(button=>button.onclick=()=>sendHomeRoomPower(button.dataset.homeRoomId,button.dataset.homeRoomGroup,button.dataset.homeRoomValue));
  document.querySelectorAll("[data-voice-room]").forEach(button=>button.onclick=()=>setRoomVoiceEnabled(button.dataset.voiceRoom,button.dataset.voiceEnabled==="true"));
 }
 async function setRoomVoiceEnabled(roomId,enabled){
@@ -710,6 +805,7 @@ function connectSmartHomeStream(){
    while(!controller.signal.aborted){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const frames=buffer.split(/\r?\n\r?\n/);buffer=frames.pop()||"";for(const frame of frames){const id=frame.match(/^id:\s*(.+)$/m);if(id)smartHomeLastEventId=id[1].trim();const data=frame.split(/\r?\n/).filter(line=>line.startsWith("data:")).map(line=>line.slice(5).trim()).join("\n");if(!data)continue;let eventData=null;try{eventData=JSON.parse(data)}catch{}if(eventData)window.dispatchEvent(new CustomEvent("roggy-smart-home-event",{detail:eventData}));if(eventData?.type!=="whisper_transcript"&&eventData?.type!=="layne_voice_response")scheduleSmartHomeRefresh()}}
  }catch(error){if(!controller.signal.aborted){smartHomeStreamStatus="disconnected";window.dispatchEvent(new CustomEvent("roggy-smart-home-stream-status",{detail:{status:"disconnected",error:String(error?.message||error)}}));if(!smartHomeStreamRetry){const delay=smartHomeStreamRetryDelayMs;smartHomeStreamRetryDelayMs=Math.min(delay*2,120000);smartHomeStreamRetry=setTimeout(()=>{smartHomeStreamRetry=null;connectSmartHomeStream()},delay)}}}finally{smartHomeStreamPromise=null;smartHomeStreamAbort=null}})();
 }
+
 function transcriptStreamStatus(status,error){
  smartHomeTranscriptStreamStatus=status;
  window.dispatchEvent(new CustomEvent("roggy-smart-home-transcript-status",{detail:{status,error}}));
@@ -732,6 +828,7 @@ function connectSmartHomeTranscriptStream(){
    if(!controller.signal.aborted)throw new Error("transcript stream ended");
  }catch(error){if(!controller.signal.aborted){transcriptStreamStatus("disconnected",String(error?.message||error));if(!smartHomeTranscriptStreamRetry){const delay=smartHomeTranscriptStreamRetryDelayMs;smartHomeTranscriptStreamRetryDelayMs=Math.min(delay*2,30000);smartHomeTranscriptStreamRetry=setTimeout(()=>{smartHomeTranscriptStreamRetry=null;connectSmartHomeTranscriptStream()},delay)}}}finally{smartHomeTranscriptStreamPromise=null;smartHomeTranscriptStreamAbort=null}})();
 }
+
 window.roggySmartHomeStream={
  connect:connectSmartHomeStream,
  status:()=>smartHomeStreamStatus,
@@ -814,8 +911,22 @@ async function insertItem(x){
   await recordActivityEvent({event_id:`website:list_item:${x.id}:created:${Date.now()}`,event_type:"list_item_created",category:"list",title:"A list item was added",summary:`${x.item||"List item"} was added to the list.`,importance:.44,related_entity:String(x.id),metadata:{list_type:currentPage,status:x.status}});
 }
 
+const pendingListCompletions=new Set();
+async function completeListItem(x,card){
+  if(pendingListCompletions.has(x.id))return;
+  const listType=currentPage,previous={status:x.status,boughtAt:x.boughtAt,deleted:x.deleted,deletedAt:x.deletedAt};
+  pendingListCompletions.add(x.id);
+  const motion=ListCompletion.complete(card,card.querySelector(".removebtn"),{emptyHTML:'<div class="card empty">Nothing here yet.</div>'});
+  if(listType==="buy")x.status="bought";x.deleted=true;x.deletedAt=new Date().toISOString();
+  const saved=saveItem(x).then(()=>null,error=>error);
+  await motion;renderLists();
+  const error=await saved;pendingListCompletions.delete(x.id);
+  if(error){Object.assign(data[listType].find(item=>item.id===x.id)||x,previous);localStorage.setItem(KEY,JSON.stringify(data));showErr(error);renderLists()}
+}
+
 function renderLists(){
   if(!["buy","groceries"].includes(currentPage))return;
+  if(ListCompletion.deferRender($("list"),renderLists))return;
   const arr=data[currentPage]||[],deleted=arr.filter(x=>x.deleted);const deletedTab=document.querySelector('#listsPage .sub-tab[data-view="deleted"]');if(deletedTab)deletedTab.childNodes[0].nodeValue=currentPage==="buy"?"Bought ":"Recently Deleted ";
   $("deletedCount").textContent=deleted.length?`(${deleted.length})`:"";
   $("pageTitle").textContent=currentPage==="buy"?"Buy List":"Groceries";
@@ -836,16 +947,18 @@ function renderLists(){
   if(!shown.length){$("list").innerHTML='<div class="card empty">Nothing here yet.</div>';return}
   shown.forEach(x=>{
     const c=document.createElement("article");c.className="card "+(listStatus(x.status)==="bought"?"bought":"");
+    const row=document.createElement("div");row.className="completion-row";row.appendChild(c);
     if(currentView==="deleted"){
       c.innerHTML=`<div class="deleted-row"><div><div class="item-name">${esc(x.item)}</div><div class="meta"><span>${esc(x.category||"Other")}</span>${currentPage==="buy"&&x.deletedAt?`<span>Bought ${new Date(x.deletedAt).toLocaleDateString([],{month:"short",day:"numeric",year:"numeric"})}</span>`:""}</div></div><button class="restorebtn" aria-label="Restore item" title="Restore item"><span class="restore-icon" aria-hidden="true">↶</span></button></div>`;
-      c.querySelector(".restorebtn").onclick=()=>{x.deleted=false;x.deletedAt=null;x.status="looking";saveItem(x).catch(showErr);renderLists()};$("list").appendChild(c);return;
+      c.querySelector(".restorebtn").onclick=()=>{x.deleted=false;x.deletedAt=null;x.status="looking";saveItem(x).catch(showErr);renderLists()};$("list").appendChild(row);return;
     }
     c.innerHTML=`<div class="card-summary"><button class="removebtn icon-action remove-left">✕</button><div class="summary-main"><div class="item-name">${esc(x.item)}${x.quantity&&x.quantity!=="1"?` <small>×${esc(x.quantity)}</small>`:""}</div><div class="meta"><span>${esc(x.category||"Other")}</span><span>${esc(listStatusLabel(x.status))}</span></div></div><div class="card-controls">${currentPage==="buy"?`<button class="prioritybtn icon-action" data-dir="up">↑</button><span class="badge ${esc(x.priority)}">${esc(x.priority)}</span><button class="prioritybtn icon-action" data-dir="down">↓</button>`:""}<span class="chevron">⌄</span></div></div><div class="card-details collapsed"><div class="quick"><button class="statusbtn ${listStatus(x.status)==="looking"?"selected":""}" data-s="looking">Looking</button><button class="statusbtn ${listStatus(x.status)==="ready_to_buy"?"selected":""}" data-s="ready_to_buy">Ready</button><button class="statusbtn ${listStatus(x.status)==="bought"?"selected":""}" data-s="bought">✓ Bought</button></div>${x.notes?`<div class="detail-notes">${esc(x.notes)}</div>`:""}${currentPage==="buy"?renderResearch(x):""}<div class="bottom-actions"><button class="editbtn">Edit details</button><button class="deletebtn danger-action" type="button">Delete</button></div></div>`;
     c.querySelector(".card-summary").onclick=e=>{if(e.target.closest("button"))return;c.querySelector(".card-details").classList.toggle("collapsed");c.classList.toggle("expanded")};
-    c.querySelector(".removebtn").onclick=()=>{if(currentPage==="buy")x.status="bought";x.deleted=true;x.deletedAt=new Date().toISOString();saveItem(x).catch(showErr);renderLists()};
+    c.querySelector(".removebtn").setAttribute("aria-label",currentPage==="buy"?"Mark bought":"Check off grocery");
+    c.querySelector(".removebtn").onclick=()=>completeListItem(x,c);
     c.querySelectorAll(".statusbtn").forEach(b=>b.onclick=()=>{x.status=b.dataset.s;saveItem(x).catch(showErr);renderLists()});
     c.querySelectorAll(".prioritybtn").forEach(b=>b.onclick=()=>changePriority(x,b.dataset.dir));
-    c.querySelector(".editbtn").onclick=()=>openEdit(x);c.querySelector(".deletebtn").onclick=async()=>{if(!confirm(`Delete "${x.item}" permanently? This will not move it to ${currentPage==="buy"?"Bought":"Recently Deleted"}.`))return;const {error}=await sb.from("list_items").delete().eq("id",x.id);if(error){showErr(error);return}data[currentPage]=data[currentPage].filter(i=>i.id!==x.id);localStorage.setItem(KEY,JSON.stringify(data));await recordActivityEvent({event_id:`website:list_item:${x.id}:deleted:${Date.now()}`,event_type:"list_item_deleted",category:"list",title:"A list item was deleted",summary:"A list item was removed from the list.",importance:.46,related_entity:String(x.id),metadata:{list_type:currentPage}});renderLists()};$("list").appendChild(c);
+    c.querySelector(".editbtn").onclick=()=>openEdit(x);c.querySelector(".deletebtn").onclick=async()=>{if(!confirm(`Delete "${x.item}" permanently? This will not move it to ${currentPage==="buy"?"Bought":"Recently Deleted"}.`))return;const {error}=await sb.from("list_items").delete().eq("id",x.id);if(error){showErr(error);return}data[currentPage]=data[currentPage].filter(i=>i.id!==x.id);localStorage.setItem(KEY,JSON.stringify(data));await recordActivityEvent({event_id:`website:list_item:${x.id}:deleted:${Date.now()}`,event_type:"list_item_deleted",category:"list",title:"A list item was deleted",summary:"A list item was removed from the list.",importance:.46,related_entity:String(x.id),metadata:{list_type:currentPage}});renderLists()};$("list").appendChild(row);
   });
 }
 function safeLink(url){try{const u=new URL(url);return ["http:","https:"].includes(u.protocol)?u.href:""}catch{return ""}}
@@ -1581,9 +1694,9 @@ document.addEventListener("keydown",e=>{
 
 /* Primary-page live panorama navigation. PRIMARY_PAGES is the only source of
    page order/count; all gesture and background math is derived from it. */
-const SWIPE_COMMIT_RATIO=.25,SWIPE_FAST_DISTANCE_RATIO=.14,SWIPE_PARALLAX=.78,SWIPE_EDGE_RESISTANCE=.16,SWIPE_GLIDE_MS=420;
+const SWIPE_COMMIT_RATIO=.25,SWIPE_FAST_DISTANCE_RATIO=.14,SWIPE_PARALLAX=.78,SWIPE_EDGE_RESISTANCE=.16,SWIPE_GLIDE_MS=360;
 let swipeStartX=0,swipeStartY=0,swipeLastX=0,swipeTracking=false,swipeAxis=null,swipeNeighbor=null,swipeNeighborPage=null,swipePointerId=null,swipeStartTime=0,swipeLastTime=0,swipeVelocityX=0;
-let swipeVisualCurrent=null,swipeSettleTimer=null;
+let swipeVisualCurrent=null,swipeSettleTimer=null,swipeSettleCleanup=null;
 function swipeViewport(){
  const page=primaryPageElement(currentPage),rect=page?.getBoundingClientRect(),root=document.documentElement;
  return {width:Math.max(1,Math.round(root.clientWidth||document.body?.clientWidth||rect?.width||1)),height:Math.max(1,Math.round(window.visualViewport?.height||root.clientHeight||document.body?.clientHeight||1))};
@@ -1638,9 +1751,12 @@ function updateSwipeHUD(page=currentPage,progress=0,direction=0){
 }
 function swipeBlockedTarget(t){return !!t.closest("dialog,input,textarea,select,a,[contenteditable=true],.fab,.layne-chat-fab,.side-drawer")}
 function clearSwipeStyles(){
- [swipeVisualCurrent,primaryPageElement(currentPage),swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating","swipe-land-lock");el.style.removeProperty("--panel-x");el.style.removeProperty("--swipe-opacity")});
+ clearTimeout(swipeSettleTimer);swipeSettleTimer=null;
+ if(swipeSettleCleanup){swipeSettleCleanup();swipeSettleCleanup=null}
+ [swipeVisualCurrent,primaryPageElement(currentPage),swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating");el.style.removeProperty("--panel-x")});
  if(swipeNeighbor&&swipeNeighborPage!==currentPage)swipeNeighbor.hidden=true;
  swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-swiping","is-settling","swipe-ready");document.documentElement.dataset.swipeDirection="idle";
+ document.documentElement.style.removeProperty("--swipe-land-top");
  updateSwipeHUD(currentPage,0,0);
 }
 function prepareSwipeNeighbor(direction){
@@ -1663,15 +1779,15 @@ function positionSwipePanels(dx){
  swipeVisualCurrent=current;updateSwipeHUD(currentPage,progress,direction);
  const atEdge=(idx===0&&direction<0)||(idx===PRIMARY_PAGES.length-1&&direction>0);
  if(atEdge){
-  document.documentElement.classList.add("is-swiping");current.classList.add("swipe-panel");current.style.setProperty("--panel-x",(dx*SWIPE_EDGE_RESISTANCE)+"px");current.style.setProperty("--swipe-opacity","1");setMountainView(currentPage,0);return;
+  document.documentElement.classList.add("is-swiping");current.classList.add("swipe-panel");current.style.setProperty("--panel-x",(dx*SWIPE_EDGE_RESISTANCE)+"px");setMountainView(currentPage,0);return;
  }
  if(!swipeNeighbor||swipeNeighborPage!==PRIMARY_PAGES[idx+direction].id){
   if(swipeNeighbor&&swipeNeighborPage!==currentPage)swipeNeighbor.hidden=true;
   swipeNeighbor=null;swipeNeighborPage=null;if(!prepareSwipeNeighbor(direction))return;
  }
  document.documentElement.classList.add("is-swiping");
- current.classList.add("swipe-panel");current.style.setProperty("--panel-x",dx+"px");current.style.setProperty("--swipe-opacity",(1-Math.min(.08,Math.abs(dx)/width*.08)).toFixed(3));
- if(swipeNeighbor){swipeNeighbor.style.setProperty("--panel-x",(dx+direction*width)+"px");swipeNeighbor.style.setProperty("--swipe-opacity",(.94+Math.min(.06,Math.abs(dx)/width*.06)).toFixed(3))}
+ current.classList.add("swipe-panel");current.style.setProperty("--panel-x",dx+"px");
+ if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x",(dx+direction*width)+"px");
  setMountainView(currentPage,dx);
 }
 function settleSwipe(commit,dx){
@@ -1685,14 +1801,21 @@ function settleSwipe(commit,dx){
    if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x","0px");
    setMountainView(target,0);
   }));
-  clearTimeout(swipeSettleTimer);swipeSettleTimer=setTimeout(()=>{
-   const landed=swipeNeighbor;
-   if(landed){const r=landed.getBoundingClientRect();document.documentElement.style.setProperty("--swipe-land-top",r.top+"px");landed.classList.add("swipe-land-lock")}
-   if(current&&current!==landed)current.hidden=true;
-   if(landed){landed.classList.remove("swipe-neighbor","swipe-animating");landed.style.removeProperty("--panel-x");landed.style.removeProperty("--swipe-opacity")}
-   swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-settling","is-swiping","swipe-ready");syncPageNavigation(target);
-   requestAnimationFrame(()=>requestAnimationFrame(()=>{if(landed)landed.classList.remove("swipe-panel","swipe-land-lock");document.documentElement.style.removeProperty("--swipe-land-top");updateSwipeHUD(target,0,0);setMountainView(target,0)}));
-  },SWIPE_GLIDE_MS);
+  const landed=swipeNeighbor,finishCommittedSwipe=()=>{
+   clearTimeout(swipeSettleTimer);swipeSettleTimer=null;
+   if(swipeSettleCleanup){swipeSettleCleanup();swipeSettleCleanup=null}
+   if(!landed||swipeNeighbor!==landed||swipeNeighborPage!==target)return;
+   window.scrollTo(0,0);
+   const tabs=document.querySelector(".page-tabs"),headerBottom=(tabs?.getBoundingClientRect().bottom||document.querySelector("header")?.getBoundingClientRect().bottom||0)+(parseFloat(getComputedStyle(tabs||document.documentElement).marginBottom)||0);
+   document.documentElement.style.setProperty("--swipe-page-top",Math.max(0,headerBottom)+"px");
+   document.querySelectorAll(".primary-page").forEach(el=>{el.hidden=el!==landed});
+   [current,landed].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating");el.style.removeProperty("--panel-x")});
+   swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-settling","is-swiping","swipe-ready");document.documentElement.style.removeProperty("--swipe-land-top");syncPageNavigation(target);updateSwipeHUD(target,0,0);setMountainView(target,0);
+  };
+  const onTransitionEnd=event=>{if(event.target===landed&&event.propertyName==="transform")finishCommittedSwipe()};
+  landed?.addEventListener("transitionend",onTransitionEnd);
+  swipeSettleCleanup=()=>landed?.removeEventListener("transitionend",onTransitionEnd);
+  clearTimeout(swipeSettleTimer);swipeSettleTimer=setTimeout(finishCommittedSwipe,SWIPE_GLIDE_MS+120);
  }else{
   updateSwipeHUD(currentPage,0,0);
   requestAnimationFrame(()=>requestAnimationFrame(()=>{if(current)current.style.setProperty("--panel-x","0px");if(swipeNeighbor)swipeNeighbor.style.setProperty("--panel-x",(direction*width)+"px");setMountainView(currentPage,0)}));
@@ -1712,9 +1835,9 @@ function finishSwipe(){
 function beginPrimarySwipe(x,y,target,pointerId=null){
  if(swipeBlockedTarget(target)||!isPrimaryPage(currentPage))return false;
  if(document.documentElement.classList.contains("is-settling")){
-   clearTimeout(swipeSettleTimer);[swipeVisualCurrent,swipeNeighbor].filter(Boolean).forEach(el=>{el.classList.remove("swipe-panel","swipe-neighbor","swipe-animating","swipe-land-lock");el.style.removeProperty("--panel-x");el.style.removeProperty("--swipe-opacity")});
+   clearSwipeStyles();
    document.querySelectorAll(".primary-page").forEach(el=>el.hidden=el!==primaryPageElement(currentPage));
-   swipeNeighbor=null;swipeNeighborPage=null;swipeVisualCurrent=null;document.documentElement.classList.remove("is-settling");syncPageNavigation(currentPage);
+   syncPageNavigation(currentPage);
  }
  clearSwipeStyles();swipeStartX=swipeLastX=x;swipeStartY=y;swipeStartTime=swipeLastTime=performance.now();swipeVelocityX=0;swipeTracking=true;swipeAxis=null;swipePointerId=pointerId;return true;
 }

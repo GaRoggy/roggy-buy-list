@@ -169,6 +169,7 @@ function smartHomeRequest(reqUrl, requestMethod = null) {
   const isAction = path.endsWith('/actions');
   const isStream = path.endsWith('/stream');
   const method = isAction ? 'POST' : 'GET';
+  if (parsed.search && isStream) return { kind: 'proxy', method, path: `/api${path}`, search: parsed.search };
   return { kind: 'proxy', method, path: `/api${path}`, search: parsed.search, stream: isStream };
 }
 
