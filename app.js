@@ -889,8 +889,8 @@ async function completeListItem(x,card){
   if(pendingListCompletions.has(x.id))return;
   const listType=currentPage,previous={status:x.status,boughtAt:x.boughtAt,deleted:x.deleted,deletedAt:x.deletedAt};
   pendingListCompletions.add(x.id);
-  const motion=ListCompletion.complete(card,card.querySelector(".removebtn"),{emptyHTML:'<div class="card empty">Nothing here yet.</div>'});
-  if(listType==="buy")x.status="bought";x.deleted=true;x.deletedAt=new Date().toISOString();
+  const motion=ListCompletion.complete(card,card.querySelector(".purchasebtn,.removebtn"),{emptyHTML:'<div class="card empty">Nothing here yet.</div>'});
+  if(listType==="buy"){x.status="bought";x.boughtAt=new Date().toISOString()}else{x.deleted=true;x.deletedAt=new Date().toISOString()}
   const saved=saveItem(x).then(()=>null,error=>error);
   await motion;renderLists();
   const error=await saved;pendingListCompletions.delete(x.id);
@@ -900,38 +900,47 @@ async function completeListItem(x,card){
 function renderLists(){
   if(!["buy","groceries"].includes(currentPage))return;
   if(ListCompletion.deferRender($("list"),renderLists))return;
-  const arr=data[currentPage]||[],deleted=arr.filter(x=>x.deleted);const deletedTab=document.querySelector('#listsPage .sub-tab[data-view="deleted"]');if(deletedTab)deletedTab.childNodes[0].nodeValue=currentPage==="buy"?"Bought ":"Recently Deleted ";
+  const isBuy=currentPage==="buy",arr=data[currentPage]||[],deleted=arr.filter(x=>x.deleted),active=arr.filter(x=>!x.deleted),purchased=active.filter(x=>listStatus(x.status)==="bought");
+  const boughtTab=document.querySelector('#listsPage .sub-tab[data-view="bought"]');if(boughtTab)boughtTab.hidden=!isBuy;
+  document.querySelectorAll("#listsPage .sub-tab").forEach(b=>b.classList.toggle("active",b.dataset.view===currentView));
   $("deletedCount").textContent=deleted.length?`(${deleted.length})`:"";
-  $("pageTitle").textContent=currentPage==="buy"?"Buy List":"Groceries";
-  $("pageSubtitle").textContent=currentPage==="buy"?"Needs first. Luxuries later.":"Food and immediate grocery items.";
-  document.querySelector(".toolbar").style.display=currentView==="deleted"?"none":"";
-   document.body.classList.toggle("deleted-view",currentView==="deleted");
-  $("summary").style.display=currentView==="deleted"?"none":"";
-  $("addBtn").style.display=currentView==="deleted"?"none":"";
-  $("priorityFilters").style.display=currentPage==="groceries"?"none":"";
-  const active=arr.filter(x=>!x.deleted),bought=active.filter(x=>listStatus(x.status)==="bought").length,ready=active.filter(x=>listStatus(x.status)==="ready_to_buy").length;
-  $("summary").innerHTML=`<div><b>${active.length-bought}</b><span>active</span></div><div><b>${ready}</b><span>ready</span></div><div><b>${bought}</b><span>bought</span></div>`;
+  $("pageTitle").textContent=isBuy?"Buy List":"Groceries";
+  $("pageSubtitle").textContent=isBuy?"Needs first. Luxuries later.":"Food and immediate grocery items.";
+  document.querySelector(".toolbar").style.display=currentView==="active"?"":"none";
+  document.body.classList.toggle("deleted-view",currentView==="deleted");
+  $("summary").style.display=currentView==="active"?"":"none";
+  $("addBtn").style.display=currentView==="active"?"":"none";
+  $("priorityFilters").style.display=isBuy?"":"none";
+  $("sort").style.display=isBuy?"":"none";
+  $("summary").innerHTML=`<div><b>${active.length-purchased.length}</b><span>active</span></div><div><b>${active.filter(x=>listStatus(x.status)==="ready_to_buy").length}</b><span>ready</span></div><div><b>${purchased.length}</b><span>bought</span></div>`;
   const q=$("search").value.toLowerCase(),rank={Need:0,Want:1,Eventually:2};
-  let shown=arr.filter(x=>currentView==="deleted"?x.deleted:!x.deleted);if(currentView==="deleted"&&currentPage==="buy")shown.sort((a,b)=>new Date(b.deletedAt||b.created||0)-new Date(a.deletedAt||a.created||0))
-    .filter(x=>currentPage==="groceries"||currentFilter==="all"||x.priority===currentFilter)
-    .filter(x=>!q||[x.item,x.category,x.notes].join(" ").toLowerCase().includes(q));
-  shown.sort($("sort").value==="name"?(a,b)=>a.item.localeCompare(b.item):(a,b)=>(rank[a.priority]??9)-(rank[b.priority]??9));
+  let shown=currentView==="deleted"?deleted:currentView==="bought"?purchased:active.filter(x=>!isBuy||listStatus(x.status)!=="bought");
+  if(currentView==="active"){shown=shown.filter(x=>!isBuy||currentFilter==="all"||x.priority===currentFilter).filter(x=>!q||[x.item,x.category,x.notes].join(" ").toLowerCase().includes(q));if(isBuy)shown.sort($("sort").value==="name"?(a,b)=>a.item.localeCompare(b.item):(a,b)=>(rank[a.priority]??9)-(rank[b.priority]??9));}
+  else shown.sort((a,b)=>new Date((currentView==="bought"?b.boughtAt:b.deletedAt)||b.created||0)-new Date((currentView==="bought"?a.boughtAt:a.deletedAt)||a.created||0));
+  async function transition(x,patch){const previous={...x};Object.assign(x,patch);try{await saveItem(x);renderLists()}catch(error){Object.assign(x,previous);localStorage.setItem(KEY,JSON.stringify(data));showErr(error);renderLists()}}
+  const trash=x=>transition(x,{deleted:true,deletedAt:new Date().toISOString()});
   $("list").innerHTML="";
   if(!shown.length){$("list").innerHTML='<div class="card empty">Nothing here yet.</div>';return}
   shown.forEach(x=>{
-    const c=document.createElement("article");c.className="card "+(listStatus(x.status)==="bought"?"bought":"");
+    const c=document.createElement("article");c.className="card";
     const row=document.createElement("div");row.className="completion-row";row.appendChild(c);
     if(currentView==="deleted"){
-      c.innerHTML=`<div class="deleted-row"><div><div class="item-name">${esc(x.item)}</div><div class="meta"><span>${esc(x.category||"Other")}</span>${currentPage==="buy"&&x.deletedAt?`<span>Bought ${new Date(x.deletedAt).toLocaleDateString([],{month:"short",day:"numeric",year:"numeric"})}</span>`:""}</div></div><button class="restorebtn" aria-label="Restore item" title="Restore item"><span class="restore-icon" aria-hidden="true">↶</span></button></div>`;
-      c.querySelector(".restorebtn").onclick=()=>{x.deleted=false;x.deletedAt=null;x.status="looking";saveItem(x).catch(showErr);renderLists()};$("list").appendChild(row);return;
+      c.innerHTML=`<div class="deleted-row"><div><div class="item-name">${esc(x.item)}</div><div class="meta"><span>${esc(x.category||"Other")}</span>${x.deletedAt?`<span>Deleted ${new Date(x.deletedAt).toLocaleDateString([],{month:"short",day:"numeric",year:"numeric"})}</span>`:""}</div></div><button class="restorebtn" aria-label="Restore item" title="Restore item"><span class="restore-icon" aria-hidden="true">↶</span></button></div>`;
+      c.querySelector(".restorebtn").onclick=()=>{transition(x,{deleted:false,deletedAt:null})};$("list").appendChild(row);return;
     }
-    c.innerHTML=`<div class="card-summary"><button class="removebtn icon-action remove-left">✕</button><div class="summary-main"><div class="item-name">${esc(x.item)}${x.quantity&&x.quantity!=="1"?` <small>×${esc(x.quantity)}</small>`:""}</div><div class="meta"><span>${esc(x.category||"Other")}</span><span>${esc(listStatusLabel(x.status))}</span></div></div><div class="card-controls">${currentPage==="buy"?`<button class="prioritybtn icon-action" data-dir="up">↑</button><span class="badge ${esc(x.priority)}">${esc(x.priority)}</span><button class="prioritybtn icon-action" data-dir="down">↓</button>`:""}<span class="chevron">⌄</span></div></div><div class="card-details collapsed"><div class="quick"><button class="statusbtn ${listStatus(x.status)==="looking"?"selected":""}" data-s="looking">Looking</button><button class="statusbtn ${listStatus(x.status)==="ready_to_buy"?"selected":""}" data-s="ready_to_buy">Ready</button><button class="statusbtn ${listStatus(x.status)==="bought"?"selected":""}" data-s="bought">✓ Bought</button></div>${x.notes?`<div class="detail-notes">${esc(x.notes)}</div>`:""}${currentPage==="buy"?renderResearch(x):""}<div class="bottom-actions"><button class="editbtn">Edit details</button><button class="deletebtn danger-action" type="button">Delete</button></div></div>`;
+    if(currentView==="bought"){
+      c.innerHTML=`<div class="card-summary"><div class="summary-main"><div class="item-name">${esc(x.item)}</div><div class="meta"><span>${esc(x.category||"Other")}</span><span>Bought ${x.boughtAt?new Date(x.boughtAt).toLocaleDateString():"—"}</span></div></div><span class="chevron">⌄</span></div><div class="card-details collapsed"><div class="bottom-actions"><button class="restorebtn" type="button">↶ Restore</button><button class="deletebtn danger-action" type="button">Delete</button></div></div>`;
+      c.querySelector(".card-summary").onclick=()=>c.querySelector(".card-details").classList.toggle("collapsed");
+      c.querySelector(".restorebtn").onclick=()=>transition(x,{status:"looking",boughtAt:null});
+      c.querySelector(".deletebtn").onclick=()=>trash(x);$("list").appendChild(row);return;
+    }
+    c.innerHTML=`<div class="card-summary">${isBuy?'<button class="purchasebtn icon-action" style="color:#36a96d;font-weight:800;font-size:1.3rem" aria-label="Mark bought">$</button>':'<button class="removebtn icon-action remove-left">✕</button>'}<div class="summary-main"><div class="item-name">${esc(x.item)}${x.quantity&&x.quantity!=="1"?` <small>×${esc(x.quantity)}</small>`:""}</div><div class="meta"><span>${esc(x.category||"Other")}</span><span>${esc(listStatusLabel(x.status))}</span></div></div><div class="card-controls">${currentPage==="buy"?`<button class="prioritybtn icon-action" data-dir="up">↑</button><span class="badge ${esc(x.priority)}">${esc(x.priority)}</span><button class="prioritybtn icon-action" data-dir="down">↓</button>`:""}<span class="chevron">⌄</span>${isBuy?'<button class="removebtn icon-action" aria-label="Delete item">✕</button>':""}</div></div><div class="card-details collapsed"><div class="quick"><button class="statusbtn ${listStatus(x.status)==="looking"?"selected":""}" data-s="looking">Looking</button><button class="statusbtn ${listStatus(x.status)==="ready_to_buy"?"selected":""}" data-s="ready_to_buy">Ready</button><button class="statusbtn ${listStatus(x.status)==="bought"?"selected":""}" data-s="bought">✓ Bought</button></div>${x.notes?`<div class="detail-notes">${esc(x.notes)}</div>`:""}${currentPage==="buy"?renderResearch(x):""}<div class="bottom-actions"><button class="editbtn">Edit details</button><button class="deletebtn danger-action" type="button">Delete</button></div></div>`;
     c.querySelector(".card-summary").onclick=e=>{if(e.target.closest("button"))return;c.querySelector(".card-details").classList.toggle("collapsed");c.classList.toggle("expanded")};
-    c.querySelector(".removebtn").setAttribute("aria-label",currentPage==="buy"?"Mark bought":"Check off grocery");
-    c.querySelector(".removebtn").onclick=()=>completeListItem(x,c);
-    c.querySelectorAll(".statusbtn").forEach(b=>b.onclick=()=>{x.status=b.dataset.s;saveItem(x).catch(showErr);renderLists()});
+    c.querySelector(".removebtn").setAttribute("aria-label",isBuy?"Delete item":"Check off grocery");
+    c.querySelector(".removebtn").onclick=()=>isBuy?trash(x):completeListItem(x,c);if(isBuy)c.querySelector(".purchasebtn").onclick=()=>completeListItem(x,c);
+    c.querySelectorAll(".statusbtn").forEach(b=>b.onclick=()=>{transition(x,{status:b.dataset.s})});
     c.querySelectorAll(".prioritybtn").forEach(b=>b.onclick=()=>changePriority(x,b.dataset.dir));
-    c.querySelector(".editbtn").onclick=()=>openEdit(x);c.querySelector(".deletebtn").onclick=async()=>{if(!confirm(`Delete "${x.item}" permanently? This will not move it to ${currentPage==="buy"?"Bought":"Recently Deleted"}.`))return;const {error}=await sb.from("list_items").delete().eq("id",x.id);if(error){showErr(error);return}data[currentPage]=data[currentPage].filter(i=>i.id!==x.id);localStorage.setItem(KEY,JSON.stringify(data));await recordActivityEvent({event_id:`website:list_item:${x.id}:deleted:${Date.now()}`,event_type:"list_item_deleted",category:"list",title:"A list item was deleted",summary:"A list item was removed from the list.",importance:.46,related_entity:String(x.id),metadata:{list_type:currentPage}});renderLists()};$("list").appendChild(row);
+    c.querySelector(".editbtn").onclick=()=>openEdit(x);c.querySelector(".deletebtn").onclick=()=>trash(x);$("list").appendChild(row);
   });
 }
 function safeLink(url){try{const u=new URL(url);return ["http:","https:"].includes(u.protocol)?u.href:""}catch{return ""}}
