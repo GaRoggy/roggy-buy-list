@@ -1,3 +1,4 @@
 export const staticFiles = ['index.html', 'app.js', 'push-notifications.js', 'monitor-ui.js', 'styles.css', 'manifest.json', 'icon.svg', 'sw.js',
   'assets/mountain-panorama.jpg', 'ai-config.js', 'ai-ui.js', 'network.js', 'network-model.mjs', 'network.css', 'pc-health.js', 'pc-health.css',
-  'garmin-dashboard.js', 'garmin.css', 'transcript.js', 'ai/browser/provider.js', 'ai/shared/protocol.js'];
+  'garmin-dashboard.js', 'garmin.css', 'transcript.js', 'ai/browser/provider.js', 'ai/shared/protocol.js',
+  'todos.js', 'todos.css', 'polish.js', 'polish.css', 'list-completion.js', 'list-completion.css'];

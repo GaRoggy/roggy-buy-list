@@ -884,8 +884,22 @@ async function insertItem(x){
   await recordActivityEvent({event_id:`website:list_item:${x.id}:created:${Date.now()}`,event_type:"list_item_created",category:"list",title:"A list item was added",summary:`${x.item||"List item"} was added to the list.`,importance:.44,related_entity:String(x.id),metadata:{list_type:currentPage,status:x.status}});
 }
 
+const pendingListCompletions=new Set();
+async function completeListItem(x,card){
+  if(pendingListCompletions.has(x.id))return;
+  const listType=currentPage,previous={status:x.status,boughtAt:x.boughtAt,deleted:x.deleted,deletedAt:x.deletedAt};
+  pendingListCompletions.add(x.id);
+  const motion=ListCompletion.complete(card,card.querySelector(".removebtn"),{emptyHTML:'<div class="card empty">Nothing here yet.</div>'});
+  if(listType==="buy")x.status="bought";x.deleted=true;x.deletedAt=new Date().toISOString();
+  const saved=saveItem(x).then(()=>null,error=>error);
+  await motion;renderLists();
+  const error=await saved;pendingListCompletions.delete(x.id);
+  if(error){Object.assign(data[listType].find(item=>item.id===x.id)||x,previous);localStorage.setItem(KEY,JSON.stringify(data));showErr(error);renderLists()}
+}
+
 function renderLists(){
   if(!["buy","groceries"].includes(currentPage))return;
+  if(ListCompletion.deferRender($("list"),renderLists))return;
   const arr=data[currentPage]||[],deleted=arr.filter(x=>x.deleted);const deletedTab=document.querySelector('#listsPage .sub-tab[data-view="deleted"]');if(deletedTab)deletedTab.childNodes[0].nodeValue=currentPage==="buy"?"Bought ":"Recently Deleted ";
   $("deletedCount").textContent=deleted.length?`(${deleted.length})`:"";
   $("pageTitle").textContent=currentPage==="buy"?"Buy List":"Groceries";
@@ -906,16 +920,18 @@ function renderLists(){
   if(!shown.length){$("list").innerHTML='<div class="card empty">Nothing here yet.</div>';return}
   shown.forEach(x=>{
     const c=document.createElement("article");c.className="card "+(listStatus(x.status)==="bought"?"bought":"");
+    const row=document.createElement("div");row.className="completion-row";row.appendChild(c);
     if(currentView==="deleted"){
       c.innerHTML=`<div class="deleted-row"><div><div class="item-name">${esc(x.item)}</div><div class="meta"><span>${esc(x.category||"Other")}</span>${currentPage==="buy"&&x.deletedAt?`<span>Bought ${new Date(x.deletedAt).toLocaleDateString([],{month:"short",day:"numeric",year:"numeric"})}</span>`:""}</div></div><button class="restorebtn" aria-label="Restore item" title="Restore item"><span class="restore-icon" aria-hidden="true">↶</span></button></div>`;
-      c.querySelector(".restorebtn").onclick=()=>{x.deleted=false;x.deletedAt=null;x.status="looking";saveItem(x).catch(showErr);renderLists()};$("list").appendChild(c);return;
+      c.querySelector(".restorebtn").onclick=()=>{x.deleted=false;x.deletedAt=null;x.status="looking";saveItem(x).catch(showErr);renderLists()};$("list").appendChild(row);return;
     }
     c.innerHTML=`<div class="card-summary"><button class="removebtn icon-action remove-left">✕</button><div class="summary-main"><div class="item-name">${esc(x.item)}${x.quantity&&x.quantity!=="1"?` <small>×${esc(x.quantity)}</small>`:""}</div><div class="meta"><span>${esc(x.category||"Other")}</span><span>${esc(listStatusLabel(x.status))}</span></div></div><div class="card-controls">${currentPage==="buy"?`<button class="prioritybtn icon-action" data-dir="up">↑</button><span class="badge ${esc(x.priority)}">${esc(x.priority)}</span><button class="prioritybtn icon-action" data-dir="down">↓</button>`:""}<span class="chevron">⌄</span></div></div><div class="card-details collapsed"><div class="quick"><button class="statusbtn ${listStatus(x.status)==="looking"?"selected":""}" data-s="looking">Looking</button><button class="statusbtn ${listStatus(x.status)==="ready_to_buy"?"selected":""}" data-s="ready_to_buy">Ready</button><button class="statusbtn ${listStatus(x.status)==="bought"?"selected":""}" data-s="bought">✓ Bought</button></div>${x.notes?`<div class="detail-notes">${esc(x.notes)}</div>`:""}${currentPage==="buy"?renderResearch(x):""}<div class="bottom-actions"><button class="editbtn">Edit details</button><button class="deletebtn danger-action" type="button">Delete</button></div></div>`;
     c.querySelector(".card-summary").onclick=e=>{if(e.target.closest("button"))return;c.querySelector(".card-details").classList.toggle("collapsed");c.classList.toggle("expanded")};
-    c.querySelector(".removebtn").onclick=()=>{if(currentPage==="buy")x.status="bought";x.deleted=true;x.deletedAt=new Date().toISOString();saveItem(x).catch(showErr);renderLists()};
+    c.querySelector(".removebtn").setAttribute("aria-label",currentPage==="buy"?"Mark bought":"Check off grocery");
+    c.querySelector(".removebtn").onclick=()=>completeListItem(x,c);
     c.querySelectorAll(".statusbtn").forEach(b=>b.onclick=()=>{x.status=b.dataset.s;saveItem(x).catch(showErr);renderLists()});
     c.querySelectorAll(".prioritybtn").forEach(b=>b.onclick=()=>changePriority(x,b.dataset.dir));
-    c.querySelector(".editbtn").onclick=()=>openEdit(x);c.querySelector(".deletebtn").onclick=async()=>{if(!confirm(`Delete "${x.item}" permanently? This will not move it to ${currentPage==="buy"?"Bought":"Recently Deleted"}.`))return;const {error}=await sb.from("list_items").delete().eq("id",x.id);if(error){showErr(error);return}data[currentPage]=data[currentPage].filter(i=>i.id!==x.id);localStorage.setItem(KEY,JSON.stringify(data));await recordActivityEvent({event_id:`website:list_item:${x.id}:deleted:${Date.now()}`,event_type:"list_item_deleted",category:"list",title:"A list item was deleted",summary:"A list item was removed from the list.",importance:.46,related_entity:String(x.id),metadata:{list_type:currentPage}});renderLists()};$("list").appendChild(c);
+    c.querySelector(".editbtn").onclick=()=>openEdit(x);c.querySelector(".deletebtn").onclick=async()=>{if(!confirm(`Delete "${x.item}" permanently? This will not move it to ${currentPage==="buy"?"Bought":"Recently Deleted"}.`))return;const {error}=await sb.from("list_items").delete().eq("id",x.id);if(error){showErr(error);return}data[currentPage]=data[currentPage].filter(i=>i.id!==x.id);localStorage.setItem(KEY,JSON.stringify(data));await recordActivityEvent({event_id:`website:list_item:${x.id}:deleted:${Date.now()}`,event_type:"list_item_deleted",category:"list",title:"A list item was deleted",summary:"A list item was removed from the list.",importance:.46,related_entity:String(x.id),metadata:{list_type:currentPage}});renderLists()};$("list").appendChild(row);
   });
 }
 function safeLink(url){try{const u=new URL(url);return ["http:","https:"].includes(u.protocol)?u.href:""}catch{return ""}}
