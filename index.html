@@ -330,7 +330,7 @@
 </section>
 
 <section id="listsPage">
-  <nav class="sub-tabs"><button class="sub-tab active" data-view="active">Active</button><button class="sub-tab" data-view="deleted">Recently Deleted <span id="deletedCount"></span></button></nav>
+  <nav class="sub-tabs"><button class="sub-tab active" data-view="active">Active</button><button class="sub-tab" data-view="bought" hidden>Bought</button><button class="sub-tab" data-view="deleted">Recently Deleted <span id="deletedCount"></span></button></nav>
   <main>
     <section id="summary" class="summary"></section>
     <section class="toolbar">
@@ -402,10 +402,10 @@
       <button id="newTodoBtn" class="wide-action todo-add-top">＋ Add Task</button>
     </section>
     <nav class="todo-filters" aria-label="Task filters">
-      <button class="todo-filter active" data-todo-filter="open">Open</button>
-      <button class="todo-filter" data-todo-filter="high">High priority</button>
-      <button class="todo-filter" data-todo-filter="done">Done</button>
-      <button class="todo-filter" data-todo-filter="all">All</button>
+      <button class="todo-filter active" data-todo-filter="open">To Do</button>
+      <button class="todo-filter" data-todo-filter="chores">Chores</button>
+      <button class="todo-filter" data-todo-filter="done">Completed</button>
+      <button class="todo-filter" data-todo-filter="deleted">Deleted</button>
     </nav>
     <section id="todoStatus" class="status"></section>
     <section id="todoList" class="todo-list"></section>
@@ -587,11 +587,11 @@
 <script src="ai-config.js?v=45"></script>
 <script>window.ROGGY_AI_CONFIG=window.ROGGY_AI_CONFIG||Object.freeze({"bridgeUrl":"https://desktop-movehp4.tail990d14.ts.net","smartHomeUrl":"https://desktop-movehp4.tail990d14.ts.net/smart-home","transcriptTimeZone":"America/Chicago"});</script>
 <script src="list-completion.js?v=1"></script>
-<script src="app.js?v=133"></script>
+<script src="app.js?v=134"></script>
 <script type="module" src="garmin-dashboard.js?v=2"></script>
 <script src="push-notifications.js?v=3"></script>
 <script src="monitor-ui.js?v=53"></script>
-<script src="todos.js?v=66"></script>
+<script src="todos.js?v=67"></script>
 <script type="module" src="network.js?v=1"></script>
 <script type="module" src="pc-health.js?v=4"></script>
 <script type="module" src="ai-ui.js?v=47"></script>
