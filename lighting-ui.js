@@ -9,6 +9,7 @@ const label=t=>t.kind==='device'?(lights(t)[0]?.friendly_name||t.id):`${api.room
 const available=(ds,cap)=>ds.filter(d=>api.usable(d)&&d.capabilities?.includes(cap));
 let target=null, parent=null, mode='color', dragging=false, syncTimer=null;
 const remembered=new Map();
+const observed=new Map();
 const queue=new LatestLightQueue((id,body)=>api.fetch(`/devices/${encodeURIComponent(id)}/actions`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),{
   onResult(id,item,error,current){if(!current)return;api.settled(id,error);if(error)status(`Couldn’t update ${api.devices().find(d=>d.device_id===id)?.friendly_name||'light'}: ${error.message}`);},
   onIdle(){clearTimeout(syncTimer);syncTimer=setTimeout(()=>api.refresh(),700);}
@@ -52,7 +53,7 @@ function open(t,{from=null}={}){
   if(!lights(t).length)return;
   target=t;parent=from;const d=lights(t)[0],last=d?.attributes?.color_mode;mode=['color_temp','color_temperature'].includes(last)?'tint':'color';
   if(!available(lights(t),'color').length)mode='tint';
-  dialog.innerHTML=`<div class="light-dialog-content"><header class="light-dialog-head"><div>${parent?'<button type="button" class="light-back" id="lightBack">‹ Group</button>':'<span class="eyebrow">LIGHTING</span>'}<h2 id="lightControlTitle">${esc(label(t))}</h2><p id="lightSelectionMeta"></p></div><button type="button" class="light-close" id="lightClose" aria-label="Close light controls">✕</button></header><div id="lightDialogQuick">${controls(t)}</div><div class="wheel-mode-tabs" role="tablist" aria-label="Light color mode"><button id="lightColorTab" type="button" role="tab" data-wheel-mode="color">${icon.color}<span>Color</span></button><button id="lightTintTab" type="button" role="tab" data-wheel-mode="tint">${icon.tint}<span>White & warmth</span></button></div><div class="light-wheel-stage">${wheelMarkup('deviceColorWheel')}</div><div class="wheel-caption"><span id="lightWheelValue"></span><span id="lightWheelModeLabel"></span></div><p id="lightControlStatus" class="light-control-status" role="status">Drag to change your lights live.</p><section id="lightDialogMembers" class="light-members"></section></div>`;
+  dialog.innerHTML=`<div class="light-dialog-content"><div class="light-dialog-head"><div>${parent?'<button type="button" class="light-back" id="lightBack">‹ Group</button>':'<span class="eyebrow">LIGHTING</span>'}<h2 id="lightControlTitle">${esc(label(t))}</h2><p id="lightSelectionMeta"></p></div><button type="button" class="light-close" id="lightClose" aria-label="Close light controls">✕</button></div><div id="lightDialogQuick">${controls(t)}</div><div class="wheel-mode-tabs" role="tablist" aria-label="Light color mode"><button id="lightColorTab" type="button" role="tab" data-wheel-mode="color">${icon.color}<span>Color</span></button><button id="lightTintTab" type="button" role="tab" data-wheel-mode="tint">${icon.tint}<span>White & warmth</span></button></div><div class="light-wheel-stage">${wheelMarkup('deviceColorWheel')}</div><div class="wheel-caption"><span id="lightWheelValue"></span><span id="lightWheelModeLabel"></span></div><p id="lightControlStatus" class="light-control-status" role="status">Drag to change your lights live.</p><section id="lightDialogMembers" class="light-members"></section></div>`;
   $('lightClose').onclick=()=>dialog.close();if(parent)$('lightBack').onclick=()=>open(parent);
   dialog.querySelectorAll('[data-wheel-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.wheelMode;sync(true)});
   attachWheel($('deviceColorWheel'),()=>mode==='color'?stateFor(target):{...stateFor(target),...limits(target)},value=>{
@@ -68,6 +69,7 @@ dialog.addEventListener('close',()=>{target=null;parent=null;dragging=false;});
 function sync(rebuild=false){
   if(!target||!dialog.open&&!rebuild)return;
   const ds=lights(target),s=stateFor(target),range=limits(target),canColor=available(ds,'color').length,canTint=available(ds,'color_temperature').length;
+  if(!dragging&&!queue.active){const first=ds.find(d=>api.power(d)==='on')||ds[0],a=first?.attributes||{},signature=JSON.stringify([a.color_mode,a.rgb_color,a.hs_color,a.color_temp_kelvin]);const old=observed.get(key(target));if(!rebuild&&old&&old!==signature)mode=['color_temp','color_temperature'].includes(a.color_mode)?'tint':'color';observed.set(key(target),signature);}
   $('lightColorTab').disabled=!api.allowed()||!canColor;$('lightTintTab').disabled=!api.allowed()||!canTint||range.min>range.max;
   for(const b of dialog.querySelectorAll('[data-wheel-mode]')){const active=b.dataset.wheelMode===mode;b.setAttribute('aria-selected',active);b.classList.toggle('active',active);}
   const wheel=$('deviceColorWheel');wheel.dataset.mode=mode;wheel.setAttribute('aria-disabled',String(!api.allowed()||!(mode==='color'?canColor:canTint)));
@@ -123,6 +125,7 @@ function theme(s,persist=false){
   const vars={'--accent':`hsl(${h} ${sat}% 38%)`,'--accent2':`hsl(${h} ${sat}% 55%)`,'--accent-soft':`hsl(${h} ${sat}% 80%)`,'--accent-pale':`hsl(${h} ${sat}% 95%)`,'--accent-wash':`hsl(${h} ${sat}% 97%)`,'--accent-shadow':`hsl(${h} ${sat}% 30% / .24)`};
   for(const [k,v] of Object.entries(vars))root.style.setProperty(k,v);
   root.dataset.theme='custom';const hex=rgbHex(hsvToRgb(h,themeState.s));document.querySelector('meta[name="theme-color"]')?.setAttribute('content',hex);if($('themeColorValue'))$('themeColorValue').textContent=hex.toUpperCase();
+  root.style.setProperty('--app-hue',h);root.style.setProperty('--app-saturation',sat+'%');
   if(themeWheel)position(themeWheel,themeState,'color');
   if(persist){localStorage.setItem('roggy-custom-color',JSON.stringify({h,s:themeState.s}));localStorage.setItem('roggy-theme','custom');}
 }

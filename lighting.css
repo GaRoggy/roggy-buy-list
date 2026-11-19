@@ -15,3 +15,10 @@
 .theme-wheel-wrap{max-width:270px;margin:20px auto 14px;padding:8px}.theme-wheel-wrap .wheel-thumb{width:34px;height:34px;border-width:4px}.theme-color-value{text-align:center;display:block;color:var(--muted);font-size:.875rem;font-variant-numeric:tabular-nums}
 html[data-mode=dark] .light-group-card,html[data-mode=dark] .light-control-dialog{background:#20232e;color:var(--ink)}html[data-mode=dark] .wheel-mode-tabs button.active{background:#353946}
 @media(max-width:520px){.light-dialog-content{padding:20px}.light-wheel-stage{padding:8px}.light-control-dialog{max-height:calc(100dvh - 20px)}.light-dialog-head h2{font-size:1.16rem}.light-group-grid{grid-template-columns:1fr}}
+
+.light-switch{min-height:27px}.light-close,.routine-close{min-height:44px;width:44px;height:44px}
+html[data-theme=custom]{--purple:var(--accent);--violet:var(--accent2);--pink:var(--accent-soft);--ink:hsl(var(--app-hue) 25% 18%);--muted:hsl(var(--app-hue) 12% 44%);--surface:hsl(var(--app-hue) 25% 98%);--surface2:hsl(var(--app-hue) 30% 95%);--glass:hsl(var(--app-hue) 30% 99% / .85);background:hsl(var(--app-hue) 40% 10%)!important}
+html[data-theme=custom][data-mode=dark]{--ink:hsl(var(--app-hue) 15% 96%);--muted:hsl(var(--app-hue) 10% 72%);--surface:hsl(var(--app-hue) 15% 11%);--surface2:hsl(var(--app-hue) 15% 16%);--glass:hsl(var(--app-hue) 18% 10% / .94)}
+html[data-theme=custom] .light-group-card,html[data-theme=custom] .routine-card,html[data-theme=custom] .routine-dialog,html[data-theme=custom] .light-control-dialog{background:var(--surface)}
+
+.device-connection-details{margin:24px 0}.device-connection-details>summary{font-size:.9rem;color:var(--muted);padding:12px 0;cursor:pointer}
