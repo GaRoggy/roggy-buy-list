@@ -12,7 +12,7 @@ const remembered=new Map();
 const observed=new Map();
 const queue=new LatestLightQueue((id,body)=>api.fetch(`/devices/${encodeURIComponent(id)}/actions`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),{
   onResult(id,item,error,current){if(!current)return;api.settled(id,error);if(error)status(`Couldn’t update ${api.devices().find(d=>d.device_id===id)?.friendly_name||'light'}: ${error.message}`);},
-  onIdle(){clearTimeout(syncTimer);syncTimer=setTimeout(()=>api.refresh(),700);}
+  onIdle(){if($('lightControlStatus')?.textContent.startsWith('Updating')||$('deviceStatus')?.textContent.startsWith('Updating'))status('Lights updated.');clearTimeout(syncTimer);syncTimer=setTimeout(()=>api.refresh(),700);}
 });
 function status(text){const out=$('lightControlStatus');if(out)out.textContent=text;const main=$('deviceStatus');if(main)main.textContent=text;}
 function command(t,body){
