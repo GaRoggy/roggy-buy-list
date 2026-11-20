@@ -1,4 +1,4 @@
-import {clamp,hsvToRgb,rgbToHsv,pointToColor,colorToPoint,kelvinToRgb,rgbHex,LatestLightQueue} from './lighting-model.mjs';
+import {clamp,hsvToRgb,rgbToHsv,pointToColor,colorToPoint,kelvinToRgb,rgbHex,LatestLightBatchQueue} from './lighting-model.mjs?v=2';
 
 const api=window.roggyLights, $=id=>document.getElementById(id), esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icon={bulb:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 18h6m-5 3h4M8 14a7 7 0 1 1 8 0c-1 1-1 2-1 2H9s0-1-1-2Z"/></svg>',color:'<span class="spectrum-icon"></span>',tint:'<span class="tint-icon"></span>'};
@@ -10,21 +10,55 @@ const available=(ds,cap)=>ds.filter(d=>api.usable(d)&&d.capabilities?.includes(c
 let target=null, parent=null, mode='color', dragging=false, syncTimer=null;
 const remembered=new Map();
 const observed=new Map();
-const queue=new LatestLightQueue((id,body)=>api.fetch(`/devices/${encodeURIComponent(id)}/actions`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),{
-  onResult(id,item,error,current){if(!current)return;api.settled(id,error);if(error)status(`Couldn’t update ${api.devices().find(d=>d.device_id===id)?.friendly_name||'light'}: ${error.message}`);},
-  onIdle(){if($('lightControlStatus')?.textContent.startsWith('Updating')||$('deviceStatus')?.textContent.startsWith('Updating'))status('Lights updated.');clearTimeout(syncTimer);syncTimer=setTimeout(()=>api.refresh(),700);}
+const receipts=new Map(),outcomes=new Map();let pollTimer=null,pollBusy=false,sliderDragging=false,controlGeneration=0;
+const queue=new LatestLightBatchQueue(body=>api.fetch('/lights/actions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),{
+  onAccepted(items,result){for(const item of items){if(queue.current(item.id,item.version))receipts.set(item.id,{revision:result.revision,version:item.version});}schedulePoll();},
+  onFailure(item,error){api.settled(item.id,null);outcomes.set(item.id,{status:'failed',error:error.message});receipts.delete(item.id);showProgress();api.refresh();},
+  onRetry(item){outcomes.set(item.id,{status:'retrying'});showProgress();},
+  onIdle(){schedulePoll();}
 });
-function status(text){const out=$('lightControlStatus');if(out)out.textContent=text;const main=$('deviceStatus');if(main)main.textContent=text;}
+const isBusy=()=>queue.active||receipts.size>0||pollBusy;
+function showProgress(){
+  const ids=(target?lights(target).map(d=>d.device_id):[...outcomes.keys()]).filter(id=>outcomes.has(id));
+  if(!ids.length)return;
+  const confirmed=ids.filter(id=>outcomes.get(id)?.status==='confirmed').length,failed=ids.filter(id=>outcomes.get(id)?.status==='failed');
+  const superseded=ids.filter(id=>outcomes.get(id)?.status==='superseded').length;
+  const waiting=ids.length-confirmed-failed.length-superseded;
+  if(waiting)status(`${confirmed} of ${ids.length} lights confirmed · syncing ${waiting}${failed.length?` · ${failed.length} need attention`:''}…`);
+  else if(failed.length)status(`${confirmed} of ${ids.length} lights confirmed. Still unsynced: ${failed.map(id=>api.devices().find(d=>d.device_id===id)?.friendly_name||id).join(', ')}.`);
+  else if(superseded)status('Latest light state synced · updated by another command.');
+  else status(`All ${ids.length} light${ids.length===1?'':'s'} confirmed.`);
+}
+function schedulePoll(){if(!pollTimer&&receipts.size)pollTimer=setTimeout(()=>{pollTimer=null;pollStatus()},350);}
+async function pollStatus(){
+  if(pollBusy||!receipts.size)return;
+  pollBusy=true;const version=controlGeneration,snapshot=[...receipts.entries()];
+  try{
+    const result=await api.fetch('/lights/status?device_ids='+encodeURIComponent(snapshot.map(([id])=>id).join(',')));
+    if(version!==controlGeneration)return;
+    for(const [id,receipt] of snapshot){
+      if(receipts.get(id)!==receipt||!queue.current(id,receipt.version))continue;
+      const entry=result.entries?.find(e=>e.device_id===id);if(!entry||entry.revision<receipt.revision)continue;
+      if(['confirmed','failed','superseded'].includes(entry.status)){
+        receipts.delete(id);queue.confirm(id,receipt.version);api.settled(id,null);
+        outcomes.set(id,{status:entry.status,error:entry.error});
+      }else outcomes.set(id,{status:entry.status});
+    }
+    api.ingest?.(result.devices||[]);showProgress();
+  }catch{if(version===controlGeneration)status('Connection interrupted · the latest light settings are still queued. Reconnecting…');}
+  finally{pollBusy=false;if(version===controlGeneration){if(receipts.size)schedulePoll();else if(!queue.active){clearTimeout(syncTimer);syncTimer=setTimeout(()=>api.refresh(),500);}}}
+}
+function status(text){for(const id of ['lightControlStatus','deviceStatus','homeControlStatus']){const out=$(id);if(out)out.textContent=text;}}
 function command(t,body){
   if(!api.allowed())return status('Sign in to control your lights.');
   const cap=body.action==='color'?'color':body.action==='color_temperature'?'color_temperature':body.action==='brightness'?'brightness':'power';
-  const ds=lights(t),supported=available(ds,cap);
+  const ds=lights(t),supported=ds.filter(d=>d.capabilities?.includes(cap));
   if(!supported.length)return status('These lights are unavailable or do not support this control.');
-  for(const d of supported){api.optimistic(d.device_id,body);queue.put(d.device_id,body);}
-  const skipped=ds.length-supported.length;
-  status(`Updating ${supported.length} light${supported.length===1?'':'s'}${skipped?` · ${skipped} unavailable or unsupported`:''}…`);
+  controlDevices(supported,body);
+  const skipped=ds.length-supported.length;if(skipped)status(`${skipped} lights do not support this control.`);
   sync();
 }
+function controlDevices(devices,body){if(!api.allowed())return;for(const d of devices){api.optimistic(d.device_id,body);queue.put(d.device_id,body);outcomes.set(d.device_id,{status:'pending'});}showProgress();}
 function controls(t){
   const ds=lights(t),id=key(t),on=ds.some(d=>api.power(d)==='on'),dim=available(ds,'brightness'),values=dim.map(api.brightness).filter(n=>n!=null),brightness=values.length?Math.round(values.reduce((a,b)=>a+b,0)/values.length):0,locked=!api.allowed();
   return `<div class="light-quick-controls"><button type="button" class="light-switch ${on?'is-on':''}" role="switch" aria-checked="${on}" aria-label="${esc(label(t))} power" data-light-power="${esc(id)}" ${locked||!available(ds,'power').length?'disabled':''}><span></span></button><span class="light-power-label">${on?'On':'Off'}</span><label class="light-brightness"><span class="sr-only">${esc(label(t))} brightness</span><input type="range" min="0" max="100" value="${brightness}" data-light-brightness="${esc(id)}" ${locked||!dim.length?'disabled':''}><output>${values.length?brightness+'%':'—'}</output></label></div>`;
@@ -37,7 +71,7 @@ function roomMarkup(room){
 }
 function stateFor(t){
   const ds=lights(t),d=ds.find(d=>api.power(d)==='on')||ds[0],a=d?.attributes||{},saved=remembered.get(key(t))||{h:0,s:0,kelvin:2700,x:0,y:0};
-  if(!dragging&&!queue.active){
+  if(!dragging&&!isBusy()){
     const rgb=a.rgb_color||a.color_rgb||(a.color&&[a.color.r,a.color.g,a.color.b]);
     if(Array.isArray(a.hs_color)){saved.h=a.hs_color[0];saved.s=a.hs_color[1]/100;}
     else if(Array.isArray(rgb)&&rgb.length===3)Object.assign(saved,rgbToHsv(rgb));
@@ -69,7 +103,7 @@ dialog.addEventListener('close',()=>{target=null;parent=null;dragging=false;});
 function sync(rebuild=false){
   if(!target||!dialog.open&&!rebuild)return;
   const ds=lights(target),s=stateFor(target),range=limits(target),canColor=available(ds,'color').length,canTint=available(ds,'color_temperature').length;
-  if(!dragging&&!queue.active){const first=ds.find(d=>api.power(d)==='on')||ds[0],a=first?.attributes||{},signature=JSON.stringify([a.color_mode,a.rgb_color,a.hs_color,a.color_temp_kelvin]);const old=observed.get(key(target));if(!rebuild&&old&&old!==signature)mode=['color_temp','color_temperature'].includes(a.color_mode)?'tint':'color';observed.set(key(target),signature);}
+  if(!dragging&&!isBusy()){const first=ds.find(d=>api.power(d)==='on')||ds[0],a=first?.attributes||{},signature=JSON.stringify([a.color_mode,a.rgb_color,a.hs_color,a.color_temp_kelvin]);const old=observed.get(key(target));if(!rebuild&&old&&old!==signature)mode=['color_temp','color_temperature'].includes(a.color_mode)?'tint':'color';observed.set(key(target),signature);}
   $('lightColorTab').disabled=!api.allowed()||!canColor;$('lightTintTab').disabled=!api.allowed()||!canTint||range.min>range.max;
   for(const b of dialog.querySelectorAll('[data-wheel-mode]')){const active=b.dataset.wheelMode===mode;b.setAttribute('aria-selected',active);b.classList.toggle('active',active);}
   const wheel=$('deviceColorWheel');wheel.dataset.mode=mode;wheel.setAttribute('aria-disabled',String(!api.allowed()||!(mode==='color'?canColor:canTint)));
@@ -79,7 +113,7 @@ function sync(rebuild=false){
   $('lightWheelValue').textContent=mode==='color'?rgbHex(rgb).toUpperCase():`${Math.round(s.kelvin)} K`;
   $('lightWheelModeLabel').textContent=mode==='color'?'Full spectrum':'Warm to cool white';
   const modes=new Set(ds.map(d=>d.attributes?.color_mode).filter(Boolean));
-  const colors=new Set(ds.map(d=>JSON.stringify([d.attributes?.rgb_color,d.attributes?.hs_color,d.attributes?.color_temp_kelvin])));
+  const colors=new Set(ds.map(d=>d.attributes?.color_mode==='color_temp'?`white:${Math.round(d.attributes.color_temp_kelvin/50)}`:JSON.stringify(d.attributes?.hs_color?.map(v=>Math.round(v))||d.attributes?.rgb_color)));
   $('lightSelectionMeta').textContent=`${ds.length===1?'Individual bulb':`${ds.length} lights together`}${modes.size>1||colors.size>1?' · Mixed colors; drag to match them':''}`;
   if(!dragging&&!$('lightDialogQuick').contains(document.activeElement)){$('lightDialogQuick').innerHTML=controls(target);}
   if(rebuild&&target.kind!=='device')$('lightDialogMembers').innerHTML=`<div class="light-members-heading"><h3>Individual lights</h3><span>${ds.length}</span></div>${ds.map(d=>`<button type="button" class="light-member" data-light-child="${esc(d.device_id)}"><span class="light-bulb-icon">${icon.bulb}</span><span><b>${esc(d.friendly_name||d.device_id)}</b><small>${esc(api.usable(d)?api.power(d)==='on'?'On · '+(api.brightness(d)??'—')+'%':'Off':'Unavailable')}</small></span><span aria-hidden="true">›</span></button>`).join('')}`;
@@ -117,6 +151,8 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('input',e=>{const input=e.target.closest('[data-light-brightness]');if(!input)return;input.nextElementSibling.textContent=input.value+'%';command(parse(input.dataset.lightBrightness),{action:'brightness',value:Number(input.value)});});
 document.addEventListener('change',e=>{if(e.target.matches('[data-light-brightness]'))api.render();});
+document.addEventListener('pointerdown',e=>{if(e.target.matches('[data-light-brightness]'))sliderDragging=true;});
+for(const event of ['pointerup','pointercancel'])document.addEventListener(event,()=>{if(sliderDragging){sliderDragging=false;api.render();}});
 // The settings wheel drives the same palette variables used throughout the app.
 const themeWheel=$('appThemeWheel');
 const themeState=(()=>{try{return JSON.parse(localStorage.getItem('roggy-custom-color'))||{h:270,s:.72}}catch{return {h:270,s:.72}}})();
@@ -130,6 +166,6 @@ function theme(s,persist=false){
   if(persist){localStorage.setItem('roggy-custom-color',JSON.stringify({h,s:themeState.s}));localStorage.setItem('roggy-theme','custom');}
 }
 if(themeWheel){attachWheel(themeWheel,()=>themeState,s=>theme(s,true));theme(themeState);}
-window.addEventListener('roggy-auth',e=>{if(!e.detail?.signedIn){queue.clear();dialog.close();remembered.clear();}});
-window.LightControls={roomMarkup,sync,openDevice:id=>open({kind:'device',id}),openRoom:room=>open({kind:'room',room})};
+window.addEventListener('roggy-auth',e=>{if(!e.detail?.signedIn){controlGeneration++;queue.clear();receipts.clear();outcomes.clear();clearTimeout(pollTimer);pollTimer=null;clearTimeout(syncTimer);dialog.close();remembered.clear();}});
+window.LightControls={roomMarkup,sync,controlDevices,get busy(){return isBusy()},get interacting(){return dragging||sliderDragging},openDevice:id=>open({kind:'device',id}),openRoom:room=>open({kind:'room',room})};
 api.render();

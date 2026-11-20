@@ -26,6 +26,7 @@ async function fixture(t, opts = {}) {
     }
     if (url.endsWith('/status')) return result({ status: 'ok', devices: [{ device_id: 'fixture_light', friendly_name: 'Fixture Light', room: 'living_room', type: 'light', capabilities: ['power'], availability: 'online', online: true, state: 'on', freshness: 'fresh' }] });
     if (url.endsWith('/health')) return result({ status: 'ok' });
+    if(url.endsWith('/api/devices')&&opts.holdDevices)await opts.holdDevices;
     if (url.endsWith('/api/devices')) return result({ devices: [{ device_id: 'fixture_light', friendly_name: 'Fixture Light', room: 'living_room', capabilities: ['power'], availability: 'online', online: true, state: 'on', freshness: 'fresh' }] });
     if (url.endsWith('/api/rooms')) return result({ rooms: [{ room_id: 'living_room', friendly_name: 'Living Room', device_count: 1, online_devices: 1 }] });
     if (url.includes('/api/garmin/')) {
@@ -88,6 +89,7 @@ async function fixture(t, opts = {}) {
     if (url.endsWith('/api/commands')) return result({ message: 'Layne command accepted' });
     if (url.includes('/api/completions')) return result({items:[{id:'completion-fixture',title:'Fixture task completed'}],cursor:1});
     if (url.endsWith('/api/devices/fixture_light/actions')) return result({ success: true });
+    if (url.includes('/api/lights/')) return result({success:true,accepted:true,revision:1,entries:[],devices:[]});
     if (opts.offline) throw Error('sensitive Ollama detail');
     if (url.endsWith('/api/tags')) return result({ models: [{ name: 'fixture:local' }, { name: 'remote:cloud' }, { name: 'hidden:alias', remote_model: 'remote' }] });
     if (url.endsWith('/api/show')) return result(opts.remote ? { remote_host: 'https://ollama.com' } : {});
@@ -106,6 +108,30 @@ async function fixture(t, opts = {}) {
     method: body === null ? 'GET' : 'POST', headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), Origin: 'https://garoggy.github.io', ...(body !== null ? { 'Content-Type': 'application/json' } : {}), ...extra }, body: body === null ? undefined : JSON.stringify(body) });
   return { cfg, calls, logs, url, request, server };
 }
+
+test('batched light routes preserve owner auth and support sustained live gestures independently of snapshot requests',async t=>{
+  const f=await fixture(t),body={updates:[{device_id:'fixture_light',power:'on'}]};
+  assert.equal((await f.request('/smart-home/lights/actions',body,'')).status,401);
+  assert.equal((await f.request('/smart-home/lights/actions',body,'other')).status,403);
+  assert.equal((await f.request('/smart-home/lights/actions',null)).status,405);
+  assert.equal((await f.request('/smart-home/lights/status',body)).status,405);
+  assert.equal((await f.request('/smart-home/lights/status?arbitrary=yes',null)).status,400);
+  // A 25-second gesture can exceed the ordinary bridge's 120-request bucket.
+  for(let n=0;n<130;n++)assert.equal((await f.request('/smart-home/lights/actions',body)).status,200);
+  assert.equal((await f.request('/smart-home/devices',null)).status,200);
+  assert.equal((await f.request('/smart-home/lights/status?device_ids=fixture_light',null)).status,200);
+  assert.ok(f.calls.some(c=>c.url.endsWith('/api/lights/actions')));
+});
+
+test('light delivery retains reserved capacity while four ordinary requests are active',async t=>{
+  let release;const holdDevices=new Promise(r=>release=r),f=await fixture(t,{holdDevices});
+  const held=Array.from({length:4},()=>f.request('/smart-home/devices',null));
+  try{
+    for(let n=0;n<100&&f.calls.filter(c=>c.url.endsWith('/api/devices')).length<4;n++)await new Promise(r=>setTimeout(r,5));
+    assert.equal(f.calls.filter(c=>c.url.endsWith('/api/devices')).length,4);
+    assert.equal((await f.request('/smart-home/lights/actions',{updates:[{device_id:'fixture_light',power:'off'}]})).status,200);
+  }finally{release();await Promise.all(held);}
+});
 test('configuration rejects privileged keys, non-loopback Ollama, wildcard origins and missing owner', () => {
   for (const change of [{ SUPABASE_ANON_KEY: 'sb_secret_private' }, { SUPABASE_ANON_KEY: `eyJ.${Buffer.from('{"role":"service_role"}').toString('base64url')}.sig` },
     { OLLAMA_BASE_URL: 'https://ollama.com' }, { OLLAMA_BASE_URL: 'http://192.168.1.1:11434' }, { OLLAMA_BASE_URL: 'http://localhost:11434/foo' },

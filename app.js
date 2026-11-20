@@ -699,6 +699,7 @@ async function sendRoomLightAction(roomId,body,capability,label,{lightsOverride=
  const status=$(statusId);
  if(!smartHomeControlAllowed){if(status)status.textContent="Sign in to control devices.";return}
  const room=smartHomeRooms().find(item=>item.room_id===roomId),lights=lightsOverride||(capability==="brightness"?roomDimmableDevices(room):roomLightDevices(room)),available=lights.filter(deviceUsable);
+ if(window.LightControls&&lights.length){window.LightControls.controlDevices(lights,body);return}
  if(!available.length){if(status)status.textContent="No available lights to control in this room.";return}
  const actions=available.map(device=>({device,action:beginDeviceAction(device.device_id,body)}));if(status)status.textContent=`Updating ${label}…`;
  const results=await Promise.allSettled(actions.map(({device})=>smartHomeFetch(`/devices/${encodeURIComponent(device.device_id)}/actions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})));
@@ -738,6 +739,7 @@ function renderHomeDeviceStatus(){
 }
 function renderDevicesPage(){
  window.LightControls?.sync();
+ if(window.LightControls?.interacting)return;
  const summary=$("deviceRoomSummary"),rooms=$("deviceRooms");if(!summary||!rooms)return;
  maybeLoadFrontDoorState();
  smartHomeState.devices=mergeFrontDoorDevice(smartHomeState.devices);
@@ -779,6 +781,7 @@ async function sendDeviceAction(deviceId,body){
  catch(error){if(actionStillCurrent(deviceId,action.version)){smartHomePendingActions.delete(deviceId);restoreDeviceSnapshot(deviceId,action.previous);if(status)status.textContent="Device update failed: "+smartErrorMessage(error)}}
 }
 function scheduleSmartHomeRefresh(delay=500){
+ if(window.LightControls?.busy)return;
  if(!smartHomeAccessToken||document.hidden||!(["home","devices"].includes(currentPage)))return;
  smartHomeRefreshQueued=true;
  if(smartHomeRefreshTimer)return;
@@ -1494,7 +1497,8 @@ window.roggyLights={
   d.attributes=a;d.freshness="fresh";
   smartHomePendingActions.set(id,{version:++smartHomeActionSequence,optimistic:snapshotDevice(d),expiresAt:Date.now()+15000});
  },
- settled(id,error){smartHomePendingActions.delete(id);if(error)loadSmartHome({silent:true}).catch(()=>{});}
+ settled(id,error){smartHomePendingActions.delete(id);if(error)loadSmartHome({silent:true}).catch(()=>{});},
+ ingest(devices){for(const item of devices){const current=smartHomeState.devices.find(d=>d.device_id===item.device_id);if(current)Object.assign(current,pendingDeviceState(item));}renderHomeDeviceStatus();renderDevicesPage();}
 };
 function setPrivacyGate(session){
  let gate=document.getElementById("privacyGate");

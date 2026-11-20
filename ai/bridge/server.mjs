@@ -155,6 +155,12 @@ function smartHomeRequest(reqUrl, requestMethod = null) {
     if (!['GET', 'POST'].includes(requestMethod)) throw new AIError('METHOD_NOT_ALLOWED', 405);
     return { kind: 'proxy', method: requestMethod, path };
   }
+  if (path === '/lights/actions' || path === '/lights/status') {
+    const method=path.endsWith('/actions')?'POST':'GET';
+    if(requestMethod!==method)throw new AIError('METHOD_NOT_ALLOWED',405);
+    if([...parsed.searchParams.keys()].some(k=>method!=='GET'||k!=='device_ids')||parsed.searchParams.get('device_ids')?.length>8192)throw new AIError('SMART_HOME_QUERY_INVALID',400);
+    return {kind:'proxy',method,path:`/api${path}`,search:parsed.search,light:true};
+  }
   if (/^\/completions(?:\/[A-Za-z0-9._~%+\-]+)?$/.test(path)) {
     if (requestMethod !== 'GET') throw new AIError('METHOD_NOT_ALLOWED', 405);
     const stream = path === '/completions/stream';
@@ -584,12 +590,12 @@ async function proxyPcHealth(req, res, cfg, fetcher, signal, route) {
 
 export function createBridge(cfg, { fetcher = coreFetch, ai = createAI(cfg, fetcher), logger = row => console.log(JSON.stringify(row)) } = {}) {
   // Fixed-size global buckets avoid attacker-controlled IP/token maps. Forwarded headers are never trusted.
-  const ingress = bucket(120), chats = bucket(10), discovery = bucket(30), codexStops = bucket(3);
-  let inflight = 0, openStreams = 0, generating = false;
+  const ingress = bucket(120), lightIngress=bucket(480), chats = bucket(10), discovery = bucket(30), codexStops = bucket(3);
+  let inflight = 0, lightInflight=0, openStreams = 0, generating = false;
   const active = new Set();
   const server = createServer({ maxHeaderSize: 16384, headersTimeout: 10000, requestTimeout: 0 }, async (req, res) => {
     const started = Date.now(), id = randomUUID(), controller = new AbortController();
-    const { signal } = controller; let timer, heartbeat, ownsGeneration = false, counted = false, countedStream = false, outcome = 'OK', operation = null;
+    const { signal } = controller; let timer, heartbeat, ownsGeneration = false, counted = false, countedLight=false, countedStream = false, outcome = 'OK', operation = null;
     active.add(controller);
     res.setHeader('Cache-Control', 'no-store'); res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Vary', 'Origin'); res.setHeader('X-Request-Id', id);
@@ -605,7 +611,8 @@ export function createBridge(cfg, { fetcher = coreFetch, ai = createAI(cfg, fetc
       const origin = req.headers.origin;
       if (origin && !cfg.origins.has(origin)) throw new AIError('ORIGIN_DENIED', 403);
       if (origin) res.setHeader('Access-Control-Allow-Origin', origin);
-      if (!ingress()) throw new AIError('RATE_LIMITED', 429);
+      const lightRoute=/^\/smart-home\/lights\/(?:actions|status)(?:\?|$)/.test(req.url);
+      if (!(lightRoute?lightIngress:ingress)()) throw new AIError('RATE_LIMITED', 429);
       if (req.method === 'OPTIONS') {
         if (!origin || !['GET', 'POST'].includes(req.headers['access-control-request-method'])) throw new AIError('ORIGIN_DENIED', 403);
         const headers = (req.headers['access-control-request-headers'] || '').toLowerCase().split(',').map(x => x.trim()).filter(Boolean);
@@ -622,6 +629,9 @@ export function createBridge(cfg, { fetcher = coreFetch, ai = createAI(cfg, fetc
       if (smartHome?.stream && smartHome.method === req.method) {
         if (openStreams >= 8) throw new AIError('BUSY', 429);
         openStreams++; countedStream = true;
+      } else if(smartHome?.light) {
+        if(lightInflight>=3)throw new AIError('BUSY',429);
+        lightInflight++;countedLight=true;
       } else {
         if (inflight >= 4) throw new AIError('BUSY', 429);
         inflight++; counted = true;
@@ -704,6 +714,7 @@ export function createBridge(cfg, { fetcher = coreFetch, ai = createAI(cfg, fetc
     } finally {
       clearTimeout(timer); clearInterval(heartbeat); active.delete(controller);
       controller.abort(); if (ownsGeneration) generating = false; if (counted) inflight--;
+      if(countedLight)lightInflight--;
       if (countedStream) openStreams--;
       // Deliberately exclude URL, headers, owner, model, prompt, response and raw errors.
       logger({ time: new Date().toISOString(), event: 'ai_request', requestId: id, operation, outcome, durationMs: Date.now() - started });

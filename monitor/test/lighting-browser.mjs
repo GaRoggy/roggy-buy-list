@@ -16,13 +16,29 @@ const browser=await chromium.launch({headless:true,channel:'msedge'});
 const page=await browser.newPage({viewport:{width:1200,height:950}}),errors=[],commands=[];
 page.on('pageerror',e=>errors.push(e.message));
 const bulbs=[1,2,3].map(n=>({device_id:`mood_${n}`,friendly_name:`Living room mood ${n}`,type:'light',device_class:'light',room:'living_room',subcategory:'mood_lighting',capabilities:['power','brightness','color','color_temperature'],availability:'online',freshness:'fresh',state:'on',attributes:{brightness:45,rgb_color:[255,128,0],hs_color:[30,100],color_mode:'hs',color_temp_kelvin:2700,min_color_temp_kelvin:2000,max_color_temp_kelvin:6500}}));
-bulbs.push({...structuredClone(bulbs[0]),device_id:'lamp',friendly_name:'Living room lamp',subcategory:'lamps'});
+for(let n=1;n<=3;n++)bulbs.push({...structuredClone(bulbs[0]),device_id:'lamp_'+n,friendly_name:'Living room lamp '+n,subcategory:'lamps'});
+let revision=0,rejectFirst=true;const deliveries=new Map();
 const now=new Date().toISOString(),run={id:'saved-run',routine_id:'morning_routine',started_at:now,ended_at:now,status:'completed',reason:'scheduled_automatic'};
 const routines=[{id:'morning_routine',name:'Good Morning',summary:'Your morning briefing, Spanish word, and weather.',description:['First confirmed morning entry starts your routine.','Your exact briefing is saved for each run.'],enabled:true,running:false},{id:'home_arrival',name:'Home Arrival',summary:'Lights and welcome message.',description:['Lights and speech.'],enabled:true,running:false}];
 await page.route('https://**/*',r=>r.fulfill({contentType:'text/javascript',body:''}));
 await page.route('**/smart-home/**',async route=>{
   const req=route.request(),url=new URL(req.url()),path=url.pathname.slice('/smart-home'.length);let data={};
-  if(path==='/diagnostics')data={smart_home:{status:'online'},voice:{microphones:[]}};
+  if(path==='/lights/actions'){
+    if(rejectFirst){rejectFirst=false;await route.fulfill({status:429,contentType:'application/json',body:JSON.stringify({error:{message:'busy'}})});return;}
+    const body=req.postDataJSON();revision++;
+    for(const update of body.updates){
+      const d=bulbs.find(d=>d.device_id===update.device_id);assert.ok(d);
+      commands.push({id:d.device_id,...update,action:update.kelvin?'color_temperature':update.color?'color':update.brightness!==undefined?'brightness':'power'});
+      if(update.power)d.state=update.power;
+      if(update.brightness!==undefined)d.attributes.brightness=update.brightness;
+      if(update.color){d.attributes.rgb_color=Object.values(update.color);delete d.attributes.hs_color;d.attributes.color_mode='rgb';}
+      if(update.kelvin){d.attributes.color_temp_kelvin=update.kelvin;d.attributes.color_mode='color_temp';}
+      deliveries.set(d.device_id,{device_id:d.device_id,revision,status:'confirmed'});
+    }
+    data={success:true,accepted:true,revision};
+  }
+  else if(path==='/lights/status')data={entries:[...deliveries.values()],devices:bulbs};
+  else if(path==='/diagnostics')data={smart_home:{status:'online'},voice:{microphones:[]}};
   else if(path==='/devices')data={devices:bulbs};
   else if(path==='/rooms')data={rooms:[{room_id:'living_room',friendly_name:'Living Room'}]};
   else if(path==='/events/history')data={events:[]};
@@ -47,13 +63,14 @@ try{
  assert.equal(await page.locator('[data-light-child]').count(),3);
  const wheel=page.locator('#deviceColorWheel');let box=await wheel.boundingBox();
  await page.mouse.move(box.x+box.width*.7,box.y+box.height*.4);await page.mouse.down();await page.mouse.move(box.x+box.width*.8,box.y+box.height*.65,{steps:8});
- await page.waitForFunction(()=>document.querySelector('#lightControlStatus').textContent.includes('Updating'));
- await new Promise(r=>setTimeout(r,200));assert.ok(commands.length>0,'drag must send commands before release');assert.ok(commands.every(c=>c.id.startsWith('mood_')),'group command touched another group');
- await page.mouse.up();await new Promise(r=>setTimeout(r,500));
+ await page.waitForFunction(()=>document.querySelector('#lightControlStatus').textContent.includes('syncing'));
+ await page.waitForTimeout(550);assert.ok(commands.length>0,'drag must send commands before release, including after 429 retry');assert.ok(commands.every(c=>c.id.startsWith('mood_')),'group command touched another group');
+ await page.mouse.up();await page.waitForFunction(()=>!window.LightControls.busy);
+ assert.match(await page.locator('#lightControlStatus').innerText(),/All 3 lights confirmed/);
  const before=commands.length;await page.locator('#lightTintTab').click();assert.equal(commands.length,before,'switching mode must not send a color');
- box=await wheel.boundingBox();await page.mouse.move(box.x+box.width*.2,box.y+box.height*.5);await page.mouse.down();await page.mouse.move(box.x+box.width*.75,box.y+box.height*.5,{steps:7});await page.mouse.up();await new Promise(r=>setTimeout(r,700));
+ box=await wheel.boundingBox();await page.mouse.move(box.x+box.width*.2,box.y+box.height*.5);await page.mouse.down();await page.mouse.move(box.x+box.width*.75,box.y+box.height*.5,{steps:7});await page.mouse.up();await page.waitForFunction(()=>!window.LightControls.busy);
  assert.equal(commands.at(-1).action,'color_temperature');assert.ok(commands.at(-1).kelvin>5000);
- await page.locator('[data-light-child="mood_1"]').click();assert.equal(await page.locator('[data-light-child]').count(),0);await page.locator('#lightColorTab').click();const singleStart=commands.length;await wheel.press('ArrowRight');await new Promise(r=>setTimeout(r,200));assert.deepEqual([...new Set(commands.slice(singleStart).map(c=>c.id))],['mood_1']);
+ await page.locator('[data-light-child="mood_1"]').click();assert.equal(await page.locator('[data-light-child]').count(),0);await page.locator('#lightColorTab').click();const singleStart=commands.length;await wheel.press('ArrowRight');await page.waitForFunction(()=>!window.LightControls.busy);assert.deepEqual([...new Set(commands.slice(singleStart).map(c=>c.id))],['mood_1']);
  await page.locator('#lightBack').click();assert.equal(await page.locator('[data-light-child]').count(),3);
  await page.waitForTimeout(250);await page.screenshot({path:out+'/group-desktop.png'});await page.locator('#lightClose').click();
  // Simulate a Layne command arriving through a later device snapshot.
@@ -62,6 +79,16 @@ try{
  await page.waitForFunction(()=>document.getElementById('deviceColorWheel').getAttribute('aria-valuenow')==='240',null,{timeout:2500}).catch(async error=>{console.log('external state debug',JSON.stringify(await page.evaluate(()=>window.roggyLights.devices().find(d=>d.device_id==='mood_1'))),JSON.stringify(commands.slice(-5)));throw error;});
  await page.setViewportSize({width:390,height:844});await page.waitForTimeout(250);await page.screenshot({path:out+'/bulb-mobile.png'});
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'mobile overflow');
+ await page.locator('#lightClose').click();
+ // Room controls must apply the latest combined settings to all six bulbs.
+ await page.evaluate(()=>window.LightControls.openRoom('living_room'));
+ await page.locator('#lightTintTab').click();await wheel.press('End');
+ await page.locator('#lightDialogQuick input[type=range]').fill('65');
+ await page.waitForFunction(()=>!window.LightControls.busy);
+ assert.ok(bulbs.every(d=>d.attributes.color_temp_kelvin===6500&&d.attributes.brightness===65&&d.state==='on'));
+ assert.match(await page.locator('#lightControlStatus').innerText(),/All 6 lights confirmed/);
+ await page.locator('#lightDialogQuick [data-light-power]').click();await page.waitForFunction(()=>!window.LightControls.busy);assert.ok(bulbs.every(d=>d.state==='off'));
+ await page.locator('#lightDialogQuick [data-light-power]').click();await page.waitForFunction(()=>!window.LightControls.busy);assert.ok(bulbs.every(d=>d.state==='on'));
  await page.locator('#lightClose').click();await page.evaluate(()=>document.getElementById('settingsToggle').checked=true);await page.waitForTimeout(400);
  const themeWheel=page.locator('#appThemeWheel'),themeBox=await themeWheel.boundingBox();const old=await page.evaluate(()=>document.documentElement.style.getPropertyValue('--accent'));
  await page.mouse.move(themeBox.x+themeBox.width*.5,themeBox.y+themeBox.height*.2);await page.mouse.down();await page.mouse.move(themeBox.x+themeBox.width*.8,themeBox.y+themeBox.height*.7,{steps:6});
