@@ -117,3 +117,37 @@ test('Google refresh-token revocation is reported as an actionable credential fa
   await assert.rejects(() => get('gmail/v1/users/me/profile'), error =>
     error.code === 'GOOGLE_REFRESH_TOKEN_INVALID' && error.terminal === true && error.cause === 'invalid_grant');
 });
+
+test('Google client coalesces concurrent token refreshes', async () => {
+  let refreshes = 0, apiCalls = 0;
+  const fakeFetch = async url => {
+    if (url.startsWith('https://oauth2.googleapis.com/token')) {
+      refreshes++;
+      await new Promise(resolve => setTimeout(resolve, 10));
+      return new Response(JSON.stringify({ access_token: 'shared-access-token', expires_in: 3600 }), { status: 200 });
+    }
+    apiCalls++;
+    return new Response(JSON.stringify({ historyId: '123' }), { status: 200 });
+  };
+  const get = await googleClient({ GOOGLE_CLIENT_ID: 'client', GOOGLE_CLIENT_SECRET: 'secret', GOOGLE_REFRESH_TOKEN: 'refresh' }, fakeFetch);
+  await Promise.all(Array.from({ length: 8 }, () => get('gmail/v1/users/me/profile')));
+  assert.equal(refreshes, 1);
+  assert.equal(apiCalls, 8);
+});
+
+test('Google client refreshes once after an expired access token response', async () => {
+  let refreshes = 0, apiCalls = 0;
+  const fakeFetch = async url => {
+    if (url.startsWith('https://oauth2.googleapis.com/token')) {
+      refreshes++;
+      return new Response(JSON.stringify({ access_token: `access-${refreshes}`, expires_in: 3600 }), { status: 200 });
+    }
+    apiCalls++;
+    if (apiCalls === 1) return new Response('unauthorized', { status: 401 });
+    return new Response(JSON.stringify({ historyId: '123' }), { status: 200 });
+  };
+  const get = await googleClient({ GOOGLE_CLIENT_ID: 'client', GOOGLE_CLIENT_SECRET: 'secret', GOOGLE_REFRESH_TOKEN: 'refresh' }, fakeFetch);
+  assert.equal((await get('gmail/v1/users/me/profile')).historyId, '123');
+  assert.equal(refreshes, 2);
+  assert.equal(apiCalls, 2);
+});

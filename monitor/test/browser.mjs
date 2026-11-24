@@ -73,6 +73,9 @@ try{
  await page.locator('[data-reminder-view="upcoming"]').click();await page.locator('[data-reminder-id="calendar-future"]').waitFor();if(await page.locator('[data-reminder-id="calendar-cancelled"]').count())throw Error('Cancelled event remained visible');
  await page.evaluate(()=>document.querySelector('button[data-page="mail"]').click());await page.locator('#mailPage:not([hidden])').waitFor();
  if(!/(MAIL|Possibly Important)/.test(await page.locator('#mailPage').textContent()))throw Error('Mail shelf missing');
+ await page.evaluate(async()=>{window.__mailRows.unshift({id:'queue-mail-live',route:'mail',subject:'Newly synced message',sender:'Fixture sender',summary:'Foreground refresh check',occurred_at:new Date(Date.now()+1000).toISOString(),source_message_id:'mail-live',route_confidence:.9});await loadEmailQueue('mail',{refresh:true})});
+ await page.locator('#mailQueueList [data-email-card-id="queue-mail-live"]').waitFor();
+ if(await page.locator('#mailQueueList [data-email-card-id="queue-mail-live"]').count()!==1)throw Error('Foreground mail refresh duplicated a message');
  await page.evaluate(()=>{const toggle=document.querySelector('#settingsToggle');if(toggle?.checked)toggle.click()});await page.waitForTimeout(350);
  if(process.argv[5])await page.screenshot({path:process.argv[5],fullPage:true});
  if(await page.locator('#mailQueueList [data-email-card-id]').count()!==10)throw Error('Mail queue did not enforce the 10-card limit');

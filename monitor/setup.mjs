@@ -25,7 +25,7 @@ async function main() {
   } else if(mode==='gmail') {
     const get=await googleClient(env),profile=await get('gmail/v1/users/me/profile');
     if(!profile.emailAddress)throw new MonitorError('GMAIL_PROFILE_REQUIRED');
-    await add('gmail',profile.emailAddress,300,true);
+    await add('gmail',profile.emailAddress,60,true);
   } else if(mode==='google') {
     const get=await googleClient(env),profile=await get('gmail/v1/users/me/profile');
     const ids=JSON.parse(env.GOOGLE_CALENDAR_IDS||'[]');
@@ -33,7 +33,7 @@ async function main() {
     const visible=await pages(get,'calendar/v3/users/me/calendarList');
     if(ids.some(id=>!visible.items.some(c=>c.id===id)))throw new MonitorError('CALENDAR_NOT_ACCESSIBLE');
     for(const id of ids)await add('calendar',id,300,true);
-    await add('gmail',profile.emailAddress,300,true);
+    await add('gmail',profile.emailAddress,60,true);
   }else if(mode==='finance') {
     if(!env.PLAID_ITEM_ID||!env.PLAID_ACCESS_TOKEN)throw new MonitorError('PLAID_AUTH_REQUIRED');
     await add('finance',env.PLAID_ITEM_ID,3600,true);

@@ -33,6 +33,26 @@ test('label changes revisit messages and history records deduplicate IDs', async
   });
   assert.equal(reads,1);assert.equal(output.records[0].payload.dashboard,false);
 });
+test('Gmail history pagination preserves the final cursor and stable message IDs', async () => {
+  const read=[];
+  const output=await syncGmail({cursor:{historyId:'old'}},async (path,params={})=>{
+    if(path.endsWith('history'))return params.pageToken?{historyId:'final',history:[{messages:[{id:'two'},{id:'three'}]}]}:{historyId:'intermediate',nextPageToken:'page-2',history:[{messages:[{id:'one'},{id:'two'}]}]};
+    const id=decodeURIComponent(path.split('/').at(-1));read.push(id);return {...message('Invoice'),id};
+  });
+  assert.deepEqual(read,['one','two','three']);
+  assert.equal(output.cursor.historyId,'final');
+});
+test('expired history bootstrap walks every message-list page before advancing its cursor', async () => {
+  const read=[];
+  const output=await syncGmail({cursor:{historyId:'expired'}},async (path,params={})=>{
+    if(path.endsWith('history'))throw new MonitorError('HTTP_404',{status:404});
+    if(path.endsWith('profile'))return{historyId:'bootstrap-boundary'};
+    if(path.endsWith('messages'))return params.pageToken?{messages:[{id:'list-two'}]}:{messages:[{id:'list-one'}],nextPageToken:'page-2'};
+    const id=decodeURIComponent(path.split('/').at(-1));read.push(id);return {...message('Invoice'),id};
+  });
+  assert.deepEqual(read,['list-one','list-two']);
+  assert.equal(output.cursor.historyId,'bootstrap-boundary');
+});
 test('a provider-forbidden message is retained as a non-content review record', async () => {
   const output = await syncGmail({cursor:{historyId:'old'}},async path => {
     if(path.endsWith('history'))return{historyId:'new',history:[{messages:[{id:'blocked'}]}]};
@@ -58,6 +78,21 @@ test('history access throttling remains retryable', async () => {
     if(path.endsWith('history')) throw new MonitorError('HTTP_403',{status:403,terminal:true});
     return { historyId:'new' };
   }), error => error.code === 'HTTP_403' && error.terminal === false && error.retryAfter >= 60);
+});
+
+test('one malformed message is retained for review while later messages still sync', async () => {
+  const output = await syncGmail({ cursor: { historyId: 'old' } }, async path => {
+    if (path.endsWith('history')) return { historyId: 'new', history: [{ messages: [{ id: 'broken' }, { id: 'good' }] }] };
+    if (path.endsWith('/broken')) return { ...message('Malformed'), id: 'broken', internalDate: 'not-a-timestamp' };
+    return { ...message('Invoice'), id: 'good' };
+  });
+  assert.deepEqual(output.records.map(row => row.external_id), ['broken', 'good']);
+  assert.equal(output.records[0].status, 'needs_review');
+  assert.equal(output.records[0].occurred_at, null);
+  assert.equal(output.records[0].payload.extraction_notes.includes('without storing its content'), true);
+  assert.equal(output.records[1].status, undefined);
+  assert.equal(output.health.retrieved_messages, 2);
+  assert.equal(output.health.failed_messages, 1);
 });
 
 test('purchase extraction keeps multiple order lines as structured metadata without raw body storage', () => {

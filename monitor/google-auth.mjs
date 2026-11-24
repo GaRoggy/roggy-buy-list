@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
-import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { request, failure, MonitorError } from './core.mjs';
+import { randomBytes, randomUUID, createHash, timingSafeEqual } from 'node:crypto';
+import { mkdir, writeFile, rename, unlink } from 'node:fs/promises';
+import { request, failure, MonitorError, config, Store } from './core.mjs';
 import { protect } from './google.mjs';
 
 async function authorize() {
@@ -30,7 +30,20 @@ async function authorize() {
         redirect_uri: redirect, grant_type: 'authorization_code' }) });
       if (!tokens.refresh_token || !scopes.every(s => (tokens.scope || '').split(' ').includes(s))) throw new MonitorError('GOOGLE_SCOPES_INCOMPLETE');
       await mkdir('.secrets', { recursive: true });
-      await writeFile('.secrets/google.tokens.json', protect(tokens.refresh_token));
+      const tokenPath = '.secrets/google.tokens.json', temporary = `${tokenPath}.${process.pid}.${randomUUID()}.tmp`;
+      try {
+        await writeFile(temporary, protect(tokens.refresh_token), { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+        await rename(temporary, tokenPath);
+      } finally { await unlink(temporary).catch(() => {}); }
+      try {
+        const env = config(), store = new Store(env);
+        const query = new URLSearchParams({ user_id: `eq.${env.MONITOR_USER_ID}`,
+          kind: 'in.(gmail,calendar,google_tasks,google_people,google_drive)' });
+        await store.api(`monitor_sources?${query}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
+          body: JSON.stringify({ next_run_at: new Date().toISOString(), error_code: null }) });
+      } catch (error) {
+        console.error(`GOOGLE_SOURCE_RESCHEDULE_FAILED:${failure(error).code}`);
+      }
       res.end('Read-only authorization saved with Windows user encryption. You can close this tab.');
       console.log('Google authorization saved with contact-edit permission. Start the worker using this same Windows account.');
     } catch (e) { res.writeHead(400); res.end('Authorization failed; see the local error code.'); console.error(failure(e).code); process.exitCode = 1; }

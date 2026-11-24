@@ -1140,7 +1140,7 @@ function emailQueueRoot(route){return route==="dashboard"?$("importantEmailList"
 function emailQueueStatus(route){return route==="dashboard"?null:route==="finance"?$("financeEmailStatus"):$("mailQueueStatus")}
 function emailQueueEmpty(route){return route==="dashboard"?"No emails need your attention.":route==="finance"?"No recent financial emails.":"No emails need review."}
 function updateMailNavCount(){const badge=$("mailNavCount"),count=Math.min(EMAIL_QUEUE_MAX,(emailQueues.mail||[]).length);if(!badge)return;badge.hidden=count===0;badge.textContent=count?String(count):""}
-function emailQueuePageState(route){return emailQueuePages[route]||(emailQueuePages[route]={cursor:null,exhausted:false,loading:false,loaded:false})}
+function emailQueuePageState(route){const state=emailQueuePages[route]||(emailQueuePages[route]={cursor:null,exhausted:false,loading:false,loaded:false});if(!Array.isArray(state.headIds))state.headIds=[];return state}
 function emailReasonLabel(value,route){
  const fallback=route==="dashboard"?"Action required":route==="finance"?"Financial information":"Possibly important";
  const clean=String(value||"").replace(/[_-]+/g," ").replace(/\s+/g," ").trim();
@@ -1182,26 +1182,38 @@ function emailQueueQuery(route,session,state){
  if(state.cursor){const stamp=state.cursor.occurredAt;query=query.or(`occurred_at.lt.${stamp},and(occurred_at.eq.${stamp},id.lt.${state.cursor.id})`)}
  return query.limit(EMAIL_QUEUE_PAGE_SIZE);
 }
-async function loadEmailQueue(route,{append=false,reset=false}={}){
+async function loadEmailQueue(route,{append=false,reset=false,refresh=false}={}){
  const state=emailQueuePageState(route);if(state.loading)return;
  if(append&&state.exhausted)return;
- if(!append&&state.loaded&&!reset){renderEmailQueue(route);return}
+ if(!append&&!refresh&&state.loaded&&!reset){renderEmailQueue(route);return}
  const version=emailQueueSessionVersion;state.loading=true;
- if(reset){state.cursor=null;state.exhausted=false;state.loaded=false;emailQueues[route]=[]}
+ if(reset){state.cursor=null;state.exhausted=false;state.loaded=false;state.headIds=[];emailQueues[route]=[]}
  const {data:{session}}=await sb.auth.getSession();
  if(version!==emailQueueSessionVersion){state.loading=false;return}
  if(!isOwnerSession(session)){emailQueues[route]=[];state.loaded=true;state.exhausted=true;state.loading=false;emailQueuesLoaded=true;emailQueueMessages[route]="Sign in to view monitored email.";renderEmailQueue(route);return}
- if(!append){emailQueueMessages[route]="Loading…";renderEmailQueue(route)}
- const {data,error}=await emailQueueQuery(route,session,state);
+ if(!append&&!refresh){emailQueueMessages[route]="Loading…";renderEmailQueue(route)}
+ const {data,error}=await emailQueueQuery(route,session,refresh?{cursor:null}:state);
  if(version!==emailQueueSessionVersion){state.loading=false;return}
  if(error){if(!emailQueues[route]?.length)emailQueues[route]=[];emailQueueMessages[route]="Monitoring unavailable. Showing the last synced mail.";state.loading=false;state.loaded=true;renderEmailQueue(route);return}
- const existing=new Set((emailQueues[route]||[]).map(row=>row.id)),fresh=(data||[]).filter(row=>!existing.has(row.id));
- emailQueues[route]=[...(emailQueues[route]||[]),...fresh].sort((a,b)=>new Date(b.occurred_at||0)-new Date(a.occurred_at||0)||(b.id||"").localeCompare(a.id||""));
- if(fresh.length){const last=fresh[fresh.length-1];state.cursor={occurredAt:last.occurred_at,id:last.id}}
- state.exhausted=fresh.length<EMAIL_QUEUE_PAGE_SIZE;state.loaded=true;state.loading=false;emailQueuesLoaded=true;emailQueueMessages[route]="";
- renderEmailQueue(route,{enterIds:append?fresh.map(row=>row.id):[]});
+ const rows=data||[],incomingIds=new Set(rows.map(row=>row.id));let enterIds=[];
+ if(refresh){
+  const oldHead=new Set(state.headIds),retained=(emailQueues[route]||[]).filter(row=>!oldHead.has(row.id)||incomingIds.has(row.id)),byId=new Map(retained.map(row=>[row.id,row]));
+  for(const row of rows)byId.set(row.id,row);
+  emailQueues[route]=[...byId.values()].sort((a,b)=>new Date(b.occurred_at||0)-new Date(a.occurred_at||0)||(b.id||"").localeCompare(a.id||""));
+  state.headIds=rows.map(row=>row.id);
+ }else{
+  const existing=new Set((emailQueues[route]||[]).map(row=>row.id)),fresh=rows.filter(row=>!existing.has(row.id));enterIds=append?fresh.map(row=>row.id):[];
+  emailQueues[route]=[...(emailQueues[route]||[]),...fresh].sort((a,b)=>new Date(b.occurred_at||0)-new Date(a.occurred_at||0)||(b.id||"").localeCompare(a.id||""));
+  if(!append)state.headIds=rows.map(row=>row.id);
+  if(rows.length){const last=rows[rows.length-1];state.cursor={occurredAt:last.occurred_at,id:last.id}}
+  state.exhausted=rows.length<EMAIL_QUEUE_PAGE_SIZE;
+ }
+ state.loaded=true;state.loading=false;emailQueuesLoaded=true;emailQueueMessages[route]="";
+ renderEmailQueue(route,{enterIds});
 }
 async function loadEmailQueues(){const routes=["dashboard","mail"];if(budgetUnlocked)routes.push("finance");await Promise.all(routes.map(route=>loadEmailQueue(route)))}
+function refreshVisibleEmailQueue(){if(document.hidden)return;const route=currentPage==="home"?"dashboard":currentPage==="mail"?"mail":currentPage==="budget"&&budgetUnlocked?"finance":null;if(route)loadEmailQueue(route,{refresh:true}).catch(()=>{})}
+setInterval(refreshVisibleEmailQueue,15000);
 function waitForEmailAnimation(){return new Promise(resolve=>setTimeout(resolve,180))}
 async function dismissEmailQueueItem(id,route){
  const prior=[...(emailQueues[route]||[])],row=prior.find(item=>item.id===id);if(!row)return;
@@ -1563,6 +1575,7 @@ function renderHome(){
 }
 document.addEventListener("visibilitychange",()=>{
  if(document.hidden)return;
+ refreshVisibleEmailQueue();
  refreshHomeForCurrentDate();
  if(!smartHomeControlAllowed)return;
  if(currentPage==="home"||currentPage==="devices"){
@@ -1574,7 +1587,7 @@ document.addEventListener("visibilitychange",()=>{
   refreshFrontDoorFrame().catch(()=>{});
  }
  if(currentPage==="front-door")loadFrontDoorEvents({runCleanup:false}).catch(()=>{});
-});window.addEventListener("focus",refreshHomeForCurrentDate);
+});window.addEventListener("focus",()=>{refreshHomeForCurrentDate();refreshVisibleEmailQueue()});
 function renderImportantEmails(){
  renderEmailQueue("dashboard");
 }

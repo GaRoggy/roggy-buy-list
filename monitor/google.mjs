@@ -1,4 +1,5 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile, rename, unlink, open, stat } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { request, MonitorError } from './core.mjs';
 
@@ -13,15 +14,44 @@ export function protect(value, decrypt = false) {
 }
 export async function googleClient(env, fetcher = fetch) {
   if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) throw new MonitorError('GOOGLE_OAUTH_REQUIRED', { terminal: true });
-  let refresh = env.GOOGLE_REFRESH_TOKEN;
-  if (!refresh) {
-    try { refresh = protect(await readFile('.secrets/google.tokens.json', 'utf8'), true); }
-    catch { throw new MonitorError('GOOGLE_OAUTH_REQUIRED', { terminal: true }); }
-  }
-  let token, expiry = 0;
-  const call = async (path, params = {}, raw = false, options = {}) => {
-    if (!/^(calendar\/v3\/|gmail\/v1\/users\/me\/|tasks\/v1\/|people\/v1\/|drive\/v3\/)/.test(path)) throw new MonitorError('GOOGLE_PATH_DENIED', { terminal: true });
-    if (Date.now() >= expiry) {
+  const tokenFile = env.GOOGLE_REFRESH_TOKEN ? null : '.secrets/google.tokens.json';
+  let refresh;
+  try { refresh = env.GOOGLE_REFRESH_TOKEN || protect(await readFile(tokenFile, 'utf8'), true); }
+  catch { throw new MonitorError('GOOGLE_OAUTH_REQUIRED', { terminal: true }); }
+  let token, expiry = 0, refreshPromise = null;
+  const persistRotatedRefreshToken = async (expected, next) => {
+    if (!tokenFile || !next || next === expected) return;
+    const lockPath = `${tokenFile}.lock`;
+    let lock;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      try { lock = await open(lockPath, 'wx'); break; }
+      catch (error) {
+        if (error.code !== 'EEXIST') throw error;
+        try {
+          const info = await stat(lockPath);
+          if (Date.now() - info.mtimeMs > 30000) { await unlink(lockPath); continue; }
+        } catch (statError) { if (statError.code === 'ENOENT') continue; throw statError; }
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+    }
+    if (!lock) throw new MonitorError('GOOGLE_TOKEN_STORE_BUSY', { retryable: true });
+    const temporary = `${tokenFile}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      const current = protect(await readFile(tokenFile, 'utf8'), true);
+      // Another worker may have already committed a newer token. Never replace it
+      // with a credential derived from the token this worker started with.
+      if (current !== expected) return;
+      await writeFile(temporary, protect(next), { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+      await rename(temporary, tokenFile);
+    } finally {
+      await unlink(temporary).catch(() => {});
+      await lock.close().catch(() => {});
+      await unlink(lockPath).catch(() => {});
+    }
+  };
+  const refreshAccessToken = async () => {
+    if (refreshPromise) return refreshPromise;
+    refreshPromise = (async () => {
       let data;
       try {
         data = await request('https://oauth2.googleapis.com/token', { method: 'POST',
@@ -35,8 +65,22 @@ export async function googleClient(env, fetcher = fetch) {
         throw error;
       }
       if (!data.access_token) throw new MonitorError('GOOGLE_OAUTH_REQUIRED', { terminal: true });
-      token = data.access_token; expiry = Date.now() + ((data.expires_in || 3600) - 60) * 1000;
-    }
+      const previous = refresh;
+      if (data.refresh_token && data.refresh_token !== refresh) {
+        await persistRotatedRefreshToken(refresh, data.refresh_token);
+        if (tokenFile) {
+          const latest = protect(await readFile(tokenFile, 'utf8'), true);
+          refresh = latest === previous ? data.refresh_token : latest;
+        }
+      }
+      token = data.access_token;
+      expiry = Date.now() + (Math.max(60, Number(data.expires_in) || 3600) - 60) * 1000;
+    })().finally(() => { refreshPromise = null; });
+    return refreshPromise;
+  };
+  const call = async (path, params = {}, raw = false, options = {}, retriedUnauthorized = false) => {
+    if (!/^(calendar\/v3\/|gmail\/v1\/users\/me\/|tasks\/v1\/|people\/v1\/|drive\/v3\/)/.test(path)) throw new MonitorError('GOOGLE_PATH_DENIED', { terminal: true });
+    if (Date.now() >= expiry) await refreshAccessToken();
     const method = String(options.method || 'GET').toUpperCase();
     const query = new URLSearchParams(params);
     const headers = { Authorization: `Bearer ${token}`, ...(options.headers || {}) };
@@ -51,6 +95,11 @@ export async function googleClient(env, fetcher = fetch) {
     let response;
     try { response = await fetcher(`${apiHost}${apiPath}${query.toString() ? `?${query}` : ''}`, init); }
     catch { throw new MonitorError('NETWORK_ERROR'); }
+    if (response.status === 401 && method === 'GET' && !retriedUnauthorized) {
+      expiry = 0;
+      await refreshAccessToken();
+      return call(path, params, raw, options, true);
+    }
     if (!response.ok) {
       const header = response.headers.get('retry-after');
       const retryAfter = header ? (/^\d+$/.test(header) ? Number(header) : Math.max(0, (Date.parse(header) - Date.now()) / 1000)) : 0;

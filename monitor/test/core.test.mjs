@@ -61,6 +61,62 @@ test('successful run projects canonical events after the provider commit', async
   assert.equal(calls[1][2][0].event_type, 'bill_due');
 });
 
+test('successful Gmail commit records end-to-end health after persistence', async () => {
+  const calls = [];
+  const store = {
+    env: {},
+    rpc: async (name, body) => { calls.push([name, body]); return 2; },
+    api: async (path, options) => { calls.push(['health', path, JSON.parse(options.body)]); return null; },
+  };
+  await runJob(store, { job: { id: 'gmail-health-job', lease_token: 'fence', attempts: 1 },
+    source: { id: 'gmail-source', kind: 'gmail', interval_seconds: 60, last_result: { consecutive_failures: 3 } } },
+  async () => ({ records: [{ kind: 'email', external_id: 'one' }, { kind: 'email', external_id: 'two' }],
+    cursor: { historyId: 'next' }, health: { retrieved_messages: 2, failed_messages: 0, last_api_success_at: new Date().toISOString() } }),
+  async () => {});
+  const health = calls.find(([name]) => name === 'health');
+  assert.ok(health);
+  assert.equal(health[2].last_result.status, 'healthy');
+  assert.equal(health[2].last_result.authentication_status, 'authorized');
+  assert.equal(health[2].last_result.messages_persisted, 2);
+  assert.equal(health[2].last_result.consecutive_failures, 0);
+  assert.equal(health[2].last_result.cursor_status, 'current');
+});
+
+test('Gmail database commit failure preserves the cursor and reports degraded health', async () => {
+  const calls = [];
+  const store = {
+    env: {},
+    rpc: async (name, body) => { calls.push([name, body]); if (name === 'commit') throw new MonitorError('HTTP_503'); return true; },
+    api: async (_path, options) => { calls.push(['health', JSON.parse(options.body)]); return null; },
+  };
+  await runJob(store, { job: { id: 'gmail-db-failure', lease_token: 'fence', attempts: 1 },
+    source: { id: 'gmail-source', kind: 'gmail', interval_seconds: 60, last_success_at: '2026-10-15T05:17:00.000Z' } },
+  async () => ({ records: [{ kind: 'email', external_id: 'message' }], cursor: { historyId: 'must-not-advance' },
+    health: { retrieved_messages: 1, last_api_success_at: new Date().toISOString() } }), async () => {});
+  assert.deepEqual(calls.map(([name]) => name), ['commit', 'fail', 'health']);
+  assert.equal(calls[0][1].p_cursor.historyId, 'must-not-advance');
+  assert.equal(calls[2][1].last_result.status, 'degraded');
+  assert.equal(calls[2][1].last_result.cursor_status, 'unchanged');
+  assert.equal(calls[2][1].last_result.messages_persisted, 0);
+});
+
+test('revoked Gmail refresh tokens are surfaced as reauthorization-required health', async () => {
+  const calls = [];
+  const store = {
+    env: {},
+    rpc: async (name, body) => { calls.push([name, body]); return true; },
+    api: async (_path, options) => { calls.push(['health', JSON.parse(options.body)]); return null; },
+  };
+  await runJob(store, { job: { id: 'gmail-auth-failure', lease_token: 'fence', attempts: 1 },
+    source: { id: 'gmail-source', kind: 'gmail', interval_seconds: 60 } },
+  async () => { throw new MonitorError('GOOGLE_REFRESH_TOKEN_INVALID', { terminal: true }); }, async () => {});
+  const health = calls.find(([name]) => name === 'health')[1].last_result;
+  assert.equal(health.status, 'reauth_required');
+  assert.equal(health.authentication_status, 'needs_reauth');
+  assert.equal(health.cursor_status, 'unchanged');
+  assert.equal(health.last_error_code, 'GOOGLE_REFRESH_TOKEN_INVALID');
+});
+
 test('retryable background job failures emit a deferred canonical event', async () => {
   const events = [];
   const store = {

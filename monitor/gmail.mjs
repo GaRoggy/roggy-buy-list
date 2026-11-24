@@ -103,11 +103,19 @@ export async function classifyEmailWithSemanticRunner(message, { runner, threadC
 export async function syncGmail(source, get, existing = [], { semanticRunner = null, threadContextById = () => ({}) } = {}) {
   const base = 'gmail/v1/users/me/';
   let historyId = source.cursor?.historyId, ids = new Set(), finalId;
+  const health = { api_calls: 0, retrieved_messages: 0, failed_messages: 0, last_api_success_at: null };
+  const api = async (...args) => {
+    const result = await get(...args);
+    health.api_calls++;
+    health.last_api_success_at = new Date().toISOString();
+    return result;
+  };
+  try {
   if (historyId) {
     try {
       let token;
       do {
-        const data = await get(base + 'history', { startHistoryId: historyId, maxResults: '500', ...(token ? {pageToken:token} : {}) });
+        const data = await api(base + 'history', { startHistoryId: historyId, maxResults: '500', ...(token ? {pageToken:token} : {}) });
         for (const history of data.history || []) for (const message of history.messages || []) ids.add(message.id);
         token = data.nextPageToken; finalId = data.historyId;
       } while (token);
@@ -128,27 +136,45 @@ export async function syncGmail(source, get, existing = [], { semanticRunner = n
   }
   if (!historyId) {
     // Capture BEFORE listing; changes during bootstrap are replayed next time.
-    finalId = (await get(base + 'profile')).historyId;
-    const recent = await pages(get, base + 'messages', { q: 'newer_than:90d', includeSpamTrash: 'true', maxResults: '500' });
+    finalId = (await api(base + 'profile')).historyId;
+    const recent = await pages(api, base + 'messages', { q: 'newer_than:90d', includeSpamTrash: 'true', maxResults: '500' });
     for (const message of recent.items) ids.add(message.id);
     for (const row of existing.filter(r => r.source_id === source.id)) ids.add(row.external_id);
   }
   if (!finalId) throw new MonitorError('GMAIL_CURSOR_MISSING');
   const records = [];
   for (const id of ids) {
+    let message;
     try {
-      const message = await get(base + `messages/${encodeURIComponent(id)}`, { format: 'full' });
+      message = await api(base + `messages/${encodeURIComponent(id)}`, { format: 'full' });
+      health.retrieved_messages++;
+    } catch (e) {
+      if (e.status === 404) records.push({ kind: 'email', external_id: id, status: 'deleted', occurred_at: null, payload: {} });
+      else if (e.status === 403) {
+        health.failed_messages++;
+        records.push({ kind: 'email', external_id: id, status: 'needs_review', occurred_at: null,
+          payload: { category: 'unavailable', dashboard: false,
+            extraction_notes: 'Gmail denied access to this message; it was skipped without storing message content.' } });
+      } else throw e;
+      continue;
+    }
+    try {
       const payload = semanticRunner
         ? await classifyEmailWithSemanticRunner(message, { runner: semanticRunner, threadContext: threadContextById(id) })
         : classifyEmail(message);
       records.push({ kind: 'email', external_id: id, occurred_at: payload.timestamp, payload });
     } catch (e) {
-      if (e.status === 404) records.push({ kind: 'email', external_id: id, status: 'deleted', occurred_at: null, payload: {} });
-      else if (e.status === 403) records.push({ kind: 'email', external_id: id, status: 'needs_review', occurred_at: null,
+      // Keep a malformed or individually unclassifiable message visible to
+      // recovery tooling without storing its body or stopping later messages.
+      health.failed_messages++;
+      records.push({ kind: 'email', external_id: id, status: 'needs_review', occurred_at: null,
         payload: { category: 'unavailable', dashboard: false,
-          extraction_notes: 'Gmail denied access to this message; it was skipped without storing message content.' } });
-      else throw e;
+          extraction_notes: 'This message could not be normalized and was retained for review without storing its content.' } });
     }
   }
-  return { records, cursor: { historyId: finalId } };
+  return { records, cursor: { historyId: finalId }, health };
+  } catch (error) {
+    error.gmailSyncHealth = { ...health };
+    throw error;
+  }
 }

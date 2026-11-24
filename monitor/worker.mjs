@@ -31,6 +31,40 @@ async function enqueueCanonicalEvent(store, input, logger = log) {
   }
 }
 
+async function projectGmailHealth(store, source, health, logger = log) {
+  if (typeof store.api !== 'function' || !source?.id) return;
+  const now = new Date();
+  const prior = source.last_result && typeof source.last_result === 'object' ? source.last_result : {};
+  const completed = health.completed === true || health.status === 'healthy';
+  const successful = health.status === 'healthy';
+  const apiAt = health.last_api_success_at || prior.last_successful_gmail_api_request || source.last_success_at || null;
+  const result = {
+    ...prior,
+    schema_version: 1,
+    status: health.status,
+    authentication_status: health.authentication_status,
+    cursor_status: health.cursor_status,
+    last_attempt_at: health.last_attempt_at,
+    last_successful_gmail_api_request: apiAt,
+    last_successful_database_write_at: completed ? health.database_write_at : (prior.last_successful_database_write_at || source.last_success_at || null),
+    last_completed_sync_at: completed ? health.database_write_at : (prior.last_completed_sync_at || source.last_success_at || null),
+    messages_retrieved: health.messages_retrieved ?? 0,
+    messages_persisted: health.messages_persisted ?? 0,
+    failed_messages: health.failed_messages ?? 0,
+    consecutive_failures: completed ? 0 : (Number(prior.consecutive_failures) || 0) + 1,
+    next_scheduled_at: completed
+      ? new Date(now.getTime() + Math.max(60, Number(source.interval_seconds) || 300) * 1000).toISOString()
+      : (health.next_scheduled_at || null),
+    estimated_pipeline_lag_seconds: completed && apiAt
+      ? Math.max(0, Math.round((Date.parse(health.database_write_at) - Date.parse(apiAt)) / 1000))
+      : (prior.estimated_pipeline_lag_seconds ?? null),
+    last_error_code: successful ? null : (health.error_code || (completed ? 'MESSAGE_REVIEW_REQUIRED' : 'SYNC_FAILED')),
+  };
+  const params = new URLSearchParams({ id: `eq.${source.id}` });
+  await store.api(`monitor_sources?${params}`, { method: 'PATCH',
+    headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ last_result: result }) });
+}
+
 export async function runJob(store, claim, collector = collect, logger = log) {
   const { job, source } = claim;
   const started = Date.now();
@@ -46,6 +80,23 @@ export async function runJob(store, claim, collector = collect, logger = log) {
     const result = await collector(source, store.env, store);
     if (lost) throw new MonitorError('STALE_LEASE');
     const count = await store.rpc('commit', { ...fence, p_records: result.records, p_cursor: result.cursor });
+    if (source.kind === 'gmail') {
+      const completedAt = new Date().toISOString();
+      try {
+        const failedMessages = result.health?.failed_messages || 0;
+        await projectGmailHealth(store, source, {
+          status: failedMessages ? 'degraded' : 'healthy', completed: true,
+          authentication_status: 'authorized', cursor_status: 'current',
+          last_attempt_at: new Date(started).toISOString(), last_api_success_at: result.health?.last_api_success_at,
+          database_write_at: completedAt, messages_retrieved: result.health?.retrieved_messages || 0,
+          messages_persisted: Number(count) || 0, failed_messages: failedMessages,
+          error_code: failedMessages ? 'MESSAGE_REVIEW_REQUIRED' : null,
+        }, logger);
+      } catch (error) {
+        await logger('gmail_health_projection_failed', { job_id: job.id, source_id: source.id,
+          error_code: failure(error).code, duration_ms: Date.now() - started });
+      }
+    }
     let eventsProcessed = 0;
     if (typeof store.upsertEvents === 'function') {
       try {
@@ -94,6 +145,23 @@ export async function runJob(store, claim, collector = collect, logger = log) {
     const err = failure(error);
     await store.rpc('fail', { ...fence, p_code: err.code, p_delay: Math.ceil(backoff(job.attempts, err.retryAfter)), p_terminal: err.terminal });
     await logger('job_failed', { job_id: job.id, error_code: err.code, duration_ms: Date.now() - started });
+    if (source.kind === 'gmail') {
+      const partial = error?.gmailSyncHealth || {};
+      try {
+        await projectGmailHealth(store, source, {
+          status: err.code === 'GOOGLE_REFRESH_TOKEN_INVALID' || err.code === 'GOOGLE_OAUTH_REQUIRED' ? 'reauth_required' : 'degraded',
+          authentication_status: err.code === 'GOOGLE_REFRESH_TOKEN_INVALID' || err.code === 'GOOGLE_OAUTH_REQUIRED' ? 'needs_reauth' : 'unknown',
+          cursor_status: 'unchanged', last_attempt_at: new Date(started).toISOString(),
+          last_api_success_at: partial.last_api_success_at,
+          messages_retrieved: partial.retrieved_messages || 0,
+          messages_persisted: 0, failed_messages: partial.failed_messages || 0,
+          error_code: err.code, next_scheduled_at: new Date(Date.now() + 3600000).toISOString(),
+        }, logger);
+      } catch (healthError) {
+        await logger('gmail_health_projection_failed', { job_id: job.id, source_id: source.id,
+          error_code: failure(healthError).code, duration_ms: Date.now() - started });
+      }
+    }
     await enqueueCanonicalEvent(store, {
       event_id: `background-job:${job.id}:${err.terminal ? 'failed' : 'deferred'}:${job.attempts}`,
       event_type: err.terminal ? 'background_job_failed' : 'background_job_deferred',
