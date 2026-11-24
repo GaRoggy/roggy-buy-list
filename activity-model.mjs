@@ -2,10 +2,15 @@ export const REASONS=Object.freeze({test:'Test',user_initiated:'User initiated',
 export const RETENTION_MS=9*86400000;
 export function completionTime(item){return Date.parse(item.completed_at);}
 export function expiryTime(item){return Date.parse(item.expires_at)||completionTime(item)+RETENTION_MS;}
+function isHiddenCompletion(item){
+  const title=String(item?.title||'').trim().replace(/[.!]+$/,'').toLowerCase();
+  const summary=String(item?.summary||'').trim().toLowerCase();
+  return title==='layne completed network get status'||summary.startsWith('layne completed network get status.');
+}
 export function mergeCompletions(previous,incoming,now=Date.now()){
   const byId=new Map(previous.map(item=>[item.id,item]));
-  for(const item of incoming){if(item&&typeof item.id==='string'&&REASONS[item.reason]&&Number.isFinite(completionTime(item)))byId.set(item.id,item);}
-  return [...byId.values()].filter(item=>expiryTime(item)>now).sort((a,b)=>completionTime(b)-completionTime(a)||(b.sequence||0)-(a.sequence||0));
+  for(const item of incoming){if(item&&typeof item.id==='string'&&REASONS[item.reason]&&Number.isFinite(completionTime(item))&&!isHiddenCompletion(item))byId.set(item.id,item);}
+  return [...byId.values()].filter(item=>!isHiddenCompletion(item)&&expiryTime(item)>now).sort((a,b)=>completionTime(b)-completionTime(a)||(b.sequence||0)-(a.sequence||0));
 }
 export function detailText(value,depth=0){
   if(depth>5)return '';

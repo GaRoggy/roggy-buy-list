@@ -96,6 +96,7 @@ function scheduleTranscriptHistoryRetry(delay = transcriptHistoryRetryDelay) {
   if (transcriptHistoryRetry || !signedIn || !transcriptVisible()) return;
   transcriptHistoryRetry = setTimeout(() => {
     transcriptHistoryRetry = null;
+    window.roggySmartHomeTranscriptStream?.connect?.();
     loadTranscriptHistory().finally(() => refreshTranscriptHealth());
   }, Math.max(250, delay));
 }

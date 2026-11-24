@@ -143,7 +143,7 @@ const DOUGH_IDEAS=Object.freeze([
 ]);
 const SMART_HOME_API=(window.ROGGY_SMART_HOME_API||window.ROGGY_AI_CONFIG?.smartHomeUrl||"").replace(/\/$/,"");
 const CAMERA_API=(window.ROGGY_AI_CONFIG?.bridgeUrl||"").replace(/\/$/,"");
-let smartHomeState={devices:[],rooms:[],events:[],diagnostics:null,voice:null},smartHomeLoaded=false,smartHomeUnavailable=false,smartHomeFailure=null,smartHomeLoading=null,smartHomeRefreshTimer=null,smartHomeRefreshQueued=false,smartHomeLastRefreshAt=0,smartHomeStreamPromise=null,smartHomeStreamAbort=null,smartHomeStreamRetry=null,smartHomeStreamRetryDelayMs=15000,smartHomeLastEventId="",smartHomeStreamStatus="disconnected",smartHomeTranscriptStreamPromise=null,smartHomeTranscriptStreamAbort=null,smartHomeTranscriptStreamRetry=null,smartHomeTranscriptStreamRetryDelayMs=1000,smartHomeTranscriptLastEventId="",smartHomeTranscriptStreamStatus="disconnected",smartHomeControlAllowed=false,smartHomeAccessToken="",smartHomePendingActions=new Map(),smartHomeActionSequence=0;
+let smartHomeState={devices:[],rooms:[],events:[],diagnostics:null,voice:null},smartHomeLoaded=false,smartHomeUnavailable=false,smartHomeFailure=null,smartHomeLoading=null,smartHomeRefreshTimer=null,smartHomeRefreshQueued=false,smartHomeLastRefreshAt=0,smartHomeStreamPromise=null,smartHomeStreamAbort=null,smartHomeStreamRetry=null,smartHomeStreamRetryDelayMs=15000,smartHomeLastEventId="",smartHomeStreamStatus="disconnected",smartHomeTranscriptStreamPromise=null,smartHomeTranscriptStreamAbort=null,smartHomeTranscriptStreamRetry=null,smartHomeTranscriptStreamRetryDelayMs=1000,smartHomeTranscriptStreamGeneration=0,smartHomeTranscriptLastEventId="",smartHomeTranscriptStreamStatus="disconnected",smartHomeControlAllowed=false,smartHomeAccessToken="",smartHomePendingActions=new Map(),smartHomeActionSequence=0;
 let layneChatMessages=[],layneChatBusy=false,layneChatError="",laynePendingAction=null,layneSessionId=null;
 let frontDoorEvents=[],frontDoorView="active",frontDoorLoaded=false,frontDoorLoading=null,frontDoorLoadError="",frontDoorFrameBusy=false,frontDoorFrameUrls=new Map(),frontDoorThumbnailUrls=new Map(),frontDoorThumbnailLoads=new Map(),frontDoorThumbnailQueue=[],frontDoorThumbnailQueued=new Set(),frontDoorThumbnailObserver=null,frontDoorThumbnailActive=0,frontDoorThumbnailToken=0,frontDoorRenderSignature="",frontDoorDeepLinkKey="",frontDoorDetailImageUrl="",frontDoorDetailRequestToken=0,frontDoorState=null,frontDoorStateLoading=null,frontDoorStateAttempted=false,frontDoorStateRetryTimer=null,frontDoorStateRetryDelayMs=5000,frontDoorAnalyzeBusy=false,frontDoorAnalyzeError="";
 const FRONT_DOOR_THUMBNAIL_CONCURRENCY=3,FRONT_DOOR_THUMBNAIL_CACHE_LIMIT=60;
@@ -815,21 +815,27 @@ function transcriptStreamStatus(status,error){
 }
 function disconnectSmartHomeTranscriptStream(){
  if(smartHomeTranscriptStreamRetry){clearTimeout(smartHomeTranscriptStreamRetry);smartHomeTranscriptStreamRetry=null}
- smartHomeTranscriptStreamAbort?.abort();
+ smartHomeTranscriptStreamGeneration++;
+ const controller=smartHomeTranscriptStreamAbort;
+ smartHomeTranscriptStreamAbort=null;smartHomeTranscriptStreamPromise=null;
+ controller?.abort();
  transcriptStreamStatus("disconnected");
 }
 function connectSmartHomeTranscriptStream(){
- if(smartHomeTranscriptStreamPromise||!smartHomeAccessToken||!SMART_HOME_API)return;
+ if(smartHomeTranscriptStreamPromise||smartHomeTranscriptStreamRetry||!smartHomeAccessToken||!SMART_HOME_API)return;
+ const generation=++smartHomeTranscriptStreamGeneration;
  transcriptStreamStatus("connecting");
  const controller=new AbortController();smartHomeTranscriptStreamAbort=controller;
- smartHomeTranscriptStreamPromise=(async()=>{try{
+ const request=(async()=>{try{
    const response=await fetch(SMART_HOME_API+"/transcripts/stream",{cache:"no-store",headers:{Accept:"text/event-stream",Authorization:`Bearer ${smartHomeAccessToken}`,...(smartHomeTranscriptLastEventId?{"Last-Event-ID":smartHomeTranscriptLastEventId}: {})},signal:controller.signal});
    if(!response.ok||!response.body)throw new Error(`transcript stream ${response.status}`);
+   if(generation!==smartHomeTranscriptStreamGeneration)return;
    smartHomeTranscriptStreamRetryDelayMs=1000;transcriptStreamStatus("connected");
    const reader=response.body.getReader(),decoder=new TextDecoder();let buffer="";
-   while(!controller.signal.aborted){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const frames=buffer.split(/\r?\n\r?\n/);buffer=frames.pop()||"";for(const frame of frames){const id=frame.match(/^id:\s*(.+)$/m);if(id)smartHomeTranscriptLastEventId=id[1].trim();const data=frame.split(/\r?\n/).filter(line=>line.startsWith("data:")).map(line=>line.slice(5).trim()).join("\n");if(!data)continue;let eventData=null;try{eventData=JSON.parse(data)}catch{}if(["whisper_transcript","layne_voice_response"].includes(eventData?.type))window.dispatchEvent(new CustomEvent("roggy-smart-home-event",{detail:eventData}))}}
-   if(!controller.signal.aborted)throw new Error("transcript stream ended");
- }catch(error){if(!controller.signal.aborted){transcriptStreamStatus("disconnected",String(error?.message||error));if(!smartHomeTranscriptStreamRetry){const delay=smartHomeTranscriptStreamRetryDelayMs;smartHomeTranscriptStreamRetryDelayMs=Math.min(delay*2,30000);smartHomeTranscriptStreamRetry=setTimeout(()=>{smartHomeTranscriptStreamRetry=null;connectSmartHomeTranscriptStream()},delay)}}}finally{smartHomeTranscriptStreamPromise=null;smartHomeTranscriptStreamAbort=null}})();
+   while(!controller.signal.aborted&&generation===smartHomeTranscriptStreamGeneration){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const frames=buffer.split(/\r?\n\r?\n/);buffer=frames.pop()||"";for(const frame of frames){const id=frame.match(/^id:\s*(.+)$/m);if(id)smartHomeTranscriptLastEventId=id[1].trim();const data=frame.split(/\r?\n/).filter(line=>line.startsWith("data:")).map(line=>line.slice(5).trim()).join("\n");if(!data)continue;let eventData=null;try{eventData=JSON.parse(data)}catch{}if(generation===smartHomeTranscriptStreamGeneration&&["whisper_transcript","layne_voice_response"].includes(eventData?.type))window.dispatchEvent(new CustomEvent("roggy-smart-home-event",{detail:eventData}))}}
+   if(!controller.signal.aborted&&generation===smartHomeTranscriptStreamGeneration)throw new Error("transcript stream ended");
+ }catch(error){if(!controller.signal.aborted&&generation===smartHomeTranscriptStreamGeneration){transcriptStreamStatus("disconnected",String(error?.message||error));if(!smartHomeTranscriptStreamRetry){const delay=smartHomeTranscriptStreamRetryDelayMs;smartHomeTranscriptStreamRetryDelayMs=Math.min(delay*2,30000);smartHomeTranscriptStreamRetry=setTimeout(()=>{smartHomeTranscriptStreamRetry=null;if(generation===smartHomeTranscriptStreamGeneration)connectSmartHomeTranscriptStream()},delay)}}}finally{if(generation===smartHomeTranscriptStreamGeneration){smartHomeTranscriptStreamPromise=null;smartHomeTranscriptStreamAbort=null}}})();
+ smartHomeTranscriptStreamPromise=request;
 }
 
 window.roggySmartHomeStream={
