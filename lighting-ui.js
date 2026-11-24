@@ -49,14 +49,14 @@ async function pollStatus(){
   finally{pollBusy=false;if(version===controlGeneration){if(receipts.size)schedulePoll();else if(!queue.active){clearTimeout(syncTimer);syncTimer=setTimeout(()=>api.refresh(),500);}}}
 }
 function status(text){for(const id of ['lightControlStatus','deviceStatus','homeControlStatus']){const out=$(id);if(out)out.textContent=text;}}
-function command(t,body){
+function command(t,body,{syncControls=true}={}){
   if(!api.allowed())return status('Sign in to control your lights.');
   const cap=body.action==='color'?'color':body.action==='color_temperature'?'color_temperature':body.action==='brightness'?'brightness':'power';
   const ds=lights(t),supported=ds.filter(d=>d.capabilities?.includes(cap));
   if(!supported.length)return status('These lights are unavailable or do not support this control.');
   controlDevices(supported,body);
   const skipped=ds.length-supported.length;if(skipped)status(`${skipped} lights do not support this control.`);
-  sync();
+  if(syncControls)sync();
 }
 function controlDevices(devices,body){if(!api.allowed())return;for(const d of devices){api.optimistic(d.device_id,body);queue.put(d.device_id,body);outcomes.set(d.device_id,{status:'pending'});}showProgress();}
 function controls(t){
@@ -149,7 +149,7 @@ document.addEventListener('click',e=>{
   const child=e.target.closest('[data-light-child]');if(child)return open({kind:'device',id:child.dataset.lightChild},{from:target});
   const power=e.target.closest('[data-light-power]');if(power){const t=parse(power.dataset.lightPower);command(t,{action:'power',value:lights(t).some(d=>api.power(d)==='on')?'off':'on'});api.render();}
 });
-document.addEventListener('input',e=>{const input=e.target.closest('[data-light-brightness]');if(!input)return;input.nextElementSibling.textContent=input.value+'%';command(parse(input.dataset.lightBrightness),{action:'brightness',value:Number(input.value)});});
+document.addEventListener('input',e=>{const input=e.target.closest('[data-light-brightness]');if(!input)return;input.nextElementSibling.textContent=input.value+'%';command(parse(input.dataset.lightBrightness),{action:'brightness',value:Number(input.value)},{syncControls:false});});
 document.addEventListener('change',e=>{if(e.target.matches('[data-light-brightness]'))api.render();});
 document.addEventListener('pointerdown',e=>{if(e.target.matches('[data-light-brightness]'))sliderDragging=true;});
 for(const event of ['pointerup','pointercancel'])document.addEventListener(event,()=>{if(sliderDragging){sliderDragging=false;api.render();}});
