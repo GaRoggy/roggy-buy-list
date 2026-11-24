@@ -1,4 +1,5 @@
 import webpush from 'npm:web-push@3.6.7';
+import { hasVerifiedCameraPerson } from './camera-evidence.ts';
 
 type Json = Record<string, unknown>;
 type User = { id: string };
@@ -322,8 +323,12 @@ function cameraEventInput(value: unknown): Json {
   if (!/^front_door_[0-9_-]+\.jpg$/.test(eventKey)) throw new PushError('EVENT_KEY_INVALID', 400);
   const snapshotName = textField(item.snapshot_name, 'snapshot_name', 160, true)!;
   if (snapshotName !== eventKey) throw new PushError('SNAPSHOT_NAME_INVALID', 400);
+  const capturedAt = isoField(item.captured_at, 'captured_at')!;
   const analysis = item.analysis && typeof item.analysis === 'object' && !Array.isArray(item.analysis)
     ? { ...(item.analysis as Json) } : {};
+  if (!hasVerifiedCameraPerson(analysis, snapshotName, capturedAt)) {
+    throw new PushError('CAMERA_PERSON_EVIDENCE_REQUIRED', 400);
+  }
   delete analysis.snapshot_path;
   if (JSON.stringify(analysis).length > 24000) throw new PushError('ANALYSIS_TOO_LARGE', 400);
   return {
@@ -331,7 +336,7 @@ function cameraEventInput(value: unknown): Json {
     camera_id: cameraId,
     camera_name: textField(item.camera_name, 'camera_name', 128, true)!,
     location: textField(item.location, 'location', 128, true)!,
-    captured_at: isoField(item.captured_at, 'captured_at')!,
+    captured_at: capturedAt,
     analysis_completed_at: isoField(item.analysis_completed_at, 'analysis_completed_at', false),
     short_description: textField(item.short_description, 'short_description', 80, true)!,
     full_description: textField(item.full_description, 'full_description', 600, true)!,

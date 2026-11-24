@@ -188,7 +188,7 @@ async function cameraJson(path,options={}){
  if(!response.ok)throw Object.assign(new Error(smartErrorMessage({payload})),{payload,status:response.status,code:payloadErrorCode({payload})||"camera_request_failed"});
  return payload||{};
 }
-function frontDoorCameraOnline(){return !!frontDoorState&&frontDoorState.listener_connected!==false&&!frontDoorState.last_error}
+function frontDoorCameraOnline(){return !!frontDoorState&&frontDoorState.detector_status==="ready"&&frontDoorState.live_stream_connected===true&&!frontDoorState.detector_error}
 function frontDoorDetectionLabel(){if(frontDoorState?.current_person_detected===true)return "Person detected";if(frontDoorState?.current_person_detected===false)return "Clear";return "Unknown"}
 function cameraLocationLabel(value){return canonicalRoomId(value)==="porch"?"Front Door / Porch":smartStateLabel(value||"Front Door / Porch")}
 function frontDoorAnalysis(){return frontDoorState?.last_analysis||null}
@@ -207,7 +207,8 @@ function frontDoorStatusMarkup(prefix="frontDoor"){
  const analysis=frontDoorAnalysis(),online=frontDoorCameraOnline(),tone=online?"online":"offline";
  const description=analysis?.short_description||"No analysis available yet.";
  const stamp=frontDoorAnalysisTimestamp();
- return `<div class="front-door-summary-grid"><div><span class="eyebrow">STATUS</span><b class="front-door-summary-status ${tone}">${online?"Online":"Offline"}</b></div><div><span class="eyebrow">PERSON</span><b>${esc(frontDoorDetectionLabel())}</b></div><div><span class="eyebrow">LAST ANALYSIS</span><b>${esc(stamp?smartTime(stamp):"—")}</b></div></div><p class="front-door-summary-description">${esc(description)}</p>${analysis?.full_description?`<details class="front-door-full-description"><summary>Full description</summary><p>${esc(analysis.full_description)}</p></details>`:""}`;
+ const detectorStatus=frontDoorState?.detector_status==="ready"?`CPU person detector · ${Number(frontDoorState.live_stream_fps||0).toFixed(1)} stream fps`:"Person detector unavailable";
+ return `<div class="front-door-summary-grid"><div><span class="eyebrow">STATUS</span><b class="front-door-summary-status ${tone}">${online?"Online":"Offline"}</b></div><div><span class="eyebrow">PERSON</span><b>${esc(frontDoorDetectionLabel())}</b></div><div><span class="eyebrow">LAST ANALYSIS</span><b>${esc(stamp?smartTime(stamp):"—")}</b></div></div><p class="front-door-summary-description">${esc(description)}</p><p class="quiet-state">${esc(detectorStatus)}</p>${analysis?.full_description?`<details class="front-door-full-description"><summary>Full description</summary><p>${esc(analysis.full_description)}</p></details>`:""}`;
 }
 function clearFrontDoorStateRetry(){
  if(frontDoorStateRetryTimer){clearTimeout(frontDoorStateRetryTimer);frontDoorStateRetryTimer=null}
@@ -259,11 +260,13 @@ async function analyzeFrontDoor(){
  catch(error){frontDoorAnalyzeError="Manual analysis failed: "+smartErrorMessage(error);renderFrontDoorSummary()}
  finally{frontDoorAnalyzeBusy=false;renderFrontDoorSummary()}
 }
+function frontDoorHasVerifiedPersonEvidence(analysis,snapshotName,capturedAt){
+ return typeof FrontDoorEvidence!=="undefined"&&FrontDoorEvidence.hasVerifiedPerson(analysis,snapshotName,capturedAt);
+}
 function frontDoorRowIsNoteworthy(row){
  const analysis=row?.analysis&&typeof row.analysis==="object"?row.analysis:{};
- if(analysis.noteworthy===false)return false;
- const description=String(row?.short_description||analysis.short_description||"").trim().toLowerCase();
- return description!=="empty porch scene";
+ const snapshotName=frontDoorSnapshotName(row?.snapshot_name||row?.event_key||"");
+ return !!snapshotName&&frontDoorHasVerifiedPersonEvidence(analysis,snapshotName,row?.captured_at);
 }
 function frontDoorRows(){
  const cutoff=Date.now()-14*86400000,now=Date.now();
@@ -284,7 +287,7 @@ function frontDoorLocalRows(payload){
   const data=event?.data&&typeof event.data==="object"?event.data:{};
   const snapshotName=frontDoorSnapshotName(data.snapshot_name||data.snapshot_path);
   const capturedAt=data.timestamp||event.timestamp;
-  if(!snapshotName||!capturedAt)return null;
+  if(!snapshotName||!capturedAt||typeof FrontDoorEvidence==="undefined"||!FrontDoorEvidence.shouldIncludeLocalEvent(event?.type,data,snapshotName,capturedAt))return null;
   return {id:`local-camera:${snapshotName}`,event_key:snapshotName,camera_id:"front_door",camera_name:String(data.camera_name||"Front Door Cam"),location:String(data.location||"front_door"),captured_at:capturedAt,analysis_completed_at:data.analysis_completed_at||null,short_description:String(data.short_description||"Front door scene"),full_description:String(data.full_description||data.summary||"No description available."),summary:String(data.summary||data.full_description||"No description available."),snapshot_name:snapshotName,analysis:data,deleted_at:null,trash_expires_at:null,source:"local_runtime"};
  }).filter(Boolean);
 }

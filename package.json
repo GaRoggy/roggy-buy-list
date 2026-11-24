@@ -6,7 +6,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "test": "node --experimental-strip-types --test monitor/test/*.test.mjs ai/test/*.test.mjs",
+    "test": "node --experimental-strip-types --test monitor/test/*.test.mjs ai/test/*.test.mjs camera/test/*.test.mjs",
     "build": "node scripts/build.mjs",
     "ollama-bridge": "node --env-file=.env ai/bridge/server.mjs",
     "ai:configure": "node --env-file=.env scripts/configure-ai.mjs",
